@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ workflow.name }} - Saba Workflow</title>
+    <style>
+        {{ custom_css | safe }}
+    </style>
+</head>
+<body>
+    {{ custom_html | safe }}
+
+    <script>
+    (function() {
+        // Intercetta tutti i form con classe saba-landing-form
+        var forms = document.querySelectorAll('.saba-landing-form');
+        forms.forEach(function(form) {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                var submitBtn = form.querySelector('[type="submit"]');
+                var successMsg = document.querySelector('.saba-success-msg');
+                var errorMsg = document.querySelector('.saba-error-msg');
+
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Invio in corso...';
+                }
+                if (successMsg) successMsg.style.display = 'none';
+                if (errorMsg) errorMsg.style.display = 'none';
+
+                var formData = new FormData(form);
+                var data = {};
+                formData.forEach(function(value, key) {
+                    data[key] = value;
+                });
+
+                try {
+                    var response = await fetch('/landing/{{ token }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+
+                    if (response.ok) {
+                        if (successMsg) {
+                            successMsg.style.display = 'block';
+                            successMsg.scrollIntoView({ behavior: 'smooth' });
+                        }
+                        form.reset();
+                        setTimeout(function() { form.style.display = 'none'; }, 2000);
+                    } else {
+                        var err = await response.json();
+                        if (errorMsg) {
+                            errorMsg.textContent = err.error || 'Errore durante il salvataggio.';
+                            errorMsg.style.display = 'block';
+                        }
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Invia';
+                        }
+                    }
+                } catch (error) {
+                    if (errorMsg) {
+                        errorMsg.textContent = 'Errore di connessione. Riprova.';
+                        errorMsg.style.display = 'block';
+                    }
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Invia';
+                    }
+                }
+            });
+        });
+
+        // Gestione unsubscribe link (se presente)
+        var unsubLinks = document.querySelectorAll('[data-saba-unsubscribe]');
+        unsubLinks.forEach(function(link) {
+            link.addEventListener('click', async function(e) {
+                e.preventDefault();
+                if (!confirm('Sei sicuro di volerti disiscrivere?')) return;
+
+                try {
+                    var response = await fetch('/landing/{{ token }}/unsubscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (response.ok) {
+                        document.body.innerHTML = '<div style="text-align:center;padding:60px;font-family:sans-serif"><h2>Disiscrizione completata</h2><p>Non riceverai più comunicazioni.</p></div>';
+                    }
+                } catch (error) {
+                    alert('Errore durante la disiscrizione.');
+                }
+            });
+        });
+    })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,377 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ workflow.name }} - Saba Workflow Admin{% endblock %}
+{% block page_title %}{{ workflow.name }}{% endblock %}
+
+{% block page_actions %}
+<a href="{{ url_for('admin.workflow_edit', workflow_id=workflow.id) }}" class="btn btn-warning">
+    <i class="bi bi-pencil"></i> Modifica
+</a>
+<a href="{{ url_for('admin.workflows_list') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Torna alla lista
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Info Workflow -->
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Informazioni</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-3">Nome:</dt>
+                    <dd class="col-sm-9">{{ workflow.name }}</dd>
+                    
+                    <dt class="col-sm-3">Descrizione:</dt>
+                    <dd class="col-sm-9">
+                        {% if workflow.description %}
+                        {{ workflow.description }}
+                        {% else %}
+                        <span class="text-muted fst-italic">Nessuna descrizione</span>
+                        {% endif %}
+                    </dd>
+                    
+                    <dt class="col-sm-3">Stato:</dt>
+                    <dd class="col-sm-9">
+                        <span class="status-badge status-{{ workflow.status.value }}">
+                            {{ workflow.status.value }}
+                        </span>
+                    </dd>
+                    
+                    <dt class="col-sm-3">Creato:</dt>
+                    <dd class="col-sm-9">{{ workflow.created_at|localtime('%d/%m/%Y alle %H:%M') }}</dd>
+                    
+                    <dt class="col-sm-3">Ultimo aggiornamento:</dt>
+                    <dd class="col-sm-9">
+                        {% if workflow.updated_at %}
+                        {{ workflow.updated_at|localtime('%d/%m/%Y alle %H:%M') }}
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-sm-3">Evento Saba Form:</dt>
+                    <dd class="col-sm-9">
+                        {% if workflow.sabaform_event_id %}
+                        <span class="status-badge status-active">
+                            <i class="bi bi-link-45deg"></i> {{ workflow.sabaform_event_name or 'Evento #' ~ workflow.sabaform_event_id }}
+                        </span>
+                        {% else %}
+                        <span class="text-muted">Nessun evento collegato</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+        
+        <!-- Steps -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-ol"></i> Steps ({{ workflow.steps|length }})</h5>
+            </div>
+            <div class="card-body">
+                {% if workflow.steps %}
+                <div class="list-group">
+                    {% for step in workflow.steps %}
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">
+                                <span class="badge bg-primary">Step {{ step.order }}</span>
+                                {{ step.name }}
+                            </h6>
+                            <small class="text-muted">{{ step.type.value }}</small>
+                        </div>
+                        <p class="mb-1">
+                            <strong>Subject:</strong> {{ step.subject or 'N/A' }}<br>
+                            <strong>Delay:</strong> {{ step.delay_hours }} ore
+                        </p>
+                        {% if step.type.value == 'email' %}
+                        <div class="mt-2 d-flex align-items-center gap-2">
+                            {% if step.landing_html %}
+                            <small class="text-success">
+                                <i class="bi bi-check-circle"></i> Landing page custom
+                            </small>
+                            {% elif step.landing_page_config %}
+                            <small class="text-success">
+                                <i class="bi bi-check-circle"></i> Ha landing page
+                            </small>
+                            {% endif %}
+                            <a href="{{ url_for('admin.landing_builder', workflow_id=workflow.id, step_id=step.id) }}"
+                               class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-palette"></i> Landing Builder
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">Nessuno step configurato</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sidebar Stats -->
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Statistiche</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h2 class="mb-0">{{ workflow.participants|length }}</h2>
+                    <small class="text-muted">Partecipanti totali</small>
+                </div>
+                
+                <div class="mb-3">
+                    <h2 class="mb-0">
+                        {{ workflow.participants|selectattr('status.value', 'equalto', 'completed')|list|length }}
+                    </h2>
+                    <small class="text-muted">Completati</small>
+                </div>
+                
+                <div class="mb-3">
+                    <h2 class="mb-0">
+                        {{ workflow.participants|selectattr('status.value', 'equalto', 'in_progress')|list|length }}
+                    </h2>
+                    <small class="text-muted">In corso</small>
+                </div>
+                
+                <hr>
+                
+                <a href="{{ url_for('admin.participants_list', workflow_id=workflow.id) }}"
+                   class="btn btn-outline-primary btn-sm w-100 mb-2">
+                    <i class="bi bi-people"></i> Vedi partecipanti
+                </a>
+
+                {% if workflow.sabaform_event_id %}
+                <button class="btn btn-primary btn-sm w-100" onclick="importFromSabaform()" id="btnImport">
+                    <i class="bi bi-download"></i> Importa da Saba Form
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Azioni -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-gear"></i> Azioni</h5>
+            </div>
+            <div class="card-body">
+                {% if workflow.status.value == 'draft' %}
+                <button class="btn btn-success w-100 mb-2" onclick="startWorkflow()">
+                    <i class="bi bi-play-circle"></i> Avvia Workflow
+                </button>
+                {% elif workflow.status.value == 'active' %}
+                <button class="btn btn-warning w-100 mb-2" onclick="pauseWorkflow()">
+                    <i class="bi bi-pause-circle"></i> Metti in Pausa
+                </button>
+                {% elif workflow.status.value == 'paused' %}
+                <button class="btn btn-success w-100 mb-2" onclick="resumeWorkflow()">
+                    <i class="bi bi-play-circle"></i> Riprendi
+                </button>
+                {% endif %}
+                
+                {% if workflow.status.value != 'active' %}
+                <button class="btn btn-danger w-100" onclick="deleteWorkflow()">
+                    <i class="bi bi-trash"></i> Elimina Workflow
+                </button>
+                {% endif %}
+
+                <hr>
+                <button class="btn btn-outline-info w-100" onclick="simulateWorkflow()" id="btnSimulate">
+                    <i class="bi bi-eye"></i> Simula Invio
+                </button>
+                <small class="text-muted d-block mt-1">Anteprima email e link landing senza inviare nulla</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Simulation Modal -->
+<div class="modal fade" id="simulateModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-eye"></i> Simulazione Invio</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="simulateContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">Simulazione in corso...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const workflowId = {{ workflow.id }};
+
+function startWorkflow() {
+    if (!confirm('Avviare il workflow? Verranno inviate email ai partecipanti.')) return;
+    
+    fetch(`/api/workflows/${workflowId}/start`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            alert('Workflow avviato!');
+            location.reload();
+        })
+        .catch(error => alert('Errore: ' + error));
+}
+
+function pauseWorkflow() {
+    fetch(`/api/workflows/${workflowId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'paused' })
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert('Workflow in pausa');
+        location.reload();
+    })
+    .catch(error => alert('Errore: ' + error));
+}
+
+function resumeWorkflow() {
+    fetch(`/api/workflows/${workflowId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' })
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert('Workflow ripreso');
+        location.reload();
+    })
+    .catch(error => alert('Errore: ' + error));
+}
+
+function importFromSabaform() {
+    if (!confirm('Importare i partecipanti dall\'evento Saba Form collegato?')) return;
+
+    const btn = document.getElementById('btnImport');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Importazione...';
+
+    fetch(`/api/workflows/${workflowId}/import-participants`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Errore: ' + data.error);
+            } else {
+                alert(`Importazione completata!\n\nImportati: ${data.imported}\nGià presenti: ${data.skipped_duplicate}\nSenza email: ${data.skipped_no_email}\nTotale nell'evento: ${data.total_in_event}`);
+                location.reload();
+            }
+        })
+        .catch(error => alert('Errore: ' + error))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-download"></i> Importa da Saba Form';
+        });
+}
+
+function simulateWorkflow() {
+    const modal = new bootstrap.Modal(document.getElementById('simulateModal'));
+    const content = document.getElementById('simulateContent');
+    content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2">Simulazione in corso...</p></div>';
+    modal.show();
+
+    fetch(`/api/workflows/${workflowId}/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            content.innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> ${data.error}</div>`;
+            return;
+        }
+
+        let html = `
+            <div class="alert alert-info mb-3">
+                <i class="bi bi-person"></i> <strong>Partecipante di test:</strong> ${data.participant.name || '—'} (${data.participant.email || 'nessuna email'})
+                <div class="mt-2">
+                    <small><strong>Come verificare:</strong> apri la landing, compila il form, poi vai su
+                    <a href="{{ url_for('admin.participants_list', workflow_id=workflow.id) }}" target="_blank">Partecipanti</a>
+                    e clicca <i class="bi bi-database"></i> sul partecipante per vedere i dati raccolti.</small>
+                </div>
+            </div>
+        `;
+
+        console.log('Simulate response:', JSON.stringify(data, null, 2));
+        data.steps.forEach(step => {
+            if (step.skipped) {
+                html += `
+                    <div class="card mb-3 border-secondary">
+                        <div class="card-header bg-light">
+                            <strong>Step ${step.order}:</strong> ${step.step_name}
+                            <span class="badge bg-secondary ms-2">${step.step_type}</span>
+                            <span class="badge bg-warning text-dark ms-1">Saltato</span>
+                        </div>
+                        <div class="card-body"><small class="text-muted">${step.note}</small></div>
+                    </div>
+                `;
+                return;
+            }
+
+            const hasLanding = step.landing_url && step.landing_url !== 'None' && step.landing_url.startsWith('http');
+            const landingBtn = hasLanding
+                ? `<a href="${step.landing_url}" target="_blank" class="btn btn-sm btn-success mt-2">
+                     <i class="bi bi-box-arrow-up-right"></i> Apri Landing Page
+                   </a>`
+                : '';
+
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <strong>Step ${step.order}:</strong> ${step.step_name}
+                        <span class="badge bg-primary ms-2">email</span>
+                        ${step.delay_hours > 0 ? `<span class="badge bg-warning text-dark ms-1"><i class="bi bi-clock"></i> +${step.delay_hours}h</span>` : ''}
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <strong>Oggetto:</strong> ${step.subject}
+                        </div>
+                        <div class="border rounded p-3 bg-white mb-2" style="max-height: 300px; overflow-y: auto;">
+                            ${step.body_html}
+                        </div>
+                        ${hasLanding ? `<div class="mt-2"><strong>Landing URL:</strong> <code style="word-break:break-all">${step.landing_url}</code></div>` : ''}
+                        ${landingBtn}
+                    </div>
+                </div>
+            `;
+        });
+
+        content.innerHTML = html;
+    })
+    .catch(err => {
+        content.innerHTML = `<div class="alert alert-danger">Errore: ${err}</div>`;
+    });
+}
+
+function deleteWorkflow() {
+    if (!confirm('Eliminare questo workflow? L\'operazione è irreversibile.')) return;
+    
+    fetch(`/api/workflows/${workflowId}`, { method: 'DELETE' })
+        .then(response => response.json())
+        .then(data => {
+            alert('Workflow eliminato');
+            window.location.href = '{{ url_for("admin.workflows_list") }}';
+        })
+        .catch(error => alert('Errore: ' + error));
+}
+</script>
+{% endblock %}

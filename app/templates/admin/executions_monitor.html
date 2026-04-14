@@ -1,0 +1,412 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Monitor Esecuzioni - Saba Workflow Admin{% endblock %}
+{% block page_title %}Monitor Esecuzioni{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .search-input { position: relative; }
+    .search-input i { position: absolute; left: 12px; bottom: 8px; color: var(--md-on-surface-variant); font-size: 14px; }
+    .search-input input { padding-left: 36px; }
+    .col-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
+    .col-chip {
+        font-size: 12px; padding: 4px 12px; border-radius: var(--md-shape-full);
+        border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-lowest);
+        color: var(--md-on-surface-variant); cursor: pointer; user-select: none; transition: all 0.15s;
+    }
+    .col-chip.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-color: transparent; }
+    .col-chip:hover { border-color: var(--md-primary); }
+    .status-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .status-chip {
+        font-size: 12px; padding: 5px 14px; border-radius: var(--md-shape-full);
+        border: 1px solid var(--md-outline-variant); background: transparent;
+        cursor: pointer; font-weight: 500; transition: all 0.15s;
+    }
+    .status-chip.active { border-color: transparent; font-weight: 600; }
+    .status-chip[data-status="all"].active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+    .status-chip[data-status="form_submitted"].active { background: #d1fae5; color: #065f46; }
+    .status-chip[data-status="email_failed"].active { background: var(--md-error-container); color: var(--md-error); }
+    .status-chip[data-status="simulation"].active { background: #fef3c7; color: #92400e; }
+    .status-chip[data-status="workflow_started"].active { background: var(--md-primary-container); color: var(--md-primary); }
+    .status-chip[data-status="status_changed"].active { background: #dbeafe; color: #1e40af; }
+    .query-builder { background: var(--md-surface-container); border-radius: var(--md-shape-md); padding: 16px; margin-top: 12px; }
+    .query-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .query-row select, .query-row input { font-size: 13px; }
+    .ptable { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+    .ptable th {
+        background: var(--md-surface-container); color: var(--md-on-surface-variant); font-weight: 600;
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px;
+        border-bottom: 1px solid var(--md-outline-variant); cursor: pointer; white-space: nowrap;
+        user-select: none; position: sticky; top: 0; z-index: 1;
+    }
+    .ptable th:hover { color: var(--md-primary); }
+    .ptable th .sort-icon { font-size: 10px; margin-left: 4px; opacity: 0.4; }
+    .ptable th.sorted .sort-icon { opacity: 1; color: var(--md-primary); }
+    .ptable td { padding: 10px 12px; border-bottom: 1px solid var(--md-surface-container-high); vertical-align: middle; }
+    .ptable tr:hover td { background: var(--md-surface-container-low); }
+    .counter-badge { background: var(--md-primary); color: var(--md-on-primary); border-radius: var(--md-shape-full); padding: 2px 10px; font-size: 12px; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Toolbar -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="filter-bar">
+            <div>
+                <label class="form-label" style="font-size:12px;margin-bottom:4px">Workflow</label>
+                <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="applyFilters()">
+                    <option value="">Tutti</option>
+                    {% for workflow in workflows %}
+                    <option value="{{ workflow.name }}" {% if current_workflow_id == workflow.id %}selected{% endif %}>
+                        {{ workflow.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="search-input" style="flex:1;min-width:200px">
+                <label class="form-label" style="font-size:12px;margin-bottom:4px">Cerca</label>
+                <i class="bi bi-search"></i>
+                <input type="text" class="form-control form-control-sm" id="filterSearch"
+                       placeholder="Partecipante, step, descrizione..." oninput="applyFilters()">
+            </div>
+            <div class="d-flex align-items-end gap-2">
+                <button class="btn btn-outline-primary btn-sm" onclick="toggleColumns()">
+                    <i class="bi bi-layout-three-columns"></i> Colonne
+                </button>
+                <button class="btn btn-outline-primary btn-sm" onclick="toggleQueryBuilder()">
+                    <i class="bi bi-funnel"></i> Query
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="exportCSV()">
+                    <i class="bi bi-download"></i> Esporta CSV
+                </button>
+                <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Event type chips -->
+        <div class="status-chips mt-3">
+            <div class="status-chip active" data-status="all" onclick="filterByType('all')">Tutti <span id="countAll" class="counter-badge ms-1">0</span></div>
+            <div class="status-chip" data-status="form_submitted" onclick="filterByType('form_submitted')">Form compilato</div>
+            <div class="status-chip" data-status="email_failed" onclick="filterByType('email_failed')">Email fallita</div>
+            <div class="status-chip" data-status="simulation" onclick="filterByType('simulation')">Simulazione</div>
+            <div class="status-chip" data-status="workflow_started" onclick="filterByType('workflow_started')">Workflow avviato</div>
+            <div class="status-chip" data-status="status_changed" onclick="filterByType('status_changed')">Stato cambiato</div>
+        </div>
+
+        <!-- Column toggles -->
+        <div id="columnToggles" style="display:none">
+            <div class="col-chips" id="colChips"></div>
+        </div>
+
+        <!-- Query builder -->
+        <div id="queryBuilder" class="query-builder" style="display:none">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong style="font-size:13px"><i class="bi bi-funnel"></i> Query avanzata</strong>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="addQueryRow()"><i class="bi bi-plus"></i> Condizione</button>
+                    <button class="btn btn-sm btn-primary" onclick="applyFilters()"><i class="bi bi-play"></i> Esegui</button>
+                </div>
+            </div>
+            <div id="queryRows"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Results -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <h6 class="mb-0"><i class="bi bi-journal-text"></i> Timeline <span id="resultCount" class="counter-badge ms-2">0</span></h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 75vh; overflow-y: auto;">
+            <table class="ptable" id="timelineTable">
+                <thead><tr id="tableHead"></tr></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        <div id="emptyState" class="empty-state" style="display:none">
+            <i class="bi bi-activity"></i>
+            <h4>Nessuna attività</h4>
+            <p>Le attività appariranno qui quando usi il workflow</p>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Info -->
+<div class="modal fade" id="infoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="infoModalTitle">Info</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="infoModalBody"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// =============================================
+// DATA
+// =============================================
+var ALL_TIMELINE = [
+    {% for item in timeline %}
+    {
+        time: {{ item.time.isoformat() | tojson }},
+        time_local: {{ item.time|localtime | tojson }},
+        event_type: {{ item.event_type | tojson }},
+        participant: {{ item.participant_name | tojson }},
+        step: {{ item.step_name | tojson }},
+        step_type: {{ item.step_type | tojson }},
+        description: {{ item.description | tojson }},
+        workflow: {{ item.workflow_name | default('', true) | tojson }},
+        error: {{ item.error | tojson if item.error else 'null' }},
+        details: {{ item.details | tojson if item.details else 'null' }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+// =============================================
+// COLUMNS
+// =============================================
+var ALL_COLUMNS = [
+    { key: 'time_local', label: 'Quando', default: true },
+    { key: 'event_type', label: 'Evento', default: true },
+    { key: 'participant', label: 'Partecipante', default: true },
+    { key: 'step', label: 'Step', default: true },
+    { key: 'description', label: 'Descrizione', default: true },
+    { key: 'workflow', label: 'Workflow', default: false },
+    { key: 'step_type', label: 'Tipo Step', default: false },
+];
+
+var visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(function(c) { return c.key; });
+var currentType = 'all';
+var sortCol = null;
+var sortDir = 'desc';
+var queryConditions = [];
+
+// INIT is at the bottom of this script
+
+// =============================================
+// COLUMN MANAGEMENT
+// =============================================
+function buildColumnChips() {
+    var container = document.getElementById('colChips');
+    container.innerHTML = '';
+    ALL_COLUMNS.forEach(function(col) {
+        var chip = document.createElement('span');
+        chip.className = 'col-chip' + (visibleColumns.indexOf(col.key) !== -1 ? ' active' : '');
+        chip.textContent = col.label;
+        chip.onclick = function() {
+            var idx = visibleColumns.indexOf(col.key);
+            if (idx !== -1) { visibleColumns.splice(idx, 1); chip.classList.remove('active'); }
+            else { visibleColumns.push(col.key); chip.classList.add('active'); }
+            applyFilters();
+        };
+        container.appendChild(chip);
+    });
+}
+function toggleColumns() { var el = document.getElementById('columnToggles'); el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+
+// =============================================
+// QUERY BUILDER
+// =============================================
+var QUERY_FIELDS = ALL_COLUMNS.map(function(c) { return { key: c.key, label: c.label }; });
+function toggleQueryBuilder() { var el = document.getElementById('queryBuilder'); el.style.display = el.style.display === 'none' ? 'block' : 'none'; if (el.style.display === 'block' && queryConditions.length === 0) addQueryRow(); }
+function addQueryRow() {
+    var container = document.getElementById('queryRows'); var idx = queryConditions.length;
+    queryConditions.push({ field: '', op: 'contains', value: '', logic: 'AND' });
+    var row = document.createElement('div'); row.className = 'query-row';
+    var logicHtml = idx > 0 ? '<select class="form-select form-select-sm" style="width:80px" onchange="queryConditions['+idx+'].logic=this.value"><option value="AND">E</option><option value="OR">O</option></select>' : '<span style="width:80px;display:inline-block;font-size:12px;color:var(--md-on-surface-variant)">Dove</span>';
+    var fieldOpts = QUERY_FIELDS.map(function(f) { return '<option value="'+f.key+'">'+f.label+'</option>'; }).join('');
+    row.innerHTML = logicHtml + '<select class="form-select form-select-sm" style="width:160px" onchange="queryConditions['+idx+'].field=this.value"><option value="">-- Campo --</option>'+fieldOpts+'</select><select class="form-select form-select-sm" style="width:140px" onchange="queryConditions['+idx+'].op=this.value;updateOpVis('+idx+')"><option value="contains">contiene</option><option value="eq">uguale a</option><option value="neq">diverso da</option><option value="not_empty">non vuoto</option><option value="empty">vuoto</option></select><input type="text" class="form-control form-control-sm" style="width:200px" placeholder="Valore..." oninput="queryConditions['+idx+'].value=this.value" id="qval'+idx+'"><button class="btn btn-sm text-danger" onclick="removeQueryRow('+idx+',this)"><i class="bi bi-x-lg"></i></button>';
+    container.appendChild(row);
+}
+function removeQueryRow(idx, btn) { btn.closest('.query-row').remove(); queryConditions[idx] = null; }
+function updateOpVis(idx) { var v = document.getElementById('qval'+idx); if (v) v.style.display = (['empty','not_empty'].indexOf(queryConditions[idx].op) !== -1) ? 'none' : ''; }
+
+// =============================================
+// FILTERING & SORTING
+// =============================================
+function filterByType(type) {
+    currentType = type;
+    document.querySelectorAll('.status-chip').forEach(function(c) { c.classList.toggle('active', c.dataset.status === type); });
+    applyFilters();
+}
+
+function applyFilters() {
+    var workflowVal = document.getElementById('filterWorkflow').value;
+    var search = document.getElementById('filterSearch').value.toLowerCase().trim();
+    var rows = ALL_TIMELINE.slice();
+
+    if (workflowVal) rows = rows.filter(function(r) { return r.workflow === workflowVal; });
+    if (currentType !== 'all') rows = rows.filter(function(r) { return r.event_type === currentType; });
+    if (search) {
+        rows = rows.filter(function(r) {
+            return [r.participant, r.step, r.description, r.event_type, r.workflow, r.time_local].join(' ').toLowerCase().indexOf(search) !== -1;
+        });
+    }
+
+    queryConditions.forEach(function(cond, i) {
+        if (!cond || !cond.field) return;
+        var logic = (i === 0) ? 'AND' : (cond.logic || 'AND');
+        var matchFn = function(r) {
+            var val = r[cond.field] || '';
+            var target = (cond.value || '').toLowerCase();
+            var v = String(val).toLowerCase();
+            switch (cond.op) {
+                case 'contains': return v.indexOf(target) !== -1;
+                case 'eq': return v === target;
+                case 'neq': return v !== target;
+                case 'not_empty': return !!val && val !== '';
+                case 'empty': return !val || val === '';
+                default: return true;
+            }
+        };
+        if (logic === 'OR') { var extra = ALL_TIMELINE.filter(matchFn); var ids = new Set(rows.map(function(r,i){return i;})); extra.forEach(function(r) { rows.push(r); }); }
+        else rows = rows.filter(matchFn);
+    });
+
+    if (sortCol) {
+        rows.sort(function(a, b) {
+            var va = a[sortCol] || ''; var vb = b[sortCol] || '';
+            if (va < vb) return sortDir === 'asc' ? -1 : 1;
+            if (va > vb) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+
+    renderTable(rows);
+}
+
+// =============================================
+// EVENT BADGE RENDERING
+// =============================================
+var EVENT_BADGES = {
+    form_submitted: '<span class="badge bg-success"><i class="bi bi-check2-square"></i> Form compilato</span>',
+    status_changed: '<span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> Stato cambiato</span>',
+    workflow_started: '<span class="badge bg-primary"><i class="bi bi-play-circle"></i> Workflow avviato</span>',
+    simulation: '<span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> Simulazione</span>',
+    unsubscribed: '<span class="badge bg-danger"><i class="bi bi-person-x"></i> Disiscritto</span>',
+    email_sent: '<span class="badge bg-success"><i class="bi bi-envelope-check"></i> Email inviata</span>',
+    email_failed: '<span class="badge bg-danger"><i class="bi bi-envelope-x"></i> Email fallita</span>',
+    email_scheduled: '<span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Schedulata</span>',
+    email_completed: '<span class="badge bg-primary"><i class="bi bi-check-all"></i> Completata</span>',
+    email_skipped: '<span class="badge bg-secondary"><i class="bi bi-skip-forward"></i> Saltata</span>',
+    goal_met: '<span class="badge bg-success"><i class="bi bi-trophy"></i> Goal raggiunto</span>',
+    goal_not_met: '<span class="badge bg-secondary"><i class="bi bi-trophy"></i> Goal non raggiunto</span>',
+    participant_imported: '<span class="badge bg-info"><i class="bi bi-download"></i> Importato</span>',
+};
+
+var STEP_ICONS = { email: 'bi-envelope', wait_until: 'bi-calendar-check', goal_check: 'bi-trophy', export_data: 'bi-download', condition: 'bi-shuffle' };
+
+// =============================================
+// RENDERING
+// =============================================
+var _filteredRows = [];
+
+function renderTable(rows) {
+    _filteredRows = rows;
+    var thead = document.getElementById('tableHead');
+    var tbody = document.getElementById('tableBody');
+    var empty = document.getElementById('emptyState');
+    document.getElementById('resultCount').textContent = rows.length;
+
+    if (rows.length === 0) { thead.innerHTML = ''; tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+
+    var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
+
+    thead.innerHTML = cols.map(function(c) {
+        var sorted = sortCol === c.key;
+        var icon = sorted ? (sortDir === 'asc' ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-down';
+        return '<th class="'+(sorted?'sorted':'')+'" onclick="sortBy(\''+c.key+'\')">'+c.label+' <i class="bi '+icon+' sort-icon"></i></th>';
+    }).join('') + '<th>Info</th>';
+
+    tbody.innerHTML = rows.map(function(r, idx) {
+        var cells = cols.map(function(c) {
+            var val = r[c.key] || '';
+            if (c.key === 'event_type') return '<td>' + (EVENT_BADGES[val] || '<span class="badge bg-secondary">'+esc(val)+'</span>') + '</td>';
+            if (c.key === 'step') {
+                var si = STEP_ICONS[r.step_type] || '';
+                return '<td><small>' + (si ? '<i class="bi '+si+'"></i> ' : '') + esc(val) + '</small></td>';
+            }
+            return '<td><small>' + esc(val || '—') + '</small></td>';
+        }).join('');
+
+        var infoBtn = '';
+        if (r.error) infoBtn = '<button class="btn btn-sm btn-outline-danger" onclick="showError('+idx+')" title="Errore"><i class="bi bi-exclamation-triangle"></i></button>';
+        else if (r.details) infoBtn = '<button class="btn btn-sm btn-outline-info" onclick="showDetails('+idx+')" title="Dettagli"><i class="bi bi-info-circle"></i></button>';
+        else infoBtn = '<span class="text-muted">-</span>';
+
+        return '<tr>' + cells + '<td>' + infoBtn + '</td></tr>';
+    }).join('');
+}
+
+function sortBy(key) {
+    if (sortCol === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    else { sortCol = key; sortDir = 'asc'; }
+    applyFilters();
+}
+
+function updateCounts() { document.getElementById('countAll').textContent = ALL_TIMELINE.length; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function showError(idx) {
+    var r = _filteredRows[idx]; if (!r) return;
+    document.getElementById('infoModalTitle').textContent = 'Errore';
+    document.getElementById('infoModalBody').innerHTML = '<div class="alert alert-danger">' + esc(r.error) + '</div>';
+    new bootstrap.Modal(document.getElementById('infoModal')).show();
+}
+
+function showDetails(idx) {
+    var r = _filteredRows[idx]; if (!r || !r.details) return;
+    document.getElementById('infoModalTitle').textContent = 'Dettagli';
+    var body = document.getElementById('infoModalBody');
+    var data = r.details;
+    var cd = data.collected_data || data;
+    if (typeof cd === 'object' && !Array.isArray(cd)) {
+        var html = '<dl class="row mb-0" style="font-size:14px">';
+        for (var k in cd) {
+            if (k === 'collected_data' && typeof cd[k] === 'object') {
+                for (var ck in cd[k]) { html += '<dt class="col-sm-4 text-muted">'+esc(ck)+'</dt><dd class="col-sm-8">'+esc(String(cd[k][ck]))+'</dd>'; }
+            } else {
+                html += '<dt class="col-sm-4 text-muted">'+esc(k)+'</dt><dd class="col-sm-8">'+esc(String(cd[k]))+'</dd>';
+            }
+        }
+        html += '</dl>';
+        body.innerHTML = html;
+    } else {
+        body.innerHTML = '<pre style="max-height:400px;overflow:auto">'+JSON.stringify(data, null, 2)+'</pre>';
+    }
+    new bootstrap.Modal(document.getElementById('infoModal')).show();
+}
+
+function exportCSV() {
+    var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
+    var csv = [cols.map(function(c) { return '"'+c.label+'"'; }).join(',')];
+    _filteredRows.forEach(function(r) {
+        csv.push(cols.map(function(c) { var v = r[c.key] || ''; return '"'+String(v).replace(/"/g,'""')+'"'; }).join(','));
+    });
+    var blob = new Blob(['\uFEFF'+csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+    link.download = 'esecuzioni_'+new Date().toISOString().slice(0,10)+'.csv'; link.click();
+}
+
+// =============================================
+// INIT
+// =============================================
+buildColumnChips();
+renderTable(ALL_TIMELINE);
+updateCounts();
+
+// Auto-refresh ogni 60 secondi
+setTimeout(function() { location.reload(); }, 60000);
+</script>
+{% endblock %}

@@ -1,0 +1,605 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Partecipanti - Saba Workflow Admin{% endblock %}
+{% block page_title %}Gestione Partecipanti{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-end;
+    }
+    .search-input {
+        position: relative;
+    }
+    .search-input i {
+        position: absolute;
+        left: 12px;
+        bottom: 8px;
+        color: var(--md-on-surface-variant);
+        font-size: 14px;
+    }
+    .search-input input {
+        padding-left: 36px;
+    }
+
+    /* Column toggle chips */
+    .col-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 12px 0;
+    }
+    .col-chip {
+        font-size: 12px;
+        padding: 4px 12px;
+        border-radius: var(--md-shape-full);
+        border: 1px solid var(--md-outline-variant);
+        background: var(--md-surface-container-lowest);
+        color: var(--md-on-surface-variant);
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.15s;
+    }
+    .col-chip.active {
+        background: var(--md-secondary-container);
+        color: var(--md-on-secondary-container);
+        border-color: transparent;
+    }
+    .col-chip:hover { border-color: var(--md-primary); }
+
+    /* Status filter chips */
+    .status-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .status-chip {
+        font-size: 12px;
+        padding: 5px 14px;
+        border-radius: var(--md-shape-full);
+        border: 1px solid var(--md-outline-variant);
+        background: transparent;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.15s;
+    }
+    .status-chip.active { border-color: transparent; font-weight: 600; }
+    .status-chip[data-status="all"].active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+    .status-chip[data-status="pending"].active { background: var(--md-tertiary-container); color: var(--md-tertiary); }
+    .status-chip[data-status="in_progress"].active { background: #C3E7FF; color: #00497B; }
+    .status-chip[data-status="completed"].active { background: var(--md-primary-container); color: var(--md-primary); }
+    .status-chip[data-status="unsubscribed"].active { background: var(--md-error-container); color: var(--md-error); }
+    .status-chip[data-status="bounced"].active { background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
+
+    /* Query builder */
+    .query-builder {
+        background: var(--md-surface-container);
+        border-radius: var(--md-shape-md);
+        padding: 16px;
+        margin-top: 12px;
+    }
+    .query-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    .query-row select, .query-row input {
+        font-size: 13px;
+    }
+
+    /* Participant table */
+    .ptable {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: 13px;
+    }
+    .ptable th {
+        background: var(--md-surface-container);
+        color: var(--md-on-surface-variant);
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--md-outline-variant);
+        cursor: pointer;
+        white-space: nowrap;
+        user-select: none;
+    }
+    .ptable th:hover { color: var(--md-primary); }
+    .ptable th .sort-icon { font-size: 10px; margin-left: 4px; opacity: 0.4; }
+    .ptable th.sorted .sort-icon { opacity: 1; color: var(--md-primary); }
+    .ptable td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--md-surface-container-high);
+        vertical-align: middle;
+    }
+    .ptable tr:hover td { background: var(--md-surface-container-low); }
+
+    /* Counter badge */
+    .counter-badge {
+        background: var(--md-primary);
+        color: var(--md-on-primary);
+        border-radius: var(--md-shape-full);
+        padding: 2px 10px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Toolbar -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="filter-bar">
+            <!-- Workflow filter -->
+            <div>
+                <label class="form-label" style="font-size:12px;margin-bottom:4px">Workflow</label>
+                <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="applyFilters()">
+                    <option value="">Tutti</option>
+                    {% for workflow in workflows %}
+                    <option value="{{ workflow.id }}" {% if current_workflow_id == workflow.id %}selected{% endif %}>
+                        {{ workflow.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Search -->
+            <div class="search-input" style="flex:1;min-width:200px">
+                <label class="form-label" style="font-size:12px;margin-bottom:4px">Cerca</label>
+                <i class="bi bi-search"></i>
+                <input type="text" class="form-control form-control-sm" id="filterSearch"
+                       placeholder="Nome, email, telefono..." oninput="applyFilters()">
+            </div>
+
+            <!-- Export -->
+            <div class="d-flex align-items-end gap-2">
+                <button class="btn btn-outline-primary btn-sm" onclick="toggleColumns()">
+                    <i class="bi bi-layout-three-columns"></i> Colonne
+                </button>
+                <button class="btn btn-outline-primary btn-sm" onclick="toggleQueryBuilder()">
+                    <i class="bi bi-funnel"></i> Query
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="exportCSV()">
+                    <i class="bi bi-download"></i> Esporta CSV
+                </button>
+            </div>
+        </div>
+
+        <!-- Status chips -->
+        <div class="status-chips mt-3">
+            <div class="status-chip active" data-status="all" onclick="filterByStatus('all')">Tutti <span id="countAll" class="counter-badge ms-1">0</span></div>
+            <div class="status-chip" data-status="pending" onclick="filterByStatus('pending')">Pending</div>
+            <div class="status-chip" data-status="in_progress" onclick="filterByStatus('in_progress')">In corso</div>
+            <div class="status-chip" data-status="completed" onclick="filterByStatus('completed')">Completati</div>
+            <div class="status-chip" data-status="unsubscribed" onclick="filterByStatus('unsubscribed')">Disiscritti</div>
+            <div class="status-chip" data-status="bounced" onclick="filterByStatus('bounced')">Bounced</div>
+        </div>
+
+        <!-- Column toggles (hidden by default) -->
+        <div id="columnToggles" style="display:none">
+            <div class="col-chips" id="colChips"></div>
+        </div>
+
+        <!-- Query builder (hidden by default) -->
+        <div id="queryBuilder" class="query-builder" style="display:none">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong style="font-size:13px"><i class="bi bi-funnel"></i> Query avanzata</strong>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="addQueryRow()"><i class="bi bi-plus"></i> Condizione</button>
+                    <button class="btn btn-sm btn-primary" onclick="applyFilters()"><i class="bi bi-play"></i> Esegui</button>
+                </div>
+            </div>
+            <div id="queryRows"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Results -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <h6 class="mb-0"><i class="bi bi-people"></i> Partecipanti <span id="resultCount" class="counter-badge ms-2">0</span></h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="ptable" id="participantsTable">
+                <thead><tr id="tableHead"></tr></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        <div id="emptyState" class="empty-state" style="display:none">
+            <i class="bi bi-people"></i>
+            <h4>Nessun partecipante trovato</h4>
+            <p>Prova a cambiare i filtri</p>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Dati Raccolti -->
+<div class="modal fade" id="dataModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="dataModalTitle">Dati Raccolti</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="dataModalBody"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// =============================================
+// DATA
+// =============================================
+var ALL_PARTICIPANTS = [
+    {% for p in participants %}
+    {
+        id: {{ p.id }},
+        name: {{ p.name | default('', true) | tojson }},
+        email: {{ p.email | default('', true) | tojson }},
+        phone: {{ p.phone | default('', true) | tojson }},
+        workflow: {{ p.workflow.name | tojson }},
+        workflow_id: {{ p.workflow_id }},
+        status: {{ p.status.value | tojson }},
+        enrolled_at: {{ p.enrolled_at|localtime | tojson }},
+        last_interaction: {{ p.last_interaction|localtime | tojson if p.last_interaction else 'null' }},
+        completed_at: {{ p.completed_at|localtime | tojson if p.completed_at else 'null' }},
+        token: {{ p.token | default('', true) | tojson }},
+        collected_data: {{ p.collected_data | tojson if p.collected_data else '{}' }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+// =============================================
+// COLUMNS CONFIG
+// =============================================
+var ALL_COLUMNS = [
+    { key: 'id', label: 'ID', default: true },
+    { key: 'name', label: 'Nome', default: true },
+    { key: 'email', label: 'Email', default: true },
+    { key: 'phone', label: 'Telefono', default: false },
+    { key: 'workflow', label: 'Workflow', default: true },
+    { key: 'status', label: 'Stato', default: true },
+    { key: 'enrolled_at', label: 'Iscritto', default: true },
+    { key: 'last_interaction', label: 'Ultima interazione', default: false },
+    { key: 'completed_at', label: 'Completato', default: false },
+    { key: 'token', label: 'Token', default: false },
+];
+
+// Aggiungi colonne dai collected_data
+var extraCols = new Set();
+ALL_PARTICIPANTS.forEach(function(p) {
+    if (p.collected_data) {
+        Object.keys(p.collected_data).forEach(function(k) { extraCols.add(k); });
+    }
+});
+extraCols.forEach(function(k) {
+    ALL_COLUMNS.push({ key: 'cd_' + k, label: k, default: false });
+});
+
+var visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(function(c) { return c.key; });
+var currentStatus = 'all';
+var sortCol = null;
+var sortDir = 'asc';
+var queryConditions = [];
+
+// =============================================
+// INIT
+// =============================================
+buildColumnChips();
+renderTable(ALL_PARTICIPANTS);
+updateCounts();
+
+// =============================================
+// COLUMN MANAGEMENT
+// =============================================
+function buildColumnChips() {
+    var container = document.getElementById('colChips');
+    container.innerHTML = '';
+    ALL_COLUMNS.forEach(function(col) {
+        var chip = document.createElement('span');
+        chip.className = 'col-chip' + (visibleColumns.indexOf(col.key) !== -1 ? ' active' : '');
+        chip.textContent = col.label;
+        chip.onclick = function() {
+            var idx = visibleColumns.indexOf(col.key);
+            if (idx !== -1) {
+                visibleColumns.splice(idx, 1);
+                chip.classList.remove('active');
+            } else {
+                visibleColumns.push(col.key);
+                chip.classList.add('active');
+            }
+            applyFilters();
+        };
+        container.appendChild(chip);
+    });
+}
+
+function toggleColumns() {
+    var el = document.getElementById('columnToggles');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// =============================================
+// QUERY BUILDER
+// =============================================
+var QUERY_FIELDS = ALL_COLUMNS.map(function(c) { return { key: c.key, label: c.label }; });
+
+function toggleQueryBuilder() {
+    var el = document.getElementById('queryBuilder');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    if (el.style.display === 'block' && queryConditions.length === 0) {
+        addQueryRow();
+    }
+}
+
+function addQueryRow() {
+    var container = document.getElementById('queryRows');
+    var idx = queryConditions.length;
+    queryConditions.push({ field: '', op: 'contains', value: '', logic: 'AND' });
+
+    var row = document.createElement('div');
+    row.className = 'query-row';
+    row.dataset.idx = idx;
+
+    var logicHtml = idx > 0
+        ? '<select class="form-select form-select-sm" style="width:80px" onchange="queryConditions[' + idx + '].logic=this.value"><option value="AND">E</option><option value="OR">O</option></select>'
+        : '<span style="width:80px;display:inline-block;font-size:12px;color:var(--md-on-surface-variant)">Dove</span>';
+
+    var fieldOpts = QUERY_FIELDS.map(function(f) { return '<option value="' + f.key + '">' + f.label + '</option>'; }).join('');
+
+    row.innerHTML = logicHtml +
+        '<select class="form-select form-select-sm" style="width:160px" onchange="queryConditions[' + idx + '].field=this.value">' +
+        '<option value="">-- Campo --</option>' + fieldOpts + '</select>' +
+        '<select class="form-select form-select-sm" style="width:140px" onchange="queryConditions[' + idx + '].op=this.value;updateOpVis(' + idx + ')">' +
+        '<option value="contains">contiene</option>' +
+        '<option value="eq">uguale a</option>' +
+        '<option value="neq">diverso da</option>' +
+        '<option value="not_empty">non vuoto</option>' +
+        '<option value="empty">vuoto</option></select>' +
+        '<input type="text" class="form-control form-control-sm" style="width:200px" placeholder="Valore..." oninput="queryConditions[' + idx + '].value=this.value" id="qval' + idx + '">' +
+        '<button class="btn btn-sm text-danger" onclick="removeQueryRow(' + idx + ',this)"><i class="bi bi-x-lg"></i></button>';
+
+    container.appendChild(row);
+}
+
+function removeQueryRow(idx, btn) {
+    btn.closest('.query-row').remove();
+    queryConditions[idx] = null;
+}
+
+function updateOpVis(idx) {
+    var val = document.getElementById('qval' + idx);
+    var op = queryConditions[idx].op;
+    if (val) val.style.display = (op === 'empty' || op === 'not_empty') ? 'none' : '';
+}
+
+// =============================================
+// FILTERING & SORTING
+// =============================================
+function filterByStatus(status) {
+    currentStatus = status;
+    document.querySelectorAll('.status-chip').forEach(function(c) {
+        c.classList.toggle('active', c.dataset.status === status);
+    });
+    applyFilters();
+}
+
+function applyFilters() {
+    var workflowId = document.getElementById('filterWorkflow').value;
+    var search = document.getElementById('filterSearch').value.toLowerCase().trim();
+    var rows = ALL_PARTICIPANTS;
+
+    // Workflow filter
+    if (workflowId) {
+        rows = rows.filter(function(p) { return String(p.workflow_id) === workflowId; });
+    }
+
+    // Status filter
+    if (currentStatus !== 'all') {
+        rows = rows.filter(function(p) { return p.status === currentStatus; });
+    }
+
+    // Text search
+    if (search) {
+        rows = rows.filter(function(p) {
+            return (p.name || '').toLowerCase().indexOf(search) !== -1 ||
+                   (p.email || '').toLowerCase().indexOf(search) !== -1 ||
+                   (p.phone || '').toLowerCase().indexOf(search) !== -1 ||
+                   (p.workflow || '').toLowerCase().indexOf(search) !== -1;
+        });
+    }
+
+    // Query conditions
+    queryConditions.forEach(function(cond, i) {
+        if (!cond || !cond.field) return;
+        var logic = (i === 0) ? 'AND' : (cond.logic || 'AND');
+
+        var matchFn = function(p) {
+            var val = getFieldValue(p, cond.field);
+            var target = (cond.value || '').toLowerCase();
+            var v = String(val || '').toLowerCase();
+
+            switch (cond.op) {
+                case 'contains': return v.indexOf(target) !== -1;
+                case 'eq': return v === target;
+                case 'neq': return v !== target;
+                case 'not_empty': return !!val && val !== '';
+                case 'empty': return !val || val === '';
+                default: return true;
+            }
+        };
+
+        if (logic === 'OR') {
+            // OR: aggiungi righe che matchano (union con quelle precedenti)
+            var extraRows = ALL_PARTICIPANTS.filter(matchFn);
+            var ids = new Set(rows.map(function(r) { return r.id; }));
+            extraRows.forEach(function(r) { if (!ids.has(r.id)) rows.push(r); });
+        } else {
+            rows = rows.filter(matchFn);
+        }
+    });
+
+    // Sort
+    if (sortCol) {
+        rows.sort(function(a, b) {
+            var va = getFieldValue(a, sortCol) || '';
+            var vb = getFieldValue(b, sortCol) || '';
+            if (va < vb) return sortDir === 'asc' ? -1 : 1;
+            if (va > vb) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+
+    renderTable(rows);
+}
+
+function getFieldValue(p, key) {
+    if (key.startsWith('cd_')) {
+        var cdKey = key.substring(3);
+        return p.collected_data ? (p.collected_data[cdKey] || '') : '';
+    }
+    return p[key];
+}
+
+// =============================================
+// RENDERING
+// =============================================
+function renderTable(rows) {
+    var thead = document.getElementById('tableHead');
+    var tbody = document.getElementById('tableBody');
+    var empty = document.getElementById('emptyState');
+    var count = document.getElementById('resultCount');
+
+    count.textContent = rows.length;
+
+    if (rows.length === 0) {
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+    empty.style.display = 'none';
+
+    // Header
+    var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
+    thead.innerHTML = cols.map(function(c) {
+        var sorted = sortCol === c.key;
+        var icon = sorted ? (sortDir === 'asc' ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-down';
+        return '<th class="' + (sorted ? 'sorted' : '') + '" onclick="sortBy(\'' + c.key + '\')">' +
+               c.label + ' <i class="bi ' + icon + ' sort-icon"></i></th>';
+    }).join('') + '<th>Azioni</th>';
+
+    // Body
+    tbody.innerHTML = rows.map(function(p) {
+        var cells = cols.map(function(c) {
+            var val = getFieldValue(p, c.key);
+            if (c.key === 'id') return '<td><strong>#' + val + '</strong></td>';
+            if (c.key === 'status') return '<td><span class="status-badge status-' + val + '">' + val + '</span></td>';
+            if (c.key === 'workflow') return '<td><a href="/admin/workflows/' + p.workflow_id + '">' + esc(val) + '</a></td>';
+            if (c.key === 'email' && val) return '<td><i class="bi bi-envelope" style="opacity:0.4;margin-right:4px"></i>' + esc(val) + '</td>';
+            return '<td>' + esc(val || '-') + '</td>';
+        }).join('');
+
+        var actions = '<td class="table-actions"><div class="btn-group btn-group-sm">' +
+            '<button class="btn btn-outline-info" onclick="viewData(' + p.id + ')" title="Dati raccolti"><i class="bi bi-file-text"></i></button>';
+        if (p.token) {
+            actions += '<button class="btn btn-outline-primary" onclick="copyUrl(\'' + esc(p.token) + '\')" title="Copia landing URL"><i class="bi bi-link-45deg"></i></button>';
+        }
+        actions += '</div></td>';
+
+        return '<tr>' + cells + actions + '</tr>';
+    }).join('');
+}
+
+function sortBy(key) {
+    if (sortCol === key) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortCol = key;
+        sortDir = 'asc';
+    }
+    applyFilters();
+}
+
+function updateCounts() {
+    document.getElementById('countAll').textContent = ALL_PARTICIPANTS.length;
+}
+
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// =============================================
+// ACTIONS
+// =============================================
+function viewData(id) {
+    var p = ALL_PARTICIPANTS.find(function(x) { return x.id === id; });
+    var body = document.getElementById('dataModalBody');
+    var title = document.getElementById('dataModalTitle');
+    if (!p) return;
+
+    title.textContent = 'Dati — ' + (p.name || p.email || '#' + p.id);
+
+    if (p.collected_data && Object.keys(p.collected_data).length > 0) {
+        var html = '<dl class="row" style="font-size:14px">';
+        for (var k in p.collected_data) {
+            html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(k) + '</dt>';
+            html += '<dd class="col-sm-8">' + esc(p.collected_data[k]) + '</dd>';
+        }
+        html += '</dl>';
+        body.innerHTML = html;
+    } else {
+        body.innerHTML = '<p style="color:var(--md-on-surface-variant)">Nessun dato raccolto</p>';
+    }
+    new bootstrap.Modal(document.getElementById('dataModal')).show();
+}
+
+function copyUrl(token) {
+    var url = window.location.origin + '/landing/' + token;
+    navigator.clipboard.writeText(url).then(function() {
+        alert('URL copiato!');
+    });
+}
+
+function exportCSV() {
+    var rows = getFilteredRows();
+    var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
+
+    var csv = cols.map(function(c) { return '"' + c.label + '"'; }).join(',') + '\n';
+    rows.forEach(function(p) {
+        csv += cols.map(function(c) {
+            var val = getFieldValue(p, c.key);
+            return '"' + String(val || '').replace(/"/g, '""') + '"';
+        }).join(',') + '\n';
+    });
+
+    var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'partecipanti_' + new Date().toISOString().slice(0, 10) + '.csv';
+    link.click();
+}
+
+function getFilteredRows() {
+    // Re-apply filters to get current view
+    var rows = ALL_PARTICIPANTS;
+    var wf = document.getElementById('filterWorkflow').value;
+    var search = document.getElementById('filterSearch').value.toLowerCase().trim();
+    if (wf) rows = rows.filter(function(p) { return String(p.workflow_id) === wf; });
+    if (currentStatus !== 'all') rows = rows.filter(function(p) { return p.status === currentStatus; });
+    if (search) rows = rows.filter(function(p) {
+        return (p.name||'').toLowerCase().indexOf(search)!==-1 || (p.email||'').toLowerCase().indexOf(search)!==-1;
+    });
+    return rows;
+}
+</script>
+{% endblock %}

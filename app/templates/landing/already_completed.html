@@ -1,0 +1,28 @@
+{% extends "landing/base.html" %}
+
+{% block title %}Già completato - Saba Workflow{% endblock %}
+
+{% block content %}
+<div style="text-align: center;">
+    <svg width="80" height="80" viewBox="0 0 80 80" style="margin-bottom: 20px;">
+        <circle cx="40" cy="40" r="35" fill="none" stroke="#4f4" stroke-width="3"/>
+        <path d="M 25 40 L 35 50 L 55 30" stroke="#4f4" stroke-width="3" stroke-linecap="round" fill="none"/>
+    </svg>
+    
+    <h1 style="color: #4f4;">Tutto fatto!</h1>
+    <p style="font-size: 18px;">Hai già completato questo workflow.</p>
+    
+    <div style="margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; text-align: left;">
+        <h3 style="margin-bottom: 10px; color: #667eea;">Riepilogo</h3>
+        <p><strong>Email:</strong> {{ participant.email }}</p>
+        {% if participant.name %}
+        <p><strong>Nome:</strong> {{ participant.name }}</p>
+        {% endif %}
+        <p><strong>Completato il:</strong> {{ participant.completed_at|localtime('%d/%m/%Y alle %H:%M') }}</p>
+    </div>
+    
+    <p style="margin-top: 30px; color: #999; font-size: 14px;">
+        Grazie per la tua partecipazione!
+    </p>
+</div>
+{% endblock %}

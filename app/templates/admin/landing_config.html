@@ -1,0 +1,934 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Configura Landing Page - {{ step.name }}{% endblock %}
+{% block page_title %}
+<i class="bi bi-palette"></i> Landing Page — {{ step.name }}
+{% endblock %}
+
+{% block page_actions %}
+<a href="{{ url_for('admin.workflow_detail', workflow_id=step.workflow_id) }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Torna al workflow
+</a>
+{% endblock %}
+
+{% block extra_css %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&family=Montserrat:wght@300;400;500;600;700&family=Lato:wght@300;400;700&family=Open+Sans:wght@300;400;500;600;700&family=Raleway:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+    .config-panel {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        padding: 24px;
+        margin-bottom: 20px;
+    }
+    .config-panel h5 {
+        font-weight: 700;
+        margin-bottom: 16px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #f0f0f0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .config-panel h5 i { color: #667eea; }
+
+    /* Color picker row */
+    .color-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .color-row label {
+        min-width: 140px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #555;
+    }
+    .color-row input[type="color"] {
+        width: 40px;
+        height: 32px;
+        border: 2px solid #ddd;
+        border-radius: 6px;
+        cursor: pointer;
+        padding: 2px;
+    }
+    .color-row input[type="text"] {
+        width: 90px;
+        font-size: 13px;
+        font-family: monospace;
+    }
+
+    /* Template cards */
+    .template-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+    }
+    .template-card {
+        border: 3px solid transparent;
+        border-radius: 12px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .template-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .template-card.selected { border-color: #667eea; box-shadow: 0 0 0 1px #667eea; }
+    .template-card .preview {
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .template-card .preview .mini-form {
+        width: 60%;
+        padding: 8px;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.9);
+    }
+    .template-card .preview .mini-form .mini-input {
+        height: 6px;
+        background: #e5e7eb;
+        border-radius: 2px;
+        margin-bottom: 4px;
+    }
+    .template-card .preview .mini-form .mini-btn {
+        height: 8px;
+        border-radius: 2px;
+    }
+    .template-card .tpl-name {
+        text-align: center;
+        padding: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #333;
+    }
+
+    /* Fields table */
+    .fields-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .fields-table th {
+        background: #f8f9fa;
+        padding: 10px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #666;
+        border-bottom: 2px solid #e5e7eb;
+    }
+    .fields-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid #f0f0f0;
+        vertical-align: middle;
+    }
+    .fields-table tr:hover td { background: #fafbff; }
+    .fields-table input, .fields-table select {
+        font-size: 13px;
+        padding: 6px 10px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-family: inherit;
+    }
+    .fields-table input:focus, .fields-table select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 2px rgba(102,126,234,0.15);
+    }
+    .field-drag-handle {
+        cursor: grab;
+        color: #aaa;
+        font-size: 16px;
+    }
+    .field-drag-handle:hover { color: #667eea; }
+    .btn-remove-field {
+        background: none;
+        border: none;
+        color: #dc3545;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 4px;
+        border-radius: 4px;
+    }
+    .btn-remove-field:hover { background: #fee; }
+
+    /* Options editor (per select/radio/checkbox) */
+    .options-editor {
+        margin-top: 4px;
+    }
+    .options-editor input {
+        width: 100%;
+        font-size: 12px;
+        padding: 4px 8px;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
+    }
+    .options-editor .opt-hint {
+        font-size: 11px;
+        color: #999;
+        margin-top: 2px;
+    }
+
+    /* Preview panel */
+    .preview-frame {
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #f5f5f5;
+        min-height: 500px;
+    }
+    .preview-frame iframe {
+        width: 100%;
+        height: 600px;
+        border: none;
+    }
+
+    /* Toggle switch */
+    .form-check-input:checked { background-color: #667eea; border-color: #667eea; }
+
+    /* Gradient picker */
+    .gradient-preview {
+        width: 100%;
+        height: 40px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        margin-top: 6px;
+    }
+
+    /* Section title badge */
+    .section-badge {
+        font-size: 10px;
+        background: #667eea;
+        color: #fff;
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- LEFT: Configurazione -->
+    <div class="col-lg-7">
+
+        <!-- TEMPLATE -->
+        <div class="config-panel">
+            <h5><i class="bi bi-layout-text-window-reverse"></i> Template <span class="section-badge">LAYOUT</span></h5>
+            <div class="template-grid" id="templateGrid">
+                <div class="template-card" data-template="modern" onclick="selectTemplate('modern')">
+                    <div class="preview" style="background:linear-gradient(135deg,#667eea,#764ba2)">
+                        <div class="mini-form"><div class="mini-input"></div><div class="mini-input"></div><div class="mini-btn" style="background:#667eea"></div></div>
+                    </div>
+                    <div class="tpl-name">Moderno</div>
+                </div>
+                <div class="template-card" data-template="corporate" onclick="selectTemplate('corporate')">
+                    <div class="preview" style="background:linear-gradient(135deg,#1a1a2e,#16213e)">
+                        <div class="mini-form"><div class="mini-input"></div><div class="mini-input"></div><div class="mini-btn" style="background:#667eea"></div></div>
+                    </div>
+                    <div class="tpl-name">Corporate</div>
+                </div>
+                <div class="template-card" data-template="minimal" onclick="selectTemplate('minimal')">
+                    <div class="preview" style="background:#f8f9fa">
+                        <div class="mini-form" style="background:transparent;border-bottom:2px solid #ddd"><div class="mini-input" style="border-bottom:1px solid #333;background:transparent;height:4px"></div><div class="mini-input" style="border-bottom:1px solid #333;background:transparent;height:4px"></div><div class="mini-btn" style="background:#111;width:50%"></div></div>
+                    </div>
+                    <div class="tpl-name">Minimale</div>
+                </div>
+                <div class="template-card" data-template="warm" onclick="selectTemplate('warm')">
+                    <div class="preview" style="background:linear-gradient(135deg,#f093fb,#f5576c)">
+                        <div class="mini-form"><div class="mini-input"></div><div class="mini-input"></div><div class="mini-btn" style="background:linear-gradient(135deg,#f093fb,#f5576c)"></div></div>
+                    </div>
+                    <div class="tpl-name">Caldo</div>
+                </div>
+                <div class="template-card" data-template="nature" onclick="selectTemplate('nature')">
+                    <div class="preview" style="background:linear-gradient(135deg,#11998e,#38ef7d)">
+                        <div class="mini-form"><div class="mini-input" style="background:#d1fae5"></div><div class="mini-input" style="background:#d1fae5"></div><div class="mini-btn" style="background:linear-gradient(135deg,#11998e,#38ef7d)"></div></div>
+                    </div>
+                    <div class="tpl-name">Natura</div>
+                </div>
+                <div class="template-card" data-template="ocean" onclick="selectTemplate('ocean')">
+                    <div class="preview" style="background:linear-gradient(135deg,#2193b0,#6dd5ed)">
+                        <div class="mini-form"><div class="mini-input"></div><div class="mini-input"></div><div class="mini-btn" style="background:#2193b0"></div></div>
+                    </div>
+                    <div class="tpl-name">Oceano</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STILE PAGINA -->
+        <div class="config-panel">
+            <h5><i class="bi bi-brush"></i> Stile Pagina <span class="section-badge">ASPETTO</span></h5>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:13px">Titolo pagina</label>
+                    <input type="text" class="form-control form-control-sm" id="cfgTitle" placeholder="Es: Iscriviti al nostro evento" oninput="updatePreview()">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:13px">Sottotitolo</label>
+                    <input type="text" class="form-control form-control-sm" id="cfgSubtitle" placeholder="Es: Compila il form per partecipare" oninput="updatePreview()">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:13px">Testo bottone</label>
+                    <input type="text" class="form-control form-control-sm" id="cfgButtonText" value="Invia" oninput="updatePreview()">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:13px">Messaggio successo</label>
+                    <input type="text" class="form-control form-control-sm" id="cfgSuccessMsg" value="Grazie! Dati salvati con successo." oninput="updatePreview()">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:13px">Logo URL (opzionale)</label>
+                    <input type="url" class="form-control form-control-sm" id="cfgLogo" placeholder="https://..." oninput="updatePreview()">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:13px">Footer</label>
+                    <input type="text" class="form-control form-control-sm" id="cfgFooter" value="Powered by Saba Workflow" oninput="updatePreview()">
+                </div>
+                <div class="col-12"><hr style="margin:8px 0"><label class="form-label fw-semibold" style="font-size:13px"><i class="bi bi-image"></i> Immagine di sfondo (opzionale)</label></div>
+                <div class="col-md-8">
+                    <label class="form-label" style="font-size:12px;color:#888">URL immagine</label>
+                    <input type="url" class="form-control form-control-sm" id="cfgBgImage" placeholder="https://images.unsplash.com/..." oninput="updatePreview()">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" style="font-size:12px;color:#888">Overlay scurimento</label>
+                    <select class="form-select form-select-sm" id="cfgBgOverlay" onchange="updatePreview()">
+                        <option value="0">Nessuno</option>
+                        <option value="0.2">Leggero (20%)</option>
+                        <option value="0.4" selected>Medio (40%)</option>
+                        <option value="0.6">Forte (60%)</option>
+                        <option value="0.8">Molto forte (80%)</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" style="font-size:12px;color:#888">Posizione</label>
+                    <select class="form-select form-select-sm" id="cfgBgPosition" onchange="updatePreview()">
+                        <option value="center center" selected>Centro</option>
+                        <option value="top center">Alto</option>
+                        <option value="bottom center">Basso</option>
+                        <option value="left center">Sinistra</option>
+                        <option value="right center">Destra</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" style="font-size:12px;color:#888">Dimensione</label>
+                    <select class="form-select form-select-sm" id="cfgBgSize" onchange="updatePreview()">
+                        <option value="cover" selected>Copri tutto</option>
+                        <option value="contain">Contieni</option>
+                        <option value="auto">Originale</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" style="font-size:12px;color:#888">Ripetizione</label>
+                    <select class="form-select form-select-sm" id="cfgBgRepeat" onchange="updatePreview()">
+                        <option value="no-repeat" selected>Non ripetere</option>
+                        <option value="repeat">Ripeti</option>
+                        <option value="repeat-x">Ripeti orizzontale</option>
+                        <option value="repeat-y">Ripeti verticale</option>
+                    </select>
+                </div>
+                <div class="col-12" style="font-size:12px;color:#999">
+                    <i class="bi bi-info-circle"></i> Se presente, l'immagine sostituisce il gradient. L'overlay aggiunge una velatura colorata (dai colori sfondo) sopra l'immagine per rendere il testo leggibile.
+                </div>
+            </div>
+        </div>
+
+        <!-- COLORI E FONT -->
+        <div class="config-panel">
+            <h5><i class="bi bi-palette2"></i> Colori e Font <span class="section-badge">DESIGN</span></h5>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="color-row">
+                        <label>Sfondo primario</label>
+                        <input type="color" id="cfgBgColor1" value="#667eea" oninput="syncColor(this, 'cfgBgColor1Hex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgBgColor1Hex" value="#667eea" oninput="syncHex(this, 'cfgBgColor1'); updatePreview()">
+                    </div>
+                    <div class="color-row">
+                        <label>Sfondo secondario</label>
+                        <input type="color" id="cfgBgColor2" value="#764ba2" oninput="syncColor(this, 'cfgBgColor2Hex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgBgColor2Hex" value="#764ba2" oninput="syncHex(this, 'cfgBgColor2'); updatePreview()">
+                    </div>
+                    <div class="color-row">
+                        <label>Sfondo card</label>
+                        <input type="color" id="cfgCardBg" value="#ffffff" oninput="syncColor(this, 'cfgCardBgHex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgCardBgHex" value="#ffffff" oninput="syncHex(this, 'cfgCardBg'); updatePreview()">
+                    </div>
+                    <div class="color-row">
+                        <label>Colore titolo</label>
+                        <input type="color" id="cfgTitleColor" value="#1a1a2e" oninput="syncColor(this, 'cfgTitleColorHex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgTitleColorHex" value="#1a1a2e" oninput="syncHex(this, 'cfgTitleColor'); updatePreview()">
+                    </div>
+                    <div class="color-row">
+                        <label>Colore testo</label>
+                        <input type="color" id="cfgTextColor" value="#666666" oninput="syncColor(this, 'cfgTextColorHex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgTextColorHex" value="#666666" oninput="syncHex(this, 'cfgTextColor'); updatePreview()">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="color-row">
+                        <label>Colore bottone</label>
+                        <input type="color" id="cfgBtnColor1" value="#667eea" oninput="syncColor(this, 'cfgBtnColor1Hex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgBtnColor1Hex" value="#667eea" oninput="syncHex(this, 'cfgBtnColor1'); updatePreview()">
+                    </div>
+                    <div class="color-row">
+                        <label>Bottone gradient</label>
+                        <input type="color" id="cfgBtnColor2" value="#764ba2" oninput="syncColor(this, 'cfgBtnColor2Hex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgBtnColor2Hex" value="#764ba2" oninput="syncHex(this, 'cfgBtnColor2'); updatePreview()">
+                    </div>
+                    <div class="color-row">
+                        <label>Testo bottone</label>
+                        <input type="color" id="cfgBtnTextColor" value="#ffffff" oninput="syncColor(this, 'cfgBtnTextColorHex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgBtnTextColorHex" value="#ffffff" oninput="syncHex(this, 'cfgBtnTextColor'); updatePreview()">
+                    </div>
+                    <div class="color-row">
+                        <label>Colore label</label>
+                        <input type="color" id="cfgLabelColor" value="#333333" oninput="syncColor(this, 'cfgLabelColorHex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgLabelColorHex" value="#333333" oninput="syncHex(this, 'cfgLabelColor'); updatePreview()">
+                    </div>
+                    <div class="color-row">
+                        <label>Bordo input</label>
+                        <input type="color" id="cfgInputBorder" value="#e1e8ed" oninput="syncColor(this, 'cfgInputBorderHex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgInputBorderHex" value="#e1e8ed" oninput="syncHex(this, 'cfgInputBorder'); updatePreview()">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" style="font-size:13px">Font principale</label>
+                    <select class="form-select form-select-sm" id="cfgFont" onchange="updatePreview()">
+                        <option value="Inter">Inter</option>
+                        <option value="Poppins">Poppins</option>
+                        <option value="Roboto">Roboto</option>
+                        <option value="Open Sans">Open Sans</option>
+                        <option value="Montserrat">Montserrat</option>
+                        <option value="Lato">Lato</option>
+                        <option value="Raleway">Raleway</option>
+                        <option value="Playfair Display">Playfair Display</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" style="font-size:13px">Dimensione titolo</label>
+                    <select class="form-select form-select-sm" id="cfgTitleSize" onchange="updatePreview()">
+                        <option value="24px">Piccolo (24px)</option>
+                        <option value="28px" selected>Medio (28px)</option>
+                        <option value="32px">Grande (32px)</option>
+                        <option value="36px">Extra (36px)</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" style="font-size:13px">Arrotondamento bordi</label>
+                    <select class="form-select form-select-sm" id="cfgBorderRadius" onchange="updatePreview()">
+                        <option value="0px">Nessuno</option>
+                        <option value="6px">Leggero (6px)</option>
+                        <option value="10px" selected>Medio (10px)</option>
+                        <option value="16px">Forte (16px)</option>
+                        <option value="24px">Molto arrotondato</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" style="font-size:13px">Card arrotondamento</label>
+                    <select class="form-select form-select-sm" id="cfgCardRadius" onchange="updatePreview()">
+                        <option value="0px">Nessuno</option>
+                        <option value="8px">Leggero</option>
+                        <option value="16px" selected>Medio</option>
+                        <option value="24px">Forte</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" style="font-size:13px">Ombra card</label>
+                    <select class="form-select form-select-sm" id="cfgCardShadow" onchange="updatePreview()">
+                        <option value="none">Nessuna</option>
+                        <option value="0 4px 12px rgba(0,0,0,0.1)">Leggera</option>
+                        <option value="0 10px 30px rgba(0,0,0,0.15)">Media</option>
+                        <option value="0 25px 60px rgba(0,0,0,0.3)" selected>Forte</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" style="font-size:13px">Card max larghezza</label>
+                    <select class="form-select form-select-sm" id="cfgCardWidth" onchange="updatePreview()">
+                        <option value="420px">Stretto (420px)</option>
+                        <option value="520px" selected>Medio (520px)</option>
+                        <option value="640px">Largo (640px)</option>
+                        <option value="800px">Molto largo (800px)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- CAMPI FORM -->
+        <div class="config-panel">
+            <h5>
+                <i class="bi bi-input-cursor-text"></i> Campi del Form <span class="section-badge">DATI</span>
+                <button class="btn btn-sm btn-primary ms-auto" onclick="addField()">
+                    <i class="bi bi-plus-lg"></i> Aggiungi campo
+                </button>
+            </h5>
+            <div class="table-responsive">
+                <table class="fields-table" id="fieldsTable">
+                    <thead>
+                        <tr>
+                            <th style="width:30px"></th>
+                            <th>Label</th>
+                            <th>Nome (DB)</th>
+                            <th style="width:130px">Tipo</th>
+                            <th style="width:150px">Placeholder</th>
+                            <th style="width:60px">Obbl.</th>
+                            <th style="width:80px">Largh.</th>
+                            <th style="width:40px"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="fieldsBody">
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-muted mt-2" style="font-size:12px">
+                <i class="bi bi-info-circle"></i> Trascina <i class="bi bi-grip-vertical"></i> per riordinare. Per select/radio/checkbox: scrivi le opzioni separate da virgola nella colonna Placeholder.
+            </div>
+        </div>
+
+        <!-- SALVA -->
+        <div class="d-flex gap-2 mb-4">
+            <button class="btn btn-success btn-lg" onclick="saveConfig()">
+                <i class="bi bi-save"></i> Salva Configurazione
+            </button>
+            <button class="btn btn-outline-primary btn-lg" onclick="openFullPreview()">
+                <i class="bi bi-box-arrow-up-right"></i> Anteprima Full Screen
+            </button>
+        </div>
+    </div>
+
+    <!-- RIGHT: Anteprima Live -->
+    <div class="col-lg-5">
+        <div class="config-panel" style="position:sticky;top:20px">
+            <h5><i class="bi bi-phone"></i> Anteprima Live</h5>
+            <div class="preview-frame">
+                <iframe id="previewFrame" srcdoc=""></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+var STEP_ID = {{ step.id }};
+var SAVE_URL = '/api/landing-builder/' + STEP_ID;
+var fields = [];
+var currentTemplate = 'modern';
+var previewTimer = null;
+
+// =============================================
+// INIT — carica config salvata o default
+// =============================================
+var savedConfig = {{ config | tojson if config else 'null' }};
+
+function initFromConfig(cfg) {
+    if (!cfg) {
+        // Default
+        selectTemplate('modern');
+        document.getElementById('cfgTitle').value = '{{ step.workflow.name }}';
+        document.getElementById('cfgSubtitle').value = 'Compila il form per partecipare.';
+        addField('Nome completo', 'nome', 'text', '', true, '100%');
+        addField('Email', 'email', 'email', '', true, '100%');
+        addField('Note', 'note', 'textarea', '', false, '100%');
+        updatePreview();
+        return;
+    }
+
+    // Ripristina template
+    selectTemplate(cfg.template || 'modern');
+
+    // Ripristina stile
+    var s = cfg.style || {};
+    setVal('cfgTitle', cfg.title || '');
+    setVal('cfgSubtitle', cfg.subtitle || '');
+    setVal('cfgButtonText', cfg.button_text || 'Invia');
+    setVal('cfgSuccessMsg', cfg.success_message || 'Grazie! Dati salvati con successo.');
+    setVal('cfgLogo', cfg.logo_url || '');
+    setVal('cfgFooter', cfg.footer || 'Powered by Saba Workflow');
+    setColorVal('cfgBgColor1', s.bg_color_1 || '#667eea');
+    setColorVal('cfgBgColor2', s.bg_color_2 || '#764ba2');
+    setColorVal('cfgCardBg', s.card_bg || '#ffffff');
+    setColorVal('cfgTitleColor', s.title_color || '#1a1a2e');
+    setColorVal('cfgTextColor', s.text_color || '#666666');
+    setColorVal('cfgBtnColor1', s.btn_color_1 || '#667eea');
+    setColorVal('cfgBtnColor2', s.btn_color_2 || '#764ba2');
+    setColorVal('cfgBtnTextColor', s.btn_text_color || '#ffffff');
+    setColorVal('cfgLabelColor', s.label_color || '#333333');
+    setColorVal('cfgInputBorder', s.input_border || '#e1e8ed');
+    setVal('cfgBgImage', s.bg_image || '');
+    setVal('cfgBgOverlay', s.bg_overlay || '0.4');
+    setVal('cfgBgPosition', s.bg_position || 'center center');
+    setVal('cfgBgSize', s.bg_size || 'cover');
+    setVal('cfgBgRepeat', s.bg_repeat || 'no-repeat');
+    setVal('cfgFont', s.font || 'Inter');
+    setVal('cfgTitleSize', s.title_size || '28px');
+    setVal('cfgBorderRadius', s.border_radius || '10px');
+    setVal('cfgCardRadius', s.card_radius || '16px');
+    setVal('cfgCardShadow', s.card_shadow || '0 25px 60px rgba(0,0,0,0.3)');
+    setVal('cfgCardWidth', s.card_width || '520px');
+
+    // Ripristina campi
+    fields = [];
+    (cfg.fields || []).forEach(function(f) {
+        addField(f.label, f.name, f.type, f.placeholder || '', f.required, f.width || '100%', f.options);
+    });
+
+    updatePreview();
+}
+
+function setVal(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.value = val;
+}
+function setColorVal(baseId, val) {
+    var picker = document.getElementById(baseId);
+    var hex = document.getElementById(baseId + 'Hex');
+    if (picker) picker.value = val;
+    if (hex) hex.value = val;
+}
+function syncColor(picker, hexId) {
+    document.getElementById(hexId).value = picker.value;
+}
+function syncHex(hexInput, pickerId) {
+    var v = hexInput.value;
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+        document.getElementById(pickerId).value = v;
+    }
+}
+
+// =============================================
+// TEMPLATE SELECTION
+// =============================================
+var TEMPLATE_PRESETS = {
+    modern:    { bg1:'#667eea', bg2:'#764ba2', cardBg:'#ffffff', titleColor:'#1a1a2e', textColor:'#666666', btn1:'#667eea', btn2:'#764ba2', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#e1e8ed' },
+    corporate: { bg1:'#1a1a2e', bg2:'#16213e', cardBg:'#1a1a3e', titleColor:'#ffffff', textColor:'#8888aa', btn1:'#667eea', btn2:'#667eea', btnText:'#ffffff', labelColor:'#cccccc', inputBorder:'#2a2a5a' },
+    minimal:   { bg1:'#f8f9fa', bg2:'#f8f9fa', cardBg:'#ffffff', titleColor:'#111111', textColor:'#888888', btn1:'#111111', btn2:'#111111', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#dddddd' },
+    warm:      { bg1:'#f093fb', bg2:'#f5576c', cardBg:'#ffffff', titleColor:'#1a1a2e', textColor:'#666666', btn1:'#f093fb', btn2:'#f5576c', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#f0e0f0' },
+    nature:    { bg1:'#11998e', bg2:'#38ef7d', cardBg:'#ffffff', titleColor:'#064e3b', textColor:'#6b7280', btn1:'#11998e', btn2:'#38ef7d', btnText:'#ffffff', labelColor:'#374151', inputBorder:'#d1fae5' },
+    ocean:     { bg1:'#2193b0', bg2:'#6dd5ed', cardBg:'#ffffff', titleColor:'#0c4a6e', textColor:'#64748b', btn1:'#2193b0', btn2:'#6dd5ed', btnText:'#ffffff', labelColor:'#334155', inputBorder:'#bae6fd' }
+};
+
+function selectTemplate(name) {
+    currentTemplate = name;
+    document.querySelectorAll('.template-card').forEach(function(c) {
+        c.classList.toggle('selected', c.dataset.template === name);
+    });
+    var p = TEMPLATE_PRESETS[name];
+    if (p) {
+        setColorVal('cfgBgColor1', p.bg1);
+        setColorVal('cfgBgColor2', p.bg2);
+        setColorVal('cfgCardBg', p.cardBg);
+        setColorVal('cfgTitleColor', p.titleColor);
+        setColorVal('cfgTextColor', p.textColor);
+        setColorVal('cfgBtnColor1', p.btn1);
+        setColorVal('cfgBtnColor2', p.btn2);
+        setColorVal('cfgBtnTextColor', p.btnText);
+        setColorVal('cfgLabelColor', p.labelColor);
+        setColorVal('cfgInputBorder', p.inputBorder);
+    }
+    updatePreview();
+}
+
+// =============================================
+// FIELDS MANAGEMENT
+// =============================================
+function addField(label, name, type, placeholder, required, width, options) {
+    label = label || '';
+    name = name || '';
+    type = type || 'text';
+    placeholder = placeholder || '';
+    required = required !== undefined ? required : false;
+    width = width || '100%';
+    options = options || '';
+
+    var idx = fields.length;
+    fields.push({ label: label, name: name, type: type, placeholder: placeholder, required: required, width: width, options: options });
+    renderFields();
+    updatePreview();
+}
+
+function removeField(idx) {
+    fields.splice(idx, 1);
+    renderFields();
+    updatePreview();
+}
+
+function renderFields() {
+    var tbody = document.getElementById('fieldsBody');
+    tbody.innerHTML = '';
+    fields.forEach(function(f, i) {
+        var isChoice = (f.type === 'select' || f.type === 'radio' || f.type === 'checkbox');
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td><i class="bi bi-grip-vertical field-drag-handle"></i></td>' +
+            '<td><input type="text" value="' + esc(f.label) + '" class="form-control form-control-sm" onchange="updateField(' + i + ',\'label\',this.value)"></td>' +
+            '<td><input type="text" value="' + esc(f.name) + '" class="form-control form-control-sm" style="font-family:monospace" onchange="updateField(' + i + ',\'name\',this.value)"></td>' +
+            '<td><select class="form-select form-select-sm" onchange="updateField(' + i + ',\'type\',this.value)">' +
+                '<option value="text"' + (f.type==='text'?' selected':'') + '>Testo</option>' +
+                '<option value="email"' + (f.type==='email'?' selected':'') + '>Email</option>' +
+                '<option value="tel"' + (f.type==='tel'?' selected':'') + '>Telefono</option>' +
+                '<option value="number"' + (f.type==='number'?' selected':'') + '>Numero</option>' +
+                '<option value="date"' + (f.type==='date'?' selected':'') + '>Data</option>' +
+                '<option value="textarea"' + (f.type==='textarea'?' selected':'') + '>Area testo</option>' +
+                '<option value="select"' + (f.type==='select'?' selected':'') + '>Menu a tendina</option>' +
+                '<option value="radio"' + (f.type==='radio'?' selected':'') + '>Scelta singola</option>' +
+                '<option value="checkbox"' + (f.type==='checkbox'?' selected':'') + '>Checkbox</option>' +
+                '<option value="hidden"' + (f.type==='hidden'?' selected':'') + '>Nascosto</option>' +
+            '</select></td>' +
+            '<td><input type="text" value="' + esc(isChoice ? f.options : f.placeholder) + '" class="form-control form-control-sm" placeholder="' + (isChoice ? 'opt1, opt2, opt3' : 'Placeholder...') + '" onchange="updateField(' + i + ',\'' + (isChoice ? 'options' : 'placeholder') + '\',this.value)"></td>' +
+            '<td class="text-center"><input type="checkbox" class="form-check-input"' + (f.required ? ' checked' : '') + ' onchange="updateField(' + i + ',\'required\',this.checked)"></td>' +
+            '<td><select class="form-select form-select-sm" onchange="updateField(' + i + ',\'width\',this.value)">' +
+                '<option value="100%"' + (f.width==='100%'?' selected':'') + '>Intera</option>' +
+                '<option value="50%"' + (f.width==='50%'?' selected':'') + '>Metà</option>' +
+                '<option value="33%"' + (f.width==='33%'?' selected':'') + '>Terzo</option>' +
+            '</select></td>' +
+            '<td><button class="btn-remove-field" onclick="removeField(' + i + ')"><i class="bi bi-trash"></i></button></td>';
+        tbody.appendChild(tr);
+    });
+
+    // Drag sort
+    if (window.Sortable) {
+        Sortable.create(tbody, {
+            handle: '.field-drag-handle',
+            animation: 150,
+            onEnd: function(evt) {
+                var item = fields.splice(evt.oldIndex, 1)[0];
+                fields.splice(evt.newIndex, 0, item);
+                renderFields();
+                updatePreview();
+            }
+        });
+    }
+}
+
+function updateField(idx, prop, val) {
+    fields[idx][prop] = val;
+    // Auto-genera nome DB dalla label se vuoto
+    if (prop === 'label' && !fields[idx].name) {
+        fields[idx].name = val.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    }
+    if (prop === 'type') renderFields(); // Re-render per cambiare placeholder/options
+    updatePreview();
+}
+
+function esc(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+// =============================================
+// PREVIEW
+// =============================================
+function updatePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(doUpdatePreview, 200);
+}
+
+function doUpdatePreview() {
+    var html = generateHTML();
+    var iframe = document.getElementById('previewFrame');
+    iframe.srcdoc = html;
+}
+
+function generateHTML() {
+    var font = document.getElementById('cfgFont').value;
+    var bg1 = document.getElementById('cfgBgColor1').value;
+    var bg2 = document.getElementById('cfgBgColor2').value;
+    var cardBg = document.getElementById('cfgCardBg').value;
+    var titleColor = document.getElementById('cfgTitleColor').value;
+    var textColor = document.getElementById('cfgTextColor').value;
+    var btn1 = document.getElementById('cfgBtnColor1').value;
+    var btn2 = document.getElementById('cfgBtnColor2').value;
+    var btnText = document.getElementById('cfgBtnTextColor').value;
+    var labelColor = document.getElementById('cfgLabelColor').value;
+    var inputBorder = document.getElementById('cfgInputBorder').value;
+    var titleSize = document.getElementById('cfgTitleSize').value;
+    var borderRadius = document.getElementById('cfgBorderRadius').value;
+    var cardRadius = document.getElementById('cfgCardRadius').value;
+    var cardShadow = document.getElementById('cfgCardShadow').value;
+    var cardWidth = document.getElementById('cfgCardWidth').value;
+    var title = document.getElementById('cfgTitle').value || 'Titolo';
+    var subtitle = document.getElementById('cfgSubtitle').value;
+    var buttonText = document.getElementById('cfgButtonText').value || 'Invia';
+    var successMsg = document.getElementById('cfgSuccessMsg').value;
+    var logo = document.getElementById('cfgLogo').value;
+    var footer = document.getElementById('cfgFooter').value;
+
+    var bgImage = document.getElementById('cfgBgImage').value;
+    var bgOverlay = document.getElementById('cfgBgOverlay').value;
+    var bgPosition = document.getElementById('cfgBgPosition').value;
+    var bgSize = document.getElementById('cfgBgSize').value;
+    var bgRepeat = document.getElementById('cfgBgRepeat').value;
+
+    var inputBg = cardBg === '#ffffff' ? '#fff' : 'rgba(255,255,255,0.1)';
+    var inputTextColor = titleColor;
+
+    var fieldsHtml = '';
+    var openRow = false;
+    fields.forEach(function(f, i) {
+        var isHalf = (f.width === '50%' || f.width === '33%');
+        var w = f.width || '100%';
+
+        if (w === '100%') {
+            if (openRow) { fieldsHtml += '</div>'; openRow = false; }
+        } else if (!openRow) {
+            fieldsHtml += '<div style="display:flex;gap:16px;flex-wrap:wrap">';
+            openRow = true;
+        }
+
+        fieldsHtml += '<div style="flex:0 0 calc(' + w + ' - 8px);min-width:200px;margin-bottom:20px">';
+
+        if (f.type !== 'hidden') {
+            fieldsHtml += '<label style="display:block;margin-bottom:6px;font-weight:600;color:' + labelColor + ';font-size:14px">' + esc(f.label) + (f.required ? ' <span style="color:#ef4444">*</span>' : '') + '</label>';
+        }
+
+        var inputStyle = 'width:100%;padding:14px 16px;border:2px solid ' + inputBorder + ';border-radius:' + borderRadius + ';font-size:15px;box-sizing:border-box;outline:none;font-family:inherit;background:' + inputBg + ';color:' + inputTextColor;
+
+        if (f.type === 'textarea') {
+            fieldsHtml += '<textarea name="' + esc(f.name) + '" rows="3" placeholder="' + esc(f.placeholder) + '"' + (f.required ? ' required' : '') + ' style="' + inputStyle + ';resize:vertical"></textarea>';
+        } else if (f.type === 'select') {
+            fieldsHtml += '<select name="' + esc(f.name) + '"' + (f.required ? ' required' : '') + ' style="' + inputStyle + '">';
+            fieldsHtml += '<option value="">Seleziona...</option>';
+            (f.options || '').split(',').forEach(function(opt) {
+                opt = opt.trim();
+                if (opt) fieldsHtml += '<option value="' + esc(opt) + '">' + esc(opt) + '</option>';
+            });
+            fieldsHtml += '</select>';
+        } else if (f.type === 'radio') {
+            (f.options || '').split(',').forEach(function(opt) {
+                opt = opt.trim();
+                if (opt) fieldsHtml += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:400;color:' + textColor + ';font-size:14px;cursor:pointer"><input type="radio" name="' + esc(f.name) + '" value="' + esc(opt) + '"> ' + esc(opt) + '</label>';
+            });
+        } else if (f.type === 'checkbox') {
+            (f.options || '').split(',').forEach(function(opt) {
+                opt = opt.trim();
+                if (opt) fieldsHtml += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:400;color:' + textColor + ';font-size:14px;cursor:pointer"><input type="checkbox" name="' + esc(f.name) + '" value="' + esc(opt) + '"> ' + esc(opt) + '</label>';
+            });
+        } else if (f.type === 'hidden') {
+            fieldsHtml += '<input type="hidden" name="' + esc(f.name) + '" value="' + esc(f.placeholder) + '">';
+        } else {
+            fieldsHtml += '<input type="' + f.type + '" name="' + esc(f.name) + '" placeholder="' + esc(f.placeholder) + '"' + (f.required ? ' required' : '') + ' style="' + inputStyle + '">';
+        }
+
+        fieldsHtml += '</div>';
+
+        if (w === '100%' || i === fields.length - 1) {
+            if (openRow) { fieldsHtml += '</div>'; openRow = false; }
+        }
+    });
+
+    var logoHtml = logo ? '<img src="' + esc(logo) + '" alt="Logo" style="max-height:48px;margin-bottom:16px">' : '';
+    var footerHtml = footer ? '<p style="text-align:center;color:' + textColor + ';opacity:0.5;font-size:12px;margin-top:24px">' + esc(footer) + '</p>' : '';
+
+    return '<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
+        '<link href="https://fonts.googleapis.com/css2?family=' + encodeURIComponent(font) + ':wght@300;400;500;600;700;800&display=swap" rel="stylesheet">' +
+        '<style>*{margin:0;padding:0;box-sizing:border-box}input:focus,textarea:focus,select:focus{border-color:' + btn1 + ' !important;box-shadow:0 0 0 3px ' + btn1 + '22}button:hover{opacity:0.9;transform:translateY(-1px)}button:active{transform:translateY(0)}</style>' +
+        '</head><body>' +
+        '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+        (bgImage
+            ? 'background-image:url(\'' + esc(bgImage) + '\');background-size:' + bgSize + ';background-position:' + bgPosition + ';background-repeat:' + bgRepeat + ';'
+            : 'background:linear-gradient(135deg,' + bg1 + ',' + bg2 + ');') +
+        'padding:40px 20px;font-family:\'' + font + '\',sans-serif;position:relative">' +
+        (bgImage && bgOverlay > 0
+            ? '<div style="position:absolute;inset:0;background:linear-gradient(135deg,' + bg1 + ',' + bg2 + ');opacity:' + bgOverlay + '"></div>'
+            : '') +
+        '<div style="background:' + cardBg + ';border-radius:' + cardRadius + ';box-shadow:' + cardShadow + ';max-width:' + cardWidth + ';width:100%;padding:48px;position:relative;z-index:1">' +
+        '<div style="text-align:center;margin-bottom:32px">' +
+        logoHtml +
+        '<h1 style="color:' + titleColor + ';font-size:' + titleSize + ';font-weight:800;margin:0 0 8px">' + esc(title) + '</h1>' +
+        (subtitle ? '<p style="color:' + textColor + ';font-size:16px;margin:0;line-height:1.5">' + esc(subtitle) + '</p>' : '') +
+        '</div>' +
+        '<form class="saba-landing-form">' +
+        fieldsHtml +
+        '<button type="submit" style="width:100%;padding:16px;background:linear-gradient(135deg,' + btn1 + ',' + btn2 + ');color:' + btnText + ';border:none;border-radius:' + borderRadius + ';font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;transition:all 0.2s">' + esc(buttonText) + '</button>' +
+        '</form>' +
+        '<div class="saba-success-msg" style="display:none;background:#ecfdf5;border:1px solid #a7f3d0;padding:16px;border-radius:' + borderRadius + ';margin-top:20px;text-align:center;color:#065f46;font-weight:600">' + esc(successMsg) + '</div>' +
+        '<div class="saba-error-msg" style="display:none;background:#fef2f2;border:1px solid #fecaca;padding:16px;border-radius:' + borderRadius + ';margin-top:20px;text-align:center;color:#991b1b;font-weight:600">Errore. Riprova.</div>' +
+        footerHtml +
+        '</div></div>' +
+        '</body></html>';
+}
+
+// =============================================
+// SAVE
+// =============================================
+function saveConfig() {
+    var config = collectConfig();
+    var html = generateHTML();
+
+    // Inietta script submit nel HTML
+    var submitScript = '<scr' + 'ipt>(function(){var forms=document.querySelectorAll(".saba-landing-form");forms.forEach(function(f){f.addEventListener("submit",function(e){e.preventDefault();var btn=f.querySelector("[type=submit]");if(btn){btn.disabled=true;btn.textContent="Invio...";}var fd=new FormData(f);var d={};fd.forEach(function(v,k){if(d[k]){if(!Array.isArray(d[k]))d[k]=[d[k]];d[k].push(v);}else{d[k]=v;}});fetch(window.location.pathname,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}).then(function(r){if(r.ok){var s=document.querySelector(".saba-success-msg");if(s)s.style.display="block";f.style.display="none";}else{var em=document.querySelector(".saba-error-msg");if(em)em.style.display="block";if(btn){btn.disabled=false;btn.textContent="' + (document.getElementById('cfgButtonText').value || 'Invia') + '";}}}).catch(function(){var em=document.querySelector(".saba-error-msg");if(em)em.style.display="block";if(btn){btn.disabled=false;btn.textContent="' + (document.getElementById('cfgButtonText').value || 'Invia') + '";}});});});})();</scr' + 'ipt>';
+    html = html.replace('</body>', submitScript + '</body>');
+
+    fetch(SAVE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            html: html,
+            css: '',
+            gjs_data: config
+        })
+    }).then(function(resp) {
+        if (resp.ok) {
+            alert('Configurazione salvata con successo!');
+        } else {
+            alert('Errore nel salvataggio');
+        }
+    }).catch(function() {
+        alert('Errore di connessione');
+    });
+}
+
+function collectConfig() {
+    return {
+        template: currentTemplate,
+        title: document.getElementById('cfgTitle').value,
+        subtitle: document.getElementById('cfgSubtitle').value,
+        button_text: document.getElementById('cfgButtonText').value,
+        success_message: document.getElementById('cfgSuccessMsg').value,
+        logo_url: document.getElementById('cfgLogo').value,
+        footer: document.getElementById('cfgFooter').value,
+        style: {
+            bg_color_1: document.getElementById('cfgBgColor1').value,
+            bg_color_2: document.getElementById('cfgBgColor2').value,
+            card_bg: document.getElementById('cfgCardBg').value,
+            title_color: document.getElementById('cfgTitleColor').value,
+            text_color: document.getElementById('cfgTextColor').value,
+            btn_color_1: document.getElementById('cfgBtnColor1').value,
+            btn_color_2: document.getElementById('cfgBtnColor2').value,
+            btn_text_color: document.getElementById('cfgBtnTextColor').value,
+            label_color: document.getElementById('cfgLabelColor').value,
+            input_border: document.getElementById('cfgInputBorder').value,
+            bg_image: document.getElementById('cfgBgImage').value,
+            bg_overlay: document.getElementById('cfgBgOverlay').value,
+            bg_position: document.getElementById('cfgBgPosition').value,
+            bg_size: document.getElementById('cfgBgSize').value,
+            bg_repeat: document.getElementById('cfgBgRepeat').value,
+            font: document.getElementById('cfgFont').value,
+            title_size: document.getElementById('cfgTitleSize').value,
+            border_radius: document.getElementById('cfgBorderRadius').value,
+            card_radius: document.getElementById('cfgCardRadius').value,
+            card_shadow: document.getElementById('cfgCardShadow').value,
+            card_width: document.getElementById('cfgCardWidth').value
+        },
+        fields: fields
+    };
+}
+
+// =============================================
+// FULL PREVIEW
+// =============================================
+function openFullPreview() {
+    var html = generateHTML();
+    var win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+}
+
+// =============================================
+// INIT
+// =============================================
+initFromConfig(savedConfig);
+</script>
+{% endblock %}

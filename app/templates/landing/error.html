@@ -1,0 +1,19 @@
+{% extends "landing/base.html" %}
+
+{% block title %}Errore - Saba Workflow{% endblock %}
+
+{% block content %}
+<div style="text-align: center;">
+    <svg width="80" height="80" viewBox="0 0 80 80" style="margin-bottom: 20px;">
+        <circle cx="40" cy="40" r="35" fill="none" stroke="#f44" stroke-width="3"/>
+        <path d="M 25 25 L 55 55 M 55 25 L 25 55" stroke="#f44" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    
+    <h1 style="color: #f44;">Oops!</h1>
+    <p style="font-size: 18px;">{{ error }}</p>
+    
+    <p style="margin-top: 30px; color: #999;">
+        Se pensi che ci sia un errore, contatta il supporto.
+    </p>
+</div>
+{% endblock %}

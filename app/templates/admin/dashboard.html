@@ -1,0 +1,287 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dashboard - Saba Workflow Admin{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="stat-label">Workflows Totali</p>
+                        <h2 class="stat-value">{{ stats.total_workflows }}</h2>
+                    </div>
+                    <i class="bi bi-diagram-3 text-primary" style="font-size: 3rem; opacity: 0.3;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="stat-label">Workflows Attivi</p>
+                        <h2 class="stat-value">{{ stats.active_workflows }}</h2>
+                    </div>
+                    <i class="bi bi-play-circle text-success" style="font-size: 3rem; opacity: 0.3;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="stat-label">Partecipanti</p>
+                        <h2 class="stat-value">{{ stats.total_participants }}</h2>
+                    </div>
+                    <i class="bi bi-people text-warning" style="font-size: 3rem; opacity: 0.3;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card danger">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="stat-label">Email Inviate</p>
+                        <h2 class="stat-value">{{ stats.emails_sent }}</h2>
+                    </div>
+                    <i class="bi bi-envelope-check text-danger" style="font-size: 3rem; opacity: 0.3;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Workflows per Stato</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="workflowStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Partecipanti per Stato</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="participantStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Workflows -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Workflows Recenti</h5>
+                <a href="{{ url_for('admin.workflows_list') }}" class="btn btn-sm btn-outline-primary">
+                    Vedi tutti <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                {% if recent_workflows %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Stato</th>
+                                <th>Steps</th>
+                                <th>Partecipanti</th>
+                                <th>Creato</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for workflow in recent_workflows %}
+                            <tr>
+                                <td>
+                                    <strong>{{ workflow.name }}</strong>
+                                    {% if workflow.description %}
+                                    <br><small class="text-muted">{{ workflow.description[:50] }}...</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="status-badge status-{{ workflow.status }}">
+                                        {{ workflow.status }}
+                                    </span>
+                                </td>
+                                <td>{{ workflow.steps|length }}</td>
+                                <td>{{ workflow.participants|length }}</td>
+                                <td>{{ workflow.created_at|localtime }}</td>
+                                <td class="table-actions">
+                                    <a href="{{ url_for('admin.workflow_detail', workflow_id=workflow.id) }}" 
+                                       class="btn btn-sm btn-outline-primary" title="Dettagli">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('admin.workflow_edit', workflow_id=workflow.id) }}" 
+                                       class="btn btn-sm btn-outline-warning" title="Modifica">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <p>Nessun workflow presente</p>
+                    <a href="{{ url_for('admin.workflow_create') }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Crea il primo workflow
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Attività Recenti -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-activity"></i> Attività Recenti</h5>
+                <a href="{{ url_for('admin.executions_monitor') }}" class="btn btn-sm btn-outline-primary">
+                    Vedi tutte <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                {% if recent_activities %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>Quando</th>
+                                <th>Evento</th>
+                                <th>Descrizione</th>
+                                <th>Partecipante</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in recent_activities %}
+                            <tr>
+                                <td class="text-nowrap"><small>{{ a.created_at|localtime }}</small></td>
+                                <td>
+                                    {% if a.event_type == 'form_submitted' %}
+                                        <span class="badge bg-success"><i class="bi bi-check2-square"></i> Form</span>
+                                    {% elif a.event_type == 'status_changed' %}
+                                        <span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> Stato</span>
+                                    {% elif a.event_type == 'workflow_started' %}
+                                        <span class="badge bg-primary"><i class="bi bi-play-circle"></i> Avviato</span>
+                                    {% elif a.event_type == 'simulation' %}
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> Simulazione</span>
+                                    {% elif a.event_type == 'unsubscribed' %}
+                                        <span class="badge bg-danger"><i class="bi bi-person-x"></i> Disiscritto</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ a.event_type }}</span>
+                                    {% endif %}
+                                </td>
+                                <td><small>{{ a.description }}</small></td>
+                                <td>
+                                    <small>{{ a.participant.name or a.participant.email or '—' if a.participant else '—' }}</small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-activity"></i>
+                    <p>Nessuna attività ancora</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Workflow Status Chart
+const workflowStatusCtx = document.getElementById('workflowStatusChart').getContext('2d');
+new Chart(workflowStatusCtx, {
+    type: 'doughnut',
+    data: {
+        labels: {{ workflow_status_labels|tojson }},
+        datasets: [{
+            data: {{ workflow_status_data|tojson }},
+            backgroundColor: [
+                '#6c757d',  // draft
+                '#198754',  // active
+                '#ffc107',  // paused
+                '#0d6efd',  // completed
+                '#dc3545'   // archived
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+});
+
+// Participant Status Chart
+const participantStatusCtx = document.getElementById('participantStatusChart').getContext('2d');
+new Chart(participantStatusCtx, {
+    type: 'bar',
+    data: {
+        labels: {{ participant_status_labels|tojson }},
+        datasets: [{
+            label: 'Partecipanti',
+            data: {{ participant_status_data|tojson }},
+            backgroundColor: '#0d6efd'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,157 @@
+{% extends "landing/base.html" %}
+
+{% block title %}{{ workflow.name }} - Saba Workflow{% endblock %}
+
+{% block content %}
+<h1>{{ workflow.name }}</h1>
+<p>Ciao {{ participant.name or participant.email }},</p>
+<p>Compila il form qui sotto per partecipare.</p>
+
+<form id="landingForm">
+    {% if config and config.fields %}
+        {% for field in config.fields %}
+        <div class="form-group">
+            <label for="{{ field.name }}">
+                {{ field.label }}
+                {% if field.required %}<span style="color: red;">*</span>{% endif %}
+            </label>
+            
+            {% if field.type == 'text' %}
+                <input type="text" 
+                       id="{{ field.name }}" 
+                       name="{{ field.name }}"
+                       {% if field.required %}required{% endif %}
+                       {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>
+            
+            {% elif field.type == 'email' %}
+                <input type="email" 
+                       id="{{ field.name }}" 
+                       name="{{ field.name }}"
+                       {% if field.required %}required{% endif %}
+                       {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>
+            
+            {% elif field.type == 'tel' %}
+                <input type="tel" 
+                       id="{{ field.name }}" 
+                       name="{{ field.name }}"
+                       {% if field.required %}required{% endif %}
+                       {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>
+            
+            {% elif field.type == 'textarea' %}
+                <textarea id="{{ field.name }}" 
+                          name="{{ field.name }}"
+                          {% if field.required %}required{% endif %}
+                          {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}></textarea>
+            
+            {% elif field.type == 'select' %}
+                <select id="{{ field.name }}" 
+                        name="{{ field.name }}"
+                        {% if field.required %}required{% endif %}>
+                    <option value="">Seleziona...</option>
+                    {% for option in field.options %}
+                    <option value="{{ option.value }}">{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <!-- Default form se config non specificato -->
+        <div class="form-group">
+            <label for="nome">Nome completo <span style="color: red;">*</span></label>
+            <input type="text" id="nome" name="nome" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="azienda">Azienda</label>
+            <input type="text" id="azienda" name="azienda">
+        </div>
+        
+        <div class="form-group">
+            <label for="note">Note</label>
+            <textarea id="note" name="note"></textarea>
+        </div>
+    {% endif %}
+    
+    <button type="submit" id="submitBtn">Invia</button>
+</form>
+
+<div id="successMessage" class="success" style="display: none;">
+    <strong>Grazie!</strong> I tuoi dati sono stati salvati correttamente.
+</div>
+
+<div id="errorMessage" class="error" style="display: none;">
+    Si è verificato un errore. Riprova.
+</div>
+
+{% endblock %}
+
+{% block footer %}
+{{ super() }}
+<div style="margin-top: 10px;">
+    <a href="/landing/{{ token }}/unsubscribe" onclick="return confirm('Sei sicuro di volerti disiscrivere?')">
+        Non ricevere più comunicazioni
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('landingForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const successMsg = document.getElementById('successMessage');
+    const errorMsg = document.getElementById('errorMessage');
+    
+    // Disabilita button
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Invio in corso...';
+    
+    // Nascondi messaggi precedenti
+    successMsg.style.display = 'none';
+    errorMsg.style.display = 'none';
+    
+    // Raccogli dati form
+    const formData = new FormData(e.target);
+    const data = {};
+    formData.forEach((value, key) => {
+        data[key] = value;
+    });
+    
+    try {
+        const response = await fetch('/landing/{{ token }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            successMsg.style.display = 'block';
+            e.target.reset();
+            
+            // Scroll to success message
+            successMsg.scrollIntoView({ behavior: 'smooth' });
+            
+            // Nasconde form dopo 2 secondi
+            setTimeout(() => {
+                e.target.style.display = 'none';
+            }, 2000);
+        } else {
+            const error = await response.json();
+            errorMsg.textContent = error.error || 'Errore durante il salvataggio.';
+            errorMsg.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Invia';
+        }
+    } catch (error) {
+        errorMsg.textContent = 'Errore di connessione. Riprova.';
+        errorMsg.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Invia';
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Landing Page Builder - {{ step.name }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; height: 100vh; display: flex; flex-direction: column; }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            height: 52px;
+            background: #1a1a2e;
+            border-bottom: 1px solid #2a2a4a;
+            flex-shrink: 0;
+        }
+        .toolbar .left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .toolbar .left a {
+            color: #8888aa;
+            text-decoration: none;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #2a2a4a;
+            transition: all 0.15s;
+        }
+        .toolbar .left a:hover { background: #2a2a4a; color: #fff; }
+        .toolbar .left .info { color: #8888aa; font-size: 13px; }
+        .toolbar .left .info strong { color: #fff; }
+        .toolbar .right { display: flex; gap: 8px; }
+        .toolbar .btn {
+            border: none;
+            padding: 8px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s;
+        }
+        .btn-preview { background: #2a2a4a; color: #fff; }
+        .btn-preview:hover { background: #3a3a5a; }
+        .btn-save { background: #28a745; color: #fff; }
+        .btn-save:hover { background: #218838; }
+
+        /* Editor container */
+        #editor-container {
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 64px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 600;
+            font-size: 14px;
+            z-index: 99999;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+        .toast.success { background: #28a745; }
+        .toast.error { background: #dc3545; }
+    </style>
+</head>
+<body>
+
+<div class="toolbar">
+    <div class="left">
+        <a href="{{ url_for('admin.workflow_detail', workflow_id=step.workflow_id) }}">
+            <i class="bi bi-arrow-left"></i> Indietro
+        </a>
+        <span class="info">
+            <strong>{{ step.workflow.name }}</strong> &rarr; {{ step.name }}
+        </span>
+    </div>
+    <div class="right">
+        <button class="btn btn-preview" onclick="doPreview()">
+            <i class="bi bi-eye"></i> Anteprima
+        </button>
+        <button class="btn btn-save" onclick="doSave()">
+            <i class="bi bi-save"></i> Salva
+        </button>
+    </div>
+</div>
+
+<div id="editor-container"></div>
+
+<div id="toast" class="toast"></div>
+
+<!-- Unlayer Embed -->
+<script src="https://editor.unlayer.com/embed.js"></script>
+
+<script>
+var SAVE_URL = '/api/landing-builder/{{ step.id }}';
+var savedDesign = {{ gjs_data | tojson if gjs_data else 'null' }};
+
+// Init Unlayer
+unlayer.init({
+    id: 'editor-container',
+    projectId: 1,
+    locale: 'it-IT',
+    displayMode: 'web',
+    appearance: {
+        theme: 'modern_dark',
+        panels: {
+            tools: {
+                dock: 'left',
+                collapsible: true
+            }
+        }
+    },
+    features: {
+        preview: false,
+        stockImages: {
+            enabled: true,
+            safeSearch: true
+        },
+        userUploads: true
+    },
+    tools: {
+        form: { enabled: true },
+        button: { enabled: true },
+        divider: { enabled: true },
+        heading: { enabled: true },
+        html: { enabled: true },
+        image: { enabled: true },
+        menu: { enabled: true },
+        social: { enabled: true },
+        text: { enabled: true },
+        timer: { enabled: true },
+        video: { enabled: true }
+    }
+});
+
+// Carica design salvato
+if (savedDesign) {
+    unlayer.loadDesign(savedDesign);
+}
+
+// Salvataggio
+function doSave() {
+    unlayer.exportHtml(function(data) {
+        var html = data.html;
+        var design = data.design;
+
+        // Inietta lo script di submit form nell'HTML
+        var formScript = '<scr' + 'ipt>' +
+            '(function(){' +
+            'var forms=document.querySelectorAll("form");' +
+            'forms.forEach(function(f){' +
+            'f.addEventListener("submit",function(e){' +
+            'e.preventDefault();' +
+            'var fd=new FormData(f);var d={};' +
+            'fd.forEach(function(v,k){d[k]=v;});' +
+            'fetch(window.location.pathname,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)})' +
+            '.then(function(r){if(r.ok){f.innerHTML="<div style=\\"padding:20px;background:#ecfdf5;border-radius:8px;text-align:center;color:#065f46;font-weight:600\\">Grazie! Dati salvati con successo.</div>";}})' +
+            '.catch(function(){alert("Errore di connessione");});' +
+            '});' +
+            '});' +
+            '})();' +
+            '</scr' + 'ipt>';
+        html = html.replace('</body>', formScript + '</body>');
+
+        fetch(SAVE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                html: html,
+                css: '',
+                gjs_data: design
+            })
+        })
+        .then(function(resp) {
+            showToast(resp.ok ? 'Salvato!' : 'Errore nel salvataggio', resp.ok ? 'success' : 'error');
+        })
+        .catch(function() {
+            showToast('Errore di connessione', 'error');
+        });
+    });
+}
+
+// Anteprima
+function doPreview() {
+    unlayer.exportHtml(function(data) {
+        var win = window.open('', '_blank');
+        win.document.write(data.html);
+        win.document.close();
+    });
+}
+
+// Toast
+function showToast(msg, type) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + type;
+    setTimeout(function() { t.className = 'toast'; }, 3000);
+}
+
+// Ctrl+S
+document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        doSave();
+    }
+});
+</script>
+</body>
+</html>
