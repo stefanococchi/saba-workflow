@@ -4,7 +4,7 @@
 
 {% block content %}
 <h1>{{ workflow.name }}</h1>
-<p>Ciao {{ participant.name or participant.email }},</p>
+<p>Ciao {{ participant.full_name or participant.email }},</p>
 <p>Compila il form qui sotto per partecipare.</p>
 
 <form id="landingForm">

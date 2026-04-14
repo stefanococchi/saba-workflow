@@ -103,7 +103,9 @@ class EmailService:
             # Context per template
             context = {
                 'participant': {
-                    'name': participant.name,
+                    'name': participant.full_name,
+                    'first_name': participant.first_name,
+                    'last_name': participant.last_name,
                     'email': participant.email,
                 },
                 'landing_url': landing_url or '',

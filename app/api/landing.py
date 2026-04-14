@@ -123,14 +123,14 @@ def submit_landing_data(token):
         log_activity(
             workflow_id=participant.workflow_id,
             event_type='form_submitted',
-            description=f'{participant.name or participant.email} ha compilato il form',
+            description=f'{participant.full_name or participant.email} ha compilato il form',
             participant_id=participant.id,
             details={'collected_data': existing}
         )
         log_activity(
             workflow_id=participant.workflow_id,
             event_type='status_changed',
-            description=f'{participant.name or participant.email} → completato',
+            description=f'{participant.full_name or participant.email} → completato',
             participant_id=participant.id,
             details={'old_status': 'in_progress', 'new_status': 'completed'}
         )
@@ -171,7 +171,7 @@ def unsubscribe_from_landing(token):
         log_activity(
             workflow_id=participant.workflow_id,
             event_type='unsubscribed',
-            description=f'{participant.name or participant.email} si è disiscritto',
+            description=f'{participant.full_name or participant.email} si è disiscritto',
             participant_id=participant.id,
         )
 

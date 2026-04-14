@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app import db_session as db
-from app.models import Workflow, Participant, ParticipantStatus, WorkflowStatus
+from app.models import Workflow, Participant, ParticipantStatus, WorkflowStatus, Execution, ActivityLog
 from app.services.activity_service import log_activity
 from app.services import TokenService, SchedulerService
 from app.services.sabaform_service import get_events, get_participants, get_event_by_id
@@ -44,7 +44,8 @@ def add_participants(workflow_id):
             participant = Participant(
                 workflow_id=workflow_id,
                 email=p_data['email'],
-                name=p_data.get('name'),
+                first_name=p_data.get('first_name', ''),
+                last_name=p_data.get('last_name', ''),
                 phone=p_data.get('phone')
             )
             
@@ -62,7 +63,8 @@ def add_participants(workflow_id):
             added.append({
                 'id': participant.id,
                 'email': participant.email,
-                'name': participant.name
+                'first_name': participant.first_name,
+                'last_name': participant.last_name
             })
         
         db.commit()
@@ -103,7 +105,8 @@ def list_participants(workflow_id):
                 {
                     'id': p.id,
                     'email': p.email,
-                    'name': p.name,
+                    'first_name': p.first_name,
+                    'last_name': p.last_name,
                     'status': p.status.value,
                     'current_step_id': p.current_step_id,
                     'enrolled_at': p.enrolled_at.isoformat(),
@@ -223,35 +226,45 @@ def import_participants_from_sabaform(workflow_id):
             return jsonify({'error': 'Nessun partecipante trovato nell\'evento'}), 404
 
         imported = 0
-        skipped = 0
+        updated = 0
 
         for p in sf_participants:
-            name = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
-            email = p.get('email', '').strip()
+            first_name = p.get('first_name', '').strip() if p.get('first_name') else ''
+            last_name = p.get('last_name', '').strip() if p.get('last_name') else ''
+            email = str(p.get('email', '') or '').strip()
+
+            # Tutti i dati originali da Saba Form
+            sabaform_data = {k: v for k, v in p.items() if v is not None and v != ''}
 
             # Deduplicazione: per email se presente, altrimenti per nome
+            existing = None
             if email:
                 existing = db.query(Participant).filter_by(
                     workflow_id=workflow_id,
                     email=email
                 ).first()
-            elif name:
+            elif first_name or last_name:
                 existing = db.query(Participant).filter_by(
                     workflow_id=workflow_id,
-                    name=name
+                    first_name=first_name,
+                    last_name=last_name
                 ).first()
-            else:
-                existing = None
 
             if existing:
-                skipped += 1
+                # Aggiorna sabaform_data anche su partecipanti già importati
+                existing.sabaform_data = sabaform_data
+                if not existing.phone and p.get('phone'):
+                    existing.phone = str(p['phone'])
+                updated += 1
                 continue
 
             participant = Participant(
                 workflow_id=workflow_id,
                 email=email or None,
-                name=name or f"Partecipante {p.get('id', '')}",
-                phone=p.get('phone', ''),
+                first_name=first_name or f"Partecipante",
+                last_name=last_name or str(p.get('id', '')),
+                phone=str(p.get('phone', '') or ''),
+                sabaform_data=sabaform_data,
             )
             db.add(participant)
             db.flush()
@@ -267,17 +280,97 @@ def import_participants_from_sabaform(workflow_id):
 
         db.commit()
 
-        logger.info(f"Import sabaform: {imported} importati, {skipped} duplicati per workflow {workflow_id}")
+        logger.info(f"Import sabaform: {imported} nuovi, {updated} aggiornati per workflow {workflow_id}")
 
         return jsonify({
             'imported': imported,
-            'skipped_duplicate': skipped,
+            'updated': updated,
             'total_in_event': len(sf_participants),
         }), 200
 
     except Exception as e:
         db.rollback()
         logger.error(f"Errore import partecipanti sabaform: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/participants/<int:participant_id>', methods=['GET'])
+def get_participant(participant_id):
+    """Dettaglio singolo partecipante"""
+    try:
+        p = db.get(Participant, participant_id)
+        if not p:
+            return jsonify({'error': 'Partecipante non trovato'}), 404
+        return jsonify({
+            'id': p.id,
+            'first_name': p.first_name,
+            'last_name': p.last_name,
+            'email': p.email,
+            'phone': p.phone,
+            'status': p.status.value,
+            'sabaform_data': p.sabaform_data or {},
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/participants/<int:participant_id>', methods=['PUT'])
+def update_participant(participant_id):
+    """Aggiorna dati partecipante"""
+    try:
+        participant = db.get(Participant, participant_id)
+        if not participant:
+            return jsonify({'error': 'Partecipante non trovato'}), 404
+
+        data = request.get_json()
+
+        if 'first_name' in data:
+            participant.first_name = data['first_name']
+        if 'last_name' in data:
+            participant.last_name = data['last_name']
+        if 'email' in data:
+            participant.email = data['email'] or None
+        if 'phone' in data:
+            participant.phone = data['phone']
+        if 'status' in data:
+            participant.status = ParticipantStatus(data['status'])
+        if 'sabaform_data' in data:
+            participant.sabaform_data = data['sabaform_data']
+
+        db.commit()
+        logger.info(f"Aggiornato partecipante {participant_id}")
+
+        return jsonify({
+            'id': participant.id,
+            'first_name': participant.first_name,
+            'last_name': participant.last_name,
+            'email': participant.email,
+            'status': participant.status.value
+        }), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore update partecipante: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/participants/<int:participant_id>', methods=['DELETE'])
+def delete_participant(participant_id):
+    """Elimina partecipante"""
+    try:
+        participant = db.get(Participant, participant_id)
+        if not participant:
+            return jsonify({'error': 'Partecipante non trovato'}), 404
+
+        db.delete(participant)
+        db.commit()
+        logger.info(f"Eliminato partecipante {participant_id}")
+
+        return jsonify({'message': 'Partecipante eliminato'}), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore eliminazione partecipante: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -308,4 +401,36 @@ def unsubscribe_participant(participant_id):
     except Exception as e:
         db.rollback()
         logger.error(f"Errore unsubscribe: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/activity-log/<int:entry_id>', methods=['DELETE'])
+def delete_activity_log(entry_id):
+    """Elimina entry dal log attività"""
+    try:
+        entry = db.get(ActivityLog, entry_id)
+        if not entry:
+            return jsonify({'error': 'Entry non trovata'}), 404
+        db.delete(entry)
+        db.commit()
+        return jsonify({'message': 'Entry eliminata'}), 200
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore eliminazione activity log: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/executions/<int:execution_id>', methods=['DELETE'])
+def delete_execution(execution_id):
+    """Elimina esecuzione"""
+    try:
+        execution = db.get(Execution, execution_id)
+        if not execution:
+            return jsonify({'error': 'Esecuzione non trovata'}), 404
+        db.delete(execution)
+        db.commit()
+        return jsonify({'message': 'Esecuzione eliminata'}), 200
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore eliminazione esecuzione: {str(e)}")
         return jsonify({'error': str(e)}), 500

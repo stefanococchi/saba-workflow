@@ -50,7 +50,7 @@ class ExportService:
                     all_fields.update(p.collected_data.keys())
             
             # CSV headers
-            headers = ['ID', 'Name', 'Email', 'Status', 'Created At', 'Last Interaction']
+            headers = ['ID', 'First Name', 'Last Name', 'Email', 'Status', 'Created At', 'Last Interaction']
             headers.extend(sorted(all_fields))  # Add dynamic fields from collected_data
             
             writer = csv.writer(output)
@@ -60,7 +60,8 @@ class ExportService:
             for p in participants:
                 row = [
                     p.id,
-                    p.name,
+                    p.first_name,
+                    p.last_name,
                     p.email,
                     p.status.value,
                     p.created_at.isoformat() if p.created_at else '',

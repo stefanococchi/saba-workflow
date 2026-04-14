@@ -181,6 +181,10 @@ def landing_builder(workflow_id, step_id):
     try:
         step = db.query(WorkflowStep).filter_by(id=step_id, workflow_id=workflow_id).first()
 
+        # Fallback: se lo step ID non esiste, cerca per ordine (gli ID cambiano dopo ogni save)
+        if not step:
+            step = db.query(WorkflowStep).filter_by(workflow_id=workflow_id, order=step_id).first()
+
         if not step:
             flash('Step non trovato', 'danger')
             return redirect(url_for('admin.workflow_detail', workflow_id=workflow_id))
@@ -263,10 +267,12 @@ def executions_monitor():
                 wf_name = ex.participant.workflow.name
             timeline.append({
                 'type': 'execution',
+                'entry_id': ex.id,
+                'participant_id': ex.participant_id,
                 'time': ex.scheduled_at,
                 'event_type': 'email_failed' if ex.status.value == 'failed' else 'email_' + ex.status.value,
                 'description': f'{ex.step.name}: {ex.status.value}' if ex.step else ex.status.value,
-                'participant_name': (ex.participant.name or ex.participant.email or '—') if ex.participant else '—',
+                'participant_name': (ex.participant.full_name or ex.participant.email or '—') if ex.participant else '—',
                 'step_name': ex.step.name if ex.step else '—',
                 'step_type': ex.step.type.value if ex.step else '',
                 'workflow_name': wf_name,
@@ -277,10 +283,12 @@ def executions_monitor():
             wf_name = a.workflow.name if a.workflow else ''
             timeline.append({
                 'type': 'activity',
+                'entry_id': a.id,
+                'participant_id': a.participant_id,
                 'time': a.created_at,
                 'event_type': a.event_type,
                 'description': a.description,
-                'participant_name': (a.participant.name or a.participant.email or '—') if a.participant else '—',
+                'participant_name': (a.participant.full_name or a.participant.email or '—') if a.participant else '—',
                 'step_name': a.step.name if a.step else '—',
                 'step_type': a.step.type.value if a.step else '',
                 'workflow_name': wf_name,

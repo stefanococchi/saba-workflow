@@ -142,6 +142,9 @@ class Participant(Base):
     
     # Dati raccolti (JSON)
     collected_data = Column(JSON, default={})
+
+    # Dati originali importati da Saba Form (JSON)
+    sabaform_data = Column(JSON, default={})
     
     # Metadata
     enrolled_at = Column(DateTime, default=datetime.utcnow)

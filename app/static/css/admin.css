@@ -3,23 +3,23 @@
    ============================================ */
 
 :root {
-    /* M3 Color Tokens — Primary: Indigo */
-    --md-primary: #667eea;
+    /* M3 Color Tokens — Primary: Warm Brown/Amber */
+    --md-primary: #8B6914;
     --md-on-primary: #FFFFFF;
-    --md-primary-container: #E0E5FF;
-    --md-on-primary-container: #1a1a5e;
+    --md-primary-container: #FFDEA1;
+    --md-on-primary-container: #2B1D00;
 
-    /* Secondary — Purple */
-    --md-secondary: #764ba2;
+    /* Secondary — Olive/Dark Green */
+    --md-secondary: #5C6134;
     --md-on-secondary: #FFFFFF;
-    --md-secondary-container: #F0E0FF;
-    --md-on-secondary-container: #2D1650;
+    --md-secondary-container: #E1E6AD;
+    --md-on-secondary-container: #1A1E00;
 
-    /* Tertiary — Soft Violet */
-    --md-tertiary: #9C6ADE;
+    /* Tertiary — Terracotta/Warm Brown */
+    --md-tertiary: #9C5A2E;
     --md-on-tertiary: #FFFFFF;
-    --md-tertiary-container: #F0E6FF;
-    --md-on-tertiary-container: #3A1D6E;
+    --md-tertiary-container: #FFDBC9;
+    --md-on-tertiary-container: #371200;
 
     /* Error */
     --md-error: #B3261E;
@@ -27,24 +27,24 @@
     --md-error-container: #F9DEDC;
     --md-on-error-container: #410E0B;
 
-    /* Surfaces — Light & airy */
-    --md-surface: #FEFBFF;
-    --md-surface-dim: #DBD9E0;
-    --md-surface-bright: #FEFBFF;
+    /* Surfaces — Warm tones */
+    --md-surface: #FFFBF5;
+    --md-surface-dim: #E0DCD4;
+    --md-surface-bright: #FFFBF5;
     --md-surface-container-lowest: #FFFFFF;
-    --md-surface-container-low: #F6F3FB;
-    --md-surface-container: #F0EDF6;
-    --md-surface-container-high: #EAE7F0;
-    --md-surface-container-highest: #E4E1EA;
-    --md-on-surface: #1a1a2e;
-    --md-on-surface-variant: #555566;
-    --md-outline: #7E7E92;
-    --md-outline-variant: #CDCBDA;
+    --md-surface-container-low: #FAF6EE;
+    --md-surface-container: #F4F0E8;
+    --md-surface-container-high: #EDE9E1;
+    --md-surface-container-highest: #E7E3DB;
+    --md-on-surface: #1D1B16;
+    --md-on-surface-variant: #4D4639;
+    --md-outline: #7F7667;
+    --md-outline-variant: #D1C8B8;
 
     /* Inverse */
-    --md-inverse-surface: #2E2E3E;
-    --md-inverse-on-surface: #F2F0F8;
-    --md-inverse-primary: #B4C4FF;
+    --md-inverse-surface: #33302A;
+    --md-inverse-on-surface: #F6F1E9;
+    --md-inverse-primary: #E8C45A;
 
     /* Status Colors (M3 custom) */
     --md-success: #386A20;

@@ -39,7 +39,7 @@
     box-shadow: 0 12px 35px rgba(0,0,0,0.2) !important;
 }
 .step-drag-handle:hover {
-    color: #667eea !important;
+    color: #8B6914 !important;
 }
 
 /* Landing page template cards */
@@ -52,12 +52,12 @@
     border-radius: 8px;
     transition: all 0.15s;
 }
-.lp-tpl-card:hover { border-color: #667eea; }
-.lp-tpl-card.selected { border-color: #667eea; background: #f0f0ff; }
+.lp-tpl-card:hover { border-color: #8B6914; }
+.lp-tpl-card.selected { border-color: #8B6914; background: #f0f0ff; }
 .lp-tpl-card small { font-size: 11px; font-weight: 600; color: #555; }
 
 .step-template {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #8B6914 0%, #5C6134 100%);
     color: white;
     padding: 15px;
     border-radius: 8px;
@@ -348,7 +348,7 @@
                         </div>
                         <div class="card-body p-0" style="max-height:250px;overflow-y:auto">
                             <table class="table table-sm mb-0" style="font-size:13px">
-                                <thead><tr><th>Nome</th><th>Email</th><th>Telefono</th></tr></thead>
+                                <thead><tr><th>Nome</th><th>Cognome</th><th>Email</th><th>Telefono</th></tr></thead>
                                 <tbody id="importedParticipantsBody"></tbody>
                             </table>
                         </div>
@@ -371,7 +371,10 @@
             </div>
         </div>
         
-        <div class="mt-3 d-flex justify-content-end">
+        <div class="mt-3 d-flex justify-content-between">
+            <button type="button" class="btn btn-success" onclick="saveWorkflow()">
+                <i class="bi bi-save"></i> Salva
+            </button>
             <button type="button" class="btn btn-primary" onclick="nextStep()">
                 Next: Build Steps <i class="bi bi-arrow-right"></i>
             </button>
@@ -506,9 +509,14 @@
             <button type="button" class="btn btn-outline-secondary" onclick="prevStep()">
                 <i class="bi bi-arrow-left"></i> Back
             </button>
-            <button type="button" class="btn btn-primary" onclick="nextStep()">
-                Next: Review <i class="bi bi-arrow-right"></i>
-            </button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-success" onclick="saveWorkflow()">
+                    <i class="bi bi-save"></i> Salva
+                </button>
+                <button type="button" class="btn btn-primary" onclick="nextStep()">
+                    Next: Review <i class="bi bi-arrow-right"></i>
+                </button>
+            </div>
         </div>
     </div>
 

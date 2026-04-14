@@ -58,6 +58,9 @@ class Workflow(Base):
     # Configurazione JSON per dati custom
     config = Column(JSON, default={})
 
+    # Scadenza token landing page (ore), default da config globale
+    token_expiration_hours = Column(Integer, nullable=True)
+
     # Collegamento evento Saba Form (read-only, sync unidirezionale)
     sabaform_event_id = Column(Integer, nullable=True)
     sabaform_event_name = Column(String(300), nullable=True)
@@ -127,8 +130,14 @@ class Participant(Base):
     
     # Dati partecipante
     email = Column(String(255), nullable=True)
-    name = Column(String(200))
+    first_name = Column(String(100))
+    last_name = Column(String(100))
     phone = Column(String(50))
+
+    @property
+    def full_name(self):
+        parts = [self.first_name or '', self.last_name or '']
+        return ' '.join(p for p in parts if p).strip() or None
     
     # Stato
     status = Column(SQLEnum(ParticipantStatus), default=ParticipantStatus.PENDING, nullable=False)
@@ -139,7 +148,10 @@ class Participant(Base):
     
     # Dati raccolti (JSON)
     collected_data = Column(JSON, default={})
-    
+
+    # Dati originali importati da Saba Form (JSON)
+    sabaform_data = Column(JSON, default={})
+
     # Metadata
     enrolled_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime)
@@ -193,9 +205,9 @@ class ActivityLog(Base):
     __tablename__ = 'activity_log'
 
     id = Column(Integer, primary_key=True)
-    workflow_id = Column(Integer, ForeignKey('workflows.id'), nullable=False)
-    participant_id = Column(Integer, ForeignKey('participants.id'), nullable=True)
-    step_id = Column(Integer, ForeignKey('workflow_steps.id'), nullable=True)
+    workflow_id = Column(Integer, ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False)
+    participant_id = Column(Integer, ForeignKey('participants.id', ondelete='CASCADE'), nullable=True)
+    step_id = Column(Integer, ForeignKey('workflow_steps.id', ondelete='CASCADE'), nullable=True)
 
     event_type = Column(String(50), nullable=False)
     description = Column(Text)
@@ -209,3 +221,20 @@ class ActivityLog(Base):
 
     def __repr__(self):
         return f'<ActivityLog {self.id}: {self.event_type}>'
+
+
+class LandingTemplate(Base):
+    """Template landing page riutilizzabili"""
+    __tablename__ = 'landing_templates'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text)
+    landing_html = Column(Text)
+    landing_css = Column(Text)
+    landing_gjs_data = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<LandingTemplate {self.id}: {self.name}>'

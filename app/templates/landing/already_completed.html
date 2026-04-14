@@ -13,10 +13,10 @@
     <p style="font-size: 18px;">Hai già completato questo workflow.</p>
     
     <div style="margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; text-align: left;">
-        <h3 style="margin-bottom: 10px; color: #667eea;">Riepilogo</h3>
+        <h3 style="margin-bottom: 10px; color: #8B6914;">Riepilogo</h3>
         <p><strong>Email:</strong> {{ participant.email }}</p>
-        {% if participant.name %}
-        <p><strong>Nome:</strong> {{ participant.name }}</p>
+        {% if participant.full_name %}
+        <p><strong>Nome:</strong> {{ participant.full_name }}</p>
         {% endif %}
         <p><strong>Completato il:</strong> {{ participant.completed_at|localtime('%d/%m/%Y alle %H:%M') }}</p>
     </div>

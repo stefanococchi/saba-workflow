@@ -204,7 +204,7 @@
                                 </td>
                                 <td><small>{{ a.description }}</small></td>
                                 <td>
-                                    <small>{{ a.participant.name or a.participant.email or '—' if a.participant else '—' }}</small>
+                                    <small>{{ a.participant.full_name or a.participant.email or '—' if a.participant else '—' }}</small>
                                 </td>
                             </tr>
                             {% endfor %}

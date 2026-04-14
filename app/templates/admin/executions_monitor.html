@@ -148,6 +148,25 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Edit Partecipante -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil"></i> Modifica Partecipante</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="editModalBody"><div class="text-center py-4"><i class="bi bi-hourglass-split"></i> Caricamento...</div></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" onclick="saveParticipant()">
+                    <i class="bi bi-check-lg"></i> Salva
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -158,6 +177,9 @@
 var ALL_TIMELINE = [
     {% for item in timeline %}
     {
+        entry_type: {{ item.type | tojson }},
+        entry_id: {{ item.entry_id }},
+        participant_id: {{ item.participant_id | tojson }},
         time: {{ item.time.isoformat() | tojson }},
         time_local: {{ item.time|localtime | tojson }},
         event_type: {{ item.event_type | tojson }},
@@ -327,7 +349,7 @@ function renderTable(rows) {
         var sorted = sortCol === c.key;
         var icon = sorted ? (sortDir === 'asc' ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-down';
         return '<th class="'+(sorted?'sorted':'')+'" onclick="sortBy(\''+c.key+'\')">'+c.label+' <i class="bi '+icon+' sort-icon"></i></th>';
-    }).join('') + '<th>Info</th>';
+    }).join('') + '<th>Azioni</th>';
 
     tbody.innerHTML = rows.map(function(r, idx) {
         var cells = cols.map(function(c) {
@@ -340,12 +362,14 @@ function renderTable(rows) {
             return '<td><small>' + esc(val || '—') + '</small></td>';
         }).join('');
 
-        var infoBtn = '';
-        if (r.error) infoBtn = '<button class="btn btn-sm btn-outline-danger" onclick="showError('+idx+')" title="Errore"><i class="bi bi-exclamation-triangle"></i></button>';
-        else if (r.details) infoBtn = '<button class="btn btn-sm btn-outline-info" onclick="showDetails('+idx+')" title="Dettagli"><i class="bi bi-info-circle"></i></button>';
-        else infoBtn = '<span class="text-muted">-</span>';
+        var actions = '<div class="btn-group btn-group-sm">';
+        if (r.error) actions += '<button class="btn btn-outline-danger" onclick="showError('+idx+')" title="Errore"><i class="bi bi-exclamation-triangle"></i></button>';
+        else if (r.details) actions += '<button class="btn btn-outline-info" onclick="showDetails('+idx+')" title="Dettagli"><i class="bi bi-info-circle"></i></button>';
+        if (r.participant_id) actions += '<button class="btn btn-outline-primary" onclick="editParticipant('+r.participant_id+')" title="Modifica partecipante"><i class="bi bi-pencil"></i></button>';
+        actions += '<button class="btn btn-outline-danger" onclick="deleteEntry('+idx+')" title="Elimina"><i class="bi bi-trash"></i></button>';
+        actions += '</div>';
 
-        return '<tr>' + cells + '<td>' + infoBtn + '</td></tr>';
+        return '<tr>' + cells + '<td>' + actions + '</td></tr>';
     }).join('');
 }
 
@@ -397,6 +421,123 @@ function exportCSV() {
     var blob = new Blob(['\uFEFF'+csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
     var link = document.createElement('a'); link.href = URL.createObjectURL(blob);
     link.download = 'esecuzioni_'+new Date().toISOString().slice(0,10)+'.csv'; link.click();
+}
+
+// =============================================
+// EDIT / DELETE
+// =============================================
+var _editSfLabels = {
+    'id': 'ID Saba Form', 'first_name': 'Nome (SF)', 'last_name': 'Cognome (SF)',
+    'email': 'Email (SF)', 'phone': 'Telefono (SF)', 'company': 'Azienda',
+    'birth_date': 'Data di nascita', 'gender': 'Sesso',
+    'nucleo': 'Nucleo Familiare',
+    'doc_type': 'Tipo Documento', 'doc_number': 'N. Documento',
+    'doc_expiry': 'Scadenza Documento',
+    'volo_arrivo': 'Volo Arrivo', 'volo_partenza': 'Volo Partenza',
+    'notes': 'Note', 'confirmed': 'Confermato'
+};
+
+function buildEditForm(p) {
+    var html = '<input type="hidden" id="editId" value="' + p.id + '">';
+    html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-person"></i> Dati Partecipante</h6>';
+    html += '<div class="row">';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Nome</label><input type="text" class="form-control" id="editFirstName" value="' + esc(p.first_name || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Cognome</label><input type="text" class="form-control" id="editLastName" value="' + esc(p.last_name || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Email</label><input type="email" class="form-control" id="editEmail" value="' + esc(p.email || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Telefono</label><input type="text" class="form-control" id="editPhone" value="' + esc(p.phone || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Stato</label><select class="form-select" id="editStatus">';
+    ['pending','in_progress','completed','bounced','unsubscribed'].forEach(function(s) {
+        html += '<option value="'+s+'"'+(p.status===s?' selected':'')+'>'+s+'</option>';
+    });
+    html += '</select></div></div>';
+    var sf = p.sabaform_data;
+    if (sf && Object.keys(sf).length > 0) {
+        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-cloud-download"></i> Dati Saba Form</h6>';
+        html += '<div class="row">';
+        for (var k in sf) {
+            var label = _editSfLabels[k] || k;
+            var val = sf[k] !== null && sf[k] !== undefined ? sf[k] : '';
+            html += '<div class="col-md-6 mb-3"><label class="form-label">' + esc(label) + '</label>';
+            html += '<input type="text" class="form-control form-control-sm edit-sf-field" data-sf-key="' + esc(k) + '" value="' + esc(String(val)) + '"></div>';
+        }
+        html += '</div>';
+    }
+    return html;
+}
+
+function editParticipant(participantId) {
+    var body = document.getElementById('editModalBody');
+    body.innerHTML = '<div class="text-center py-4"><i class="bi bi-hourglass-split"></i> Caricamento...</div>';
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+
+    // Carica dati completi via API
+    fetch('/api/participants/' + participantId)
+    .then(function(r) { return r.json(); })
+    .then(function(p) {
+        body.innerHTML = buildEditForm(p);
+    })
+    .catch(function(e) {
+        body.innerHTML = '<div class="alert alert-danger">Errore: ' + esc(e.message) + '</div>';
+    });
+}
+
+function saveParticipant() {
+    var id = document.getElementById('editId').value;
+    var data = {
+        first_name: document.getElementById('editFirstName').value,
+        last_name: document.getElementById('editLastName').value,
+        email: document.getElementById('editEmail').value,
+        phone: document.getElementById('editPhone').value,
+        status: document.getElementById('editStatus').value
+    };
+    var sfFields = document.querySelectorAll('.edit-sf-field');
+    if (sfFields.length > 0) {
+        var sfData = {};
+        sfFields.forEach(function(el) { sfData[el.dataset.sfKey] = el.value; });
+        data.sabaform_data = sfData;
+    }
+    fetch('/api/participants/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Errore'); });
+        return r.json();
+    })
+    .then(function() {
+        bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+        ALL_TIMELINE.forEach(function(r) {
+            if (r.participant_id === parseInt(id)) r.participant = ((data.first_name || '') + ' ' + (data.last_name || '')).trim();
+        });
+        applyFilters();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
+}
+
+function deleteEntry(idx) {
+    var r = _filteredRows[idx];
+    if (!r) return;
+    if (!confirm('Eliminare questa entry (' + (r.description || r.event_type) + ')?')) return;
+
+    var url = r.entry_type === 'execution'
+        ? '/api/executions/' + r.entry_id
+        : '/api/activity-log/' + r.entry_id;
+
+    fetch(url, { method: 'DELETE' })
+    .then(function(resp) {
+        if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.error || 'Errore'); });
+        return resp.json();
+    })
+    .then(function() {
+        // Rimuovi dalla lista locale
+        var globalIdx = ALL_TIMELINE.indexOf(r);
+        if (globalIdx !== -1) ALL_TIMELINE.splice(globalIdx, 1);
+        applyFilters();
+        updateCounts();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
 }
 
 // =============================================

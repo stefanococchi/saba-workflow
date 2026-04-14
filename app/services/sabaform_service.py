@@ -65,46 +65,114 @@ def get_events():
 
 
 def get_participants(event_id):
-    """Ritorna lista partecipanti di un evento da sabaform.
+    """Ritorna lista partecipanti di un evento da sabaform con dati risolti.
+
+    Risolve le foreign key (nucleus_id, flight_in_id, flight_out_id)
+    con LEFT JOIN sulle tabelle correlate di Saba Form.
 
     Args:
         event_id: ID evento in sabaform
 
     Returns:
-        list[dict]: [{id, first_name, last_name, email, phone, company, birth_date, gender, notes}]
+        list[dict]: tutti i campi del partecipante con valori risolti
     """
     try:
         engine = _get_engine()
         with engine.connect() as conn:
-            result = conn.execute(text("""
-                SELECT
-                    p.id,
-                    p.first_name,
-                    p.last_name,
-                    p.email,
-                    p.phone,
-                    p.company,
-                    p.birth_date,
-                    p.gender,
-                    p.notes
-                FROM participants p
+            # Prima scopriamo quali tabelle/colonne correlate esistono
+            # per costruire le JOIN in modo robusto
+            fk_joins = ""
+            fk_selects = ""
+
+            # Verifica se esiste tabella nuclei/family_groups
+            for table_name in ['nuclei', 'family_groups', 'nucleus']:
+                try:
+                    check = conn.execute(text(
+                        f"SELECT column_name FROM information_schema.columns "
+                        f"WHERE table_name = :t LIMIT 5"
+                    ), {'t': table_name})
+                    cols = [r[0] for r in check]
+                    if cols:
+                        name_col = 'name' if 'name' in cols else cols[1] if len(cols) > 1 else cols[0]
+                        fk_joins += f" LEFT JOIN {table_name} n ON n.id = p.nucleus_id"
+                        fk_selects += f", n.{name_col} AS nucleus_name"
+                        break
+                except Exception:
+                    continue
+
+            # Verifica se esiste tabella flights/voli
+            for table_name in ['flights', 'voli', 'flight']:
+                try:
+                    check = conn.execute(text(
+                        f"SELECT column_name FROM information_schema.columns "
+                        f"WHERE table_name = :t LIMIT 10"
+                    ), {'t': table_name})
+                    cols = [r[0] for r in check]
+                    if cols:
+                        # Cerca colonna descrittiva: description, name, flight_number, code
+                        desc_col = next((c for c in ['description', 'name', 'flight_number', 'code', 'label'] if c in cols), cols[1] if len(cols) > 1 else cols[0])
+                        fk_joins += f" LEFT JOIN {table_name} fi ON fi.id = p.flight_in_id"
+                        fk_joins += f" LEFT JOIN {table_name} fo ON fo.id = p.flight_out_id"
+                        fk_selects += f", fi.{desc_col} AS flight_in_name"
+                        fk_selects += f", fo.{desc_col} AS flight_out_name"
+                        break
+                except Exception:
+                    continue
+
+            query = f"""
+                SELECT p.*{fk_selects}
+                FROM participants p{fk_joins}
                 WHERE p.event_id = :event_id
                 ORDER BY p.last_name, p.first_name
-            """), {'event_id': event_id})
+            """
+            logger.debug(f"Query sabaform participants: {query}")
+            result = conn.execute(text(query), {'event_id': event_id})
+
+            # Mappa per tradurre doc_type
+            doc_type_labels = {
+                'id_card': 'Carta d\'identità',
+                'passport': 'Passaporto',
+                'driving_license': 'Patente',
+                'fiscal_code': 'Codice Fiscale',
+                'health_card': 'Tessera Sanitaria',
+            }
+
+            # Campi da escludere (FK raw che abbiamo risolto)
+            skip_keys = {'event_id', 'created_at', 'updated_at'}
+            fk_resolved = set()
+            if fk_selects:
+                if 'nucleus_name' in fk_selects:
+                    fk_resolved.add('nucleus_id')
+                if 'flight_in_name' in fk_selects:
+                    fk_resolved.add('flight_in_id')
+                if 'flight_out_name' in fk_selects:
+                    fk_resolved.add('flight_out_id')
 
             participants = []
             for row in result.mappings():
-                participants.append({
-                    'id': row['id'],
-                    'first_name': row['first_name'] or '',
-                    'last_name': row['last_name'] or '',
-                    'email': row['email'] or '',
-                    'phone': row['phone'] or '',
-                    'company': row['company'] or '',
-                    'birth_date': str(row['birth_date']) if row['birth_date'] else None,
-                    'gender': row['gender'],
-                    'notes': row['notes'] or '',
-                })
+                p = {}
+                for key, value in row.items():
+                    if key in skip_keys or key in fk_resolved:
+                        continue
+                    if value is None:
+                        continue
+                    # Traduci doc_type
+                    if key == 'doc_type' and isinstance(value, str):
+                        p[key] = doc_type_labels.get(value, value)
+                    elif hasattr(value, 'isoformat'):
+                        p[key] = value.isoformat()
+                    else:
+                        p[key] = str(value) if not isinstance(value, (str, int, float, bool)) else value
+
+                # Rinomina campi risolti con nomi leggibili
+                if p.get('nucleus_name'):
+                    p['nucleo'] = p.pop('nucleus_name')
+                if p.get('flight_in_name'):
+                    p['volo_arrivo'] = p.pop('flight_in_name')
+                if p.get('flight_out_name'):
+                    p['volo_partenza'] = p.pop('flight_out_name')
+
+                participants.append(p)
             return participants
 
     except Exception as e:

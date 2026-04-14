@@ -82,6 +82,7 @@ function getDefaultConfig(type) {
             wait_type: 'date',
             target_date: '',
             target_time: '09:00',
+            delay_hours: 0,
             timezone: 'UTC'
         },
         goal_check: {
@@ -267,7 +268,8 @@ function renderStepSummary(step) {
             const waitDesc = {
                 'date': `Until ${step.config.target_date || 'date not set'} at ${step.config.target_time}`,
                 'time': `Daily at ${step.config.target_time}`,
-                'day_of_week': `Every ${step.config.target_day || 'Monday'} at ${step.config.target_time}`
+                'day_of_week': `Every ${step.config.target_day || 'Monday'} at ${step.config.target_time}`,
+                'delay_hours': `${step.config.delay_hours || 0} ore dopo lo step precedente`
             };
             return `<p class="mb-0"><strong>Wait:</strong> ${waitDesc[step.config.wait_type] || 'Not configured'}</p>`;
         case 'goal_check':
@@ -363,8 +365,14 @@ function renderStepEditForm(step) {
                         <span class="variable-badge" onclick="insertVariable('workflow_name')" title="Il nome del workflow/evento">
                             <i class="bi bi-bookmark"></i> Nome Evento
                         </span>
-                        <span class="variable-badge" onclick="insertVariable('participant.name')" title="Nome del partecipante">
+                        <span class="variable-badge" onclick="insertVariable('participant.first_name')" title="Nome del partecipante">
                             <i class="bi bi-person"></i> Nome
+                        </span>
+                        <span class="variable-badge" onclick="insertVariable('participant.last_name')" title="Cognome del partecipante">
+                            <i class="bi bi-person"></i> Cognome
+                        </span>
+                        <span class="variable-badge" onclick="insertVariable('participant.full_name')" title="Nome completo del partecipante">
+                            <i class="bi bi-person-badge"></i> Nome Completo
                         </span>
                         <span class="variable-badge" onclick="insertVariable('participant.email')" title="Email del partecipante">
                             <i class="bi bi-envelope"></i> Email
@@ -398,47 +406,60 @@ function renderStepEditForm(step) {
                 <div class="mb-3">
                     <label class="form-label">Wait Type</label>
                     <select class="form-select" id="editWaitType" onchange="updateWaitUntilForm()">
-                        <option value="date" ${step.config.wait_type === 'date' ? 'selected' : ''}>Specific Date & Time</option>
-                        <option value="time" ${step.config.wait_type === 'time' ? 'selected' : ''}>Daily at Specific Time</option>
-                        <option value="day_of_week" ${step.config.wait_type === 'day_of_week' ? 'selected' : ''}>Specific Day of Week</option>
+                        <option value="delay_hours" ${step.config.wait_type === 'delay_hours' ? 'selected' : ''}>X ore dopo lo step precedente</option>
+                        <option value="date" ${step.config.wait_type === 'date' ? 'selected' : ''}>Data e ora specifica</option>
+                        <option value="time" ${step.config.wait_type === 'time' ? 'selected' : ''}>Ogni giorno a un orario</option>
+                        <option value="day_of_week" ${step.config.wait_type === 'day_of_week' ? 'selected' : ''}>Giorno della settimana</option>
                     </select>
                 </div>
-                
-                <div id="waitUntilDateFields" ${step.config.wait_type !== 'date' ? 'style="display:none"' : ''}>
+
+                <div id="waitUntilDelayFields" ${step.config.wait_type !== 'delay_hours' ? 'style="display:none"' : ''}>
                     <div class="mb-3">
-                        <label class="form-label">Target Date</label>
-                        <input type="date" class="form-control" id="editTargetDate" 
-                               value="${step.config.target_date || ''}" min="${new Date().toISOString().split('T')[0]}">
-                        <small class="text-muted">Wait until this specific date</small>
+                        <label class="form-label">Ore di attesa</label>
+                        <input type="number" class="form-control" id="editWaitDelayHours"
+                               value="${step.config.delay_hours || 0}" min="0" step="1">
+                        <small class="text-muted">Attendi X ore dopo il completamento dello step precedente</small>
                     </div>
                 </div>
-                
+
+                <div id="waitUntilDateFields" ${step.config.wait_type !== 'date' ? 'style="display:none"' : ''}>
+                    <div class="mb-3">
+                        <label class="form-label">Data</label>
+                        <input type="date" class="form-control" id="editTargetDate"
+                               value="${step.config.target_date || ''}" min="${new Date().toISOString().split('T')[0]}">
+                        <small class="text-muted">Attendi fino a questa data</small>
+                    </div>
+                </div>
+
                 <div id="waitUntilDayFields" ${step.config.wait_type !== 'day_of_week' ? 'style="display:none"' : ''}>
                     <div class="mb-3">
-                        <label class="form-label">Day of Week</label>
+                        <label class="form-label">Giorno della settimana</label>
                         <select class="form-select" id="editTargetDay">
-                            <option value="monday" ${step.config.target_day === 'monday' ? 'selected' : ''}>Monday</option>
-                            <option value="tuesday" ${step.config.target_day === 'tuesday' ? 'selected' : ''}>Tuesday</option>
-                            <option value="wednesday" ${step.config.target_day === 'wednesday' ? 'selected' : ''}>Wednesday</option>
-                            <option value="thursday" ${step.config.target_day === 'thursday' ? 'selected' : ''}>Thursday</option>
-                            <option value="friday" ${step.config.target_day === 'friday' ? 'selected' : ''}>Friday</option>
-                            <option value="saturday" ${step.config.target_day === 'saturday' ? 'selected' : ''}>Saturday</option>
-                            <option value="sunday" ${step.config.target_day === 'sunday' ? 'selected' : ''}>Sunday</option>
+                            <option value="monday" ${step.config.target_day === 'monday' ? 'selected' : ''}>Lunedì</option>
+                            <option value="tuesday" ${step.config.target_day === 'tuesday' ? 'selected' : ''}>Martedì</option>
+                            <option value="wednesday" ${step.config.target_day === 'wednesday' ? 'selected' : ''}>Mercoledì</option>
+                            <option value="thursday" ${step.config.target_day === 'thursday' ? 'selected' : ''}>Giovedì</option>
+                            <option value="friday" ${step.config.target_day === 'friday' ? 'selected' : ''}>Venerdì</option>
+                            <option value="saturday" ${step.config.target_day === 'saturday' ? 'selected' : ''}>Sabato</option>
+                            <option value="sunday" ${step.config.target_day === 'sunday' ? 'selected' : ''}>Domenica</option>
                         </select>
                     </div>
                 </div>
-                
-                <div class="mb-3">
-                    <label class="form-label">Time</label>
-                    <input type="time" class="form-control" id="editTargetTime" 
-                           value="${step.config.target_time || '09:00'}">
+
+                <div id="waitUntilTimeFields" ${step.config.wait_type === 'delay_hours' ? 'style="display:none"' : ''}>
+                    <div class="mb-3">
+                        <label class="form-label">Orario</label>
+                        <input type="time" class="form-control" id="editTargetTime"
+                               value="${step.config.target_time || '09:00'}">
+                    </div>
                 </div>
-                
+
                 <div class="alert alert-info">
-                    <small><i class="bi bi-info-circle"></i> 
-                    <strong>Date:</strong> Execute on specific date at specific time<br>
-                    <strong>Time:</strong> Execute daily at specific time (or next day if already passed)<br>
-                    <strong>Day of Week:</strong> Execute on next occurrence of weekday at specific time
+                    <small><i class="bi bi-info-circle"></i>
+                    <strong>Ore dopo step precedente:</strong> Attendi X ore dal completamento dello step prima<br>
+                    <strong>Data e ora:</strong> Esegui in una data e ora specifica<br>
+                    <strong>Ogni giorno:</strong> Esegui ogni giorno a un orario (o il giorno dopo se già passato)<br>
+                    <strong>Giorno della settimana:</strong> Esegui alla prossima occorrenza del giorno scelto
                     </small>
                 </div>
             `;
@@ -642,9 +663,11 @@ function insertVariable(variable) {
 // Update wait until form based on type
 function updateWaitUntilForm() {
     const waitType = document.getElementById('editWaitType').value;
-    
+
+    document.getElementById('waitUntilDelayFields').style.display = waitType === 'delay_hours' ? 'block' : 'none';
     document.getElementById('waitUntilDateFields').style.display = waitType === 'date' ? 'block' : 'none';
     document.getElementById('waitUntilDayFields').style.display = waitType === 'day_of_week' ? 'block' : 'none';
+    document.getElementById('waitUntilTimeFields').style.display = waitType === 'delay_hours' ? 'none' : 'block';
 }
 
 // Update goal check form based on type
@@ -730,8 +753,9 @@ function saveStepEdit() {
         case 'wait_until':
             step.config.wait_type = document.getElementById('editWaitType').value;
             step.config.target_date = document.getElementById('editTargetDate')?.value || '';
-            step.config.target_time = document.getElementById('editTargetTime').value;
+            step.config.target_time = document.getElementById('editTargetTime')?.value || '09:00';
             step.config.target_day = document.getElementById('editTargetDay')?.value || '';
+            step.config.delay_hours = parseInt(document.getElementById('editWaitDelayHours')?.value) || 0;
             break;
         case 'goal_check':
             step.config.goal = document.getElementById('editGoalType').value;
@@ -971,8 +995,12 @@ function saveWorkflow() {
                     wait_type: step.config.wait_type,
                     target_date: step.config.target_date,
                     target_time: step.config.target_time,
-                    target_day: step.config.target_day
+                    target_day: step.config.target_day,
+                    delay_hours: step.config.delay_hours
                 };
+                if (step.config.wait_type === 'delay_hours') {
+                    stepData.delay_hours = step.config.delay_hours;
+                }
             }
             
             // For goal_check steps, store config in skip_conditions
@@ -1015,8 +1043,26 @@ function saveWorkflow() {
             alert('Errore: ' + result.error);
             return;
         }
+        // Se è un nuovo workflow, aggiorna l'URL senza ricaricare per restare nella pagina
+        if (!isEdit && result.id) {
+            window._currentWorkflowId = result.id;
+            history.replaceState(null, '', '/admin/workflows/' + result.id + '/edit');
+        }
+        // Ricarica gli step dal server per avere i nuovi ID (dopo save vengono ricreati)
+        var wfId = result.id || window._currentWorkflowId;
+        if (wfId) {
+            fetch('/api/workflows/' + wfId)
+            .then(function(r) { return r.json(); })
+            .then(function(wf) {
+                if (wf.steps) {
+                    wf.steps.forEach(function(serverStep) {
+                        var local = workflowSteps.find(function(s) { return s.order === serverStep.order; });
+                        if (local) local.id = serverStep.id;
+                    });
+                }
+            }).catch(function(){});
+        }
         alert('Workflow salvato!');
-        window.location.href = '/admin/workflows/' + (result.id || window._currentWorkflowId);
     })
     .catch(error => {
         alert('Errore salvataggio: ' + error);
@@ -1087,19 +1133,28 @@ function importFromEvent() {
                 return;
             }
 
-            // Aggiungi solo quelli non già importati (per nome)
-            var existingNames = importedParticipants.map(function(p) { return p.name; });
+            // Aggiungi solo quelli non già importati (per nome+cognome)
+            var existingKeys = importedParticipants.map(function(p) { return (p.first_name + ' ' + p.last_name).trim(); });
             var added = 0;
             participants.forEach(function(p) {
-                var name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
-                if (!name) return;
-                if (existingNames.indexOf(name) !== -1) return;
+                var first = p.first_name || '';
+                var last = p.last_name || '';
+                var key = (first + ' ' + last).trim();
+                if (!key) return;
+                if (existingKeys.indexOf(key) !== -1) return;
+                // Salva tutti i dati originali da Saba Form
+                var sabaform_data = {};
+                for (var k in p) {
+                    if (p[k] !== null && p[k] !== '') sabaform_data[k] = p[k];
+                }
                 importedParticipants.push({
-                    name: name,
+                    first_name: first,
+                    last_name: last,
                     email: p.email || '',
-                    phone: p.phone || ''
+                    phone: p.phone || '',
+                    sabaform_data: sabaform_data
                 });
-                existingNames.push(name);
+                existingKeys.push(key);
                 added++;
             });
 
@@ -1131,7 +1186,7 @@ function renderImportedParticipants() {
     tbody.innerHTML = '';
     importedParticipants.forEach(function(p) {
         var tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + escHtml(p.name) + '</td><td>' + escHtml(p.email) + '</td><td>' + escHtml(p.phone) + '</td>';
+        tr.innerHTML = '<td>' + escHtml(p.first_name) + '</td><td>' + escHtml(p.last_name) + '</td><td>' + escHtml(p.email) + '</td><td>' + escHtml(p.phone) + '</td>';
         tbody.appendChild(tr);
     });
 }
@@ -1181,8 +1236,8 @@ var lpCurrentStepId = null;
 var lpPreviewTimer = null;
 
 var LP_PRESETS = {
-    modern:    { bg1:'#667eea', bg2:'#764ba2', cardBg:'#ffffff', titleColor:'#1a1a2e', textColor:'#666666', btn1:'#667eea', btn2:'#764ba2', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#e1e8ed' },
-    corporate: { bg1:'#1a1a2e', bg2:'#16213e', cardBg:'#1a1a3e', titleColor:'#ffffff', textColor:'#8888aa', btn1:'#667eea', btn2:'#667eea', btnText:'#ffffff', labelColor:'#cccccc', inputBorder:'#2a2a5a' },
+    modern:    { bg1:'#8B6914', bg2:'#5C6134', cardBg:'#ffffff', titleColor:'#1a1a2e', textColor:'#666666', btn1:'#8B6914', btn2:'#5C6134', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#e1e8ed' },
+    corporate: { bg1:'#1a1a2e', bg2:'#16213e', cardBg:'#1a1a3e', titleColor:'#ffffff', textColor:'#8888aa', btn1:'#8B6914', btn2:'#8B6914', btnText:'#ffffff', labelColor:'#cccccc', inputBorder:'#2a2a5a' },
     minimal:   { bg1:'#f8f9fa', bg2:'#f8f9fa', cardBg:'#ffffff', titleColor:'#111111', textColor:'#888888', btn1:'#111111', btn2:'#111111', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#dddddd' },
     warm:      { bg1:'#f093fb', bg2:'#f5576c', cardBg:'#ffffff', titleColor:'#1a1a2e', textColor:'#666666', btn1:'#f093fb', btn2:'#f5576c', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#f0e0f0' },
     nature:    { bg1:'#11998e', bg2:'#38ef7d', cardBg:'#ffffff', titleColor:'#064e3b', textColor:'#6b7280', btn1:'#11998e', btn2:'#38ef7d', btnText:'#ffffff', labelColor:'#374151', inputBorder:'#d1fae5' },

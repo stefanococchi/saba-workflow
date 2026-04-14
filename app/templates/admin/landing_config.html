@@ -30,7 +30,7 @@
         align-items: center;
         gap: 8px;
     }
-    .config-panel h5 i { color: #667eea; }
+    .config-panel h5 i { color: #8B6914; }
 
     /* Color picker row */
     .color-row {
@@ -75,7 +75,7 @@
         box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
     .template-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .template-card.selected { border-color: #667eea; box-shadow: 0 0 0 1px #667eea; }
+    .template-card.selected { border-color: #8B6914; box-shadow: 0 0 0 1px #8B6914; }
     .template-card .preview {
         height: 100px;
         display: flex;
@@ -137,7 +137,7 @@
     }
     .fields-table input:focus, .fields-table select:focus {
         outline: none;
-        border-color: #667eea;
+        border-color: #8B6914;
         box-shadow: 0 0 0 2px rgba(102,126,234,0.15);
     }
     .field-drag-handle {
@@ -145,7 +145,7 @@
         color: #aaa;
         font-size: 16px;
     }
-    .field-drag-handle:hover { color: #667eea; }
+    .field-drag-handle:hover { color: #8B6914; }
     .btn-remove-field {
         background: none;
         border: none;
@@ -189,7 +189,7 @@
     }
 
     /* Toggle switch */
-    .form-check-input:checked { background-color: #667eea; border-color: #667eea; }
+    .form-check-input:checked { background-color: #8B6914; border-color: #8B6914; }
 
     /* Gradient picker */
     .gradient-preview {
@@ -203,7 +203,7 @@
     /* Section title badge */
     .section-badge {
         font-size: 10px;
-        background: #667eea;
+        background: #8B6914;
         color: #fff;
         padding: 2px 8px;
         border-radius: 20px;
@@ -223,14 +223,14 @@
             <h5><i class="bi bi-layout-text-window-reverse"></i> Template <span class="section-badge">LAYOUT</span></h5>
             <div class="template-grid" id="templateGrid">
                 <div class="template-card" data-template="modern" onclick="selectTemplate('modern')">
-                    <div class="preview" style="background:linear-gradient(135deg,#667eea,#764ba2)">
-                        <div class="mini-form"><div class="mini-input"></div><div class="mini-input"></div><div class="mini-btn" style="background:#667eea"></div></div>
+                    <div class="preview" style="background:linear-gradient(135deg,#8B6914,#5C6134)">
+                        <div class="mini-form"><div class="mini-input"></div><div class="mini-input"></div><div class="mini-btn" style="background:#8B6914"></div></div>
                     </div>
                     <div class="tpl-name">Moderno</div>
                 </div>
                 <div class="template-card" data-template="corporate" onclick="selectTemplate('corporate')">
                     <div class="preview" style="background:linear-gradient(135deg,#1a1a2e,#16213e)">
-                        <div class="mini-form"><div class="mini-input"></div><div class="mini-input"></div><div class="mini-btn" style="background:#667eea"></div></div>
+                        <div class="mini-form"><div class="mini-input"></div><div class="mini-input"></div><div class="mini-btn" style="background:#8B6914"></div></div>
                     </div>
                     <div class="tpl-name">Corporate</div>
                 </div>
@@ -344,13 +344,13 @@
                 <div class="col-md-6">
                     <div class="color-row">
                         <label>Sfondo primario</label>
-                        <input type="color" id="cfgBgColor1" value="#667eea" oninput="syncColor(this, 'cfgBgColor1Hex'); updatePreview()">
-                        <input type="text" class="form-control form-control-sm" id="cfgBgColor1Hex" value="#667eea" oninput="syncHex(this, 'cfgBgColor1'); updatePreview()">
+                        <input type="color" id="cfgBgColor1" value="#8B6914" oninput="syncColor(this, 'cfgBgColor1Hex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgBgColor1Hex" value="#8B6914" oninput="syncHex(this, 'cfgBgColor1'); updatePreview()">
                     </div>
                     <div class="color-row">
                         <label>Sfondo secondario</label>
-                        <input type="color" id="cfgBgColor2" value="#764ba2" oninput="syncColor(this, 'cfgBgColor2Hex'); updatePreview()">
-                        <input type="text" class="form-control form-control-sm" id="cfgBgColor2Hex" value="#764ba2" oninput="syncHex(this, 'cfgBgColor2'); updatePreview()">
+                        <input type="color" id="cfgBgColor2" value="#5C6134" oninput="syncColor(this, 'cfgBgColor2Hex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgBgColor2Hex" value="#5C6134" oninput="syncHex(this, 'cfgBgColor2'); updatePreview()">
                     </div>
                     <div class="color-row">
                         <label>Sfondo card</label>
@@ -371,13 +371,13 @@
                 <div class="col-md-6">
                     <div class="color-row">
                         <label>Colore bottone</label>
-                        <input type="color" id="cfgBtnColor1" value="#667eea" oninput="syncColor(this, 'cfgBtnColor1Hex'); updatePreview()">
-                        <input type="text" class="form-control form-control-sm" id="cfgBtnColor1Hex" value="#667eea" oninput="syncHex(this, 'cfgBtnColor1'); updatePreview()">
+                        <input type="color" id="cfgBtnColor1" value="#8B6914" oninput="syncColor(this, 'cfgBtnColor1Hex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgBtnColor1Hex" value="#8B6914" oninput="syncHex(this, 'cfgBtnColor1'); updatePreview()">
                     </div>
                     <div class="color-row">
                         <label>Bottone gradient</label>
-                        <input type="color" id="cfgBtnColor2" value="#764ba2" oninput="syncColor(this, 'cfgBtnColor2Hex'); updatePreview()">
-                        <input type="text" class="form-control form-control-sm" id="cfgBtnColor2Hex" value="#764ba2" oninput="syncHex(this, 'cfgBtnColor2'); updatePreview()">
+                        <input type="color" id="cfgBtnColor2" value="#5C6134" oninput="syncColor(this, 'cfgBtnColor2Hex'); updatePreview()">
+                        <input type="text" class="form-control form-control-sm" id="cfgBtnColor2Hex" value="#5C6134" oninput="syncHex(this, 'cfgBtnColor2'); updatePreview()">
                     </div>
                     <div class="color-row">
                         <label>Testo bottone</label>
@@ -489,13 +489,36 @@
         </div>
 
         <!-- SALVA -->
-        <div class="d-flex gap-2 mb-4">
+        <div class="d-flex gap-2 flex-wrap mb-4">
             <button class="btn btn-success btn-lg" onclick="saveConfig()">
                 <i class="bi bi-save"></i> Salva Configurazione
             </button>
             <button class="btn btn-outline-primary btn-lg" onclick="openFullPreview()">
                 <i class="bi bi-box-arrow-up-right"></i> Anteprima Full Screen
             </button>
+            <div class="btn-group">
+                <button class="btn btn-outline-secondary btn-lg" onclick="saveAsTemplate()">
+                    <i class="bi bi-bookmark-plus"></i> Salva come Template
+                </button>
+                <button class="btn btn-outline-secondary btn-lg" onclick="loadTemplateModal()">
+                    <i class="bi bi-bookmark-star"></i> Carica Template
+                </button>
+            </div>
+        </div>
+
+        <!-- Modal Carica Template -->
+        <div class="modal fade" id="templateModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-bookmark-star"></i> Template Salvati</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="templateModalBody">
+                        <p class="text-muted">Caricamento...</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -549,13 +572,13 @@ function initFromConfig(cfg) {
     setVal('cfgSuccessMsg', cfg.success_message || 'Grazie! Dati salvati con successo.');
     setVal('cfgLogo', cfg.logo_url || '');
     setVal('cfgFooter', cfg.footer || 'Powered by Saba Workflow');
-    setColorVal('cfgBgColor1', s.bg_color_1 || '#667eea');
-    setColorVal('cfgBgColor2', s.bg_color_2 || '#764ba2');
+    setColorVal('cfgBgColor1', s.bg_color_1 || '#8B6914');
+    setColorVal('cfgBgColor2', s.bg_color_2 || '#5C6134');
     setColorVal('cfgCardBg', s.card_bg || '#ffffff');
     setColorVal('cfgTitleColor', s.title_color || '#1a1a2e');
     setColorVal('cfgTextColor', s.text_color || '#666666');
-    setColorVal('cfgBtnColor1', s.btn_color_1 || '#667eea');
-    setColorVal('cfgBtnColor2', s.btn_color_2 || '#764ba2');
+    setColorVal('cfgBtnColor1', s.btn_color_1 || '#8B6914');
+    setColorVal('cfgBtnColor2', s.btn_color_2 || '#5C6134');
     setColorVal('cfgBtnTextColor', s.btn_text_color || '#ffffff');
     setColorVal('cfgLabelColor', s.label_color || '#333333');
     setColorVal('cfgInputBorder', s.input_border || '#e1e8ed');
@@ -604,8 +627,8 @@ function syncHex(hexInput, pickerId) {
 // TEMPLATE SELECTION
 // =============================================
 var TEMPLATE_PRESETS = {
-    modern:    { bg1:'#667eea', bg2:'#764ba2', cardBg:'#ffffff', titleColor:'#1a1a2e', textColor:'#666666', btn1:'#667eea', btn2:'#764ba2', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#e1e8ed' },
-    corporate: { bg1:'#1a1a2e', bg2:'#16213e', cardBg:'#1a1a3e', titleColor:'#ffffff', textColor:'#8888aa', btn1:'#667eea', btn2:'#667eea', btnText:'#ffffff', labelColor:'#cccccc', inputBorder:'#2a2a5a' },
+    modern:    { bg1:'#8B6914', bg2:'#5C6134', cardBg:'#ffffff', titleColor:'#1a1a2e', textColor:'#666666', btn1:'#8B6914', btn2:'#5C6134', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#e1e8ed' },
+    corporate: { bg1:'#1a1a2e', bg2:'#16213e', cardBg:'#1a1a3e', titleColor:'#ffffff', textColor:'#8888aa', btn1:'#8B6914', btn2:'#8B6914', btnText:'#ffffff', labelColor:'#cccccc', inputBorder:'#2a2a5a' },
     minimal:   { bg1:'#f8f9fa', bg2:'#f8f9fa', cardBg:'#ffffff', titleColor:'#111111', textColor:'#888888', btn1:'#111111', btn2:'#111111', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#dddddd' },
     warm:      { bg1:'#f093fb', bg2:'#f5576c', cardBg:'#ffffff', titleColor:'#1a1a2e', textColor:'#666666', btn1:'#f093fb', btn2:'#f5576c', btnText:'#ffffff', labelColor:'#333333', inputBorder:'#f0e0f0' },
     nature:    { bg1:'#11998e', bg2:'#38ef7d', cardBg:'#ffffff', titleColor:'#064e3b', textColor:'#6b7280', btn1:'#11998e', btn2:'#38ef7d', btnText:'#ffffff', labelColor:'#374151', inputBorder:'#d1fae5' },
@@ -925,6 +948,94 @@ function openFullPreview() {
     win.document.write(html);
     win.document.close();
 }
+
+// =============================================
+// TEMPLATE LIBRARY
+// =============================================
+function saveAsTemplate() {
+    var name = prompt('Nome del template:');
+    if (!name) return;
+    var desc = prompt('Descrizione (opzionale):') || '';
+
+    var config = collectConfig();
+    var html = generateHTML();
+
+    fetch('/api/landing-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name: name,
+            description: desc,
+            html: html,
+            css: '',
+            gjs_data: config
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(result) {
+        if (result.error) { alert('Errore: ' + result.error); return; }
+        alert('Template "' + result.name + '" salvato!');
+    })
+    .catch(function(e) { alert('Errore: ' + e); });
+}
+
+function loadTemplateModal() {
+    var body = document.getElementById('templateModalBody');
+    body.innerHTML = '<p class="text-muted">Caricamento...</p>';
+    new bootstrap.Modal(document.getElementById('templateModal')).show();
+
+    fetch('/api/landing-templates')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var templates = data.templates || [];
+        if (templates.length === 0) {
+            body.innerHTML = '<p class="text-muted">Nessun template salvato. Usa "Salva come Template" per crearne uno.</p>';
+            return;
+        }
+        var html = '<div class="list-group">';
+        templates.forEach(function(t) {
+            html += '<div class="list-group-item d-flex justify-content-between align-items-center">';
+            html += '<div>';
+            html += '<strong>' + escHtml(t.name) + '</strong>';
+            if (t.description) html += '<br><small class="text-muted">' + escHtml(t.description) + '</small>';
+            if (t.updated_at) html += '<br><small class="text-muted">' + t.updated_at.slice(0, 10) + '</small>';
+            html += '</div>';
+            html += '<div class="btn-group btn-group-sm">';
+            html += '<button class="btn btn-primary" onclick="loadTemplate(' + t.id + ')"><i class="bi bi-download"></i> Carica</button>';
+            html += '<button class="btn btn-outline-danger" onclick="deleteTemplate(' + t.id + ')"><i class="bi bi-trash"></i></button>';
+            html += '</div></div>';
+        });
+        html += '</div>';
+        body.innerHTML = html;
+    })
+    .catch(function(e) { body.innerHTML = '<p class="text-danger">Errore: ' + e + '</p>'; });
+}
+
+function loadTemplate(templateId) {
+    if (!confirm('Caricare questo template? La configurazione attuale verrà sostituita.')) return;
+
+    fetch('/api/landing-templates/' + templateId)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert('Errore: ' + data.error); return; }
+        if (data.gjs_data) {
+            initFromConfig(data.gjs_data);
+        }
+        bootstrap.Modal.getInstance(document.getElementById('templateModal')).hide();
+        alert('Template "' + data.name + '" caricato!');
+    })
+    .catch(function(e) { alert('Errore: ' + e); });
+}
+
+function deleteTemplate(templateId) {
+    if (!confirm('Eliminare questo template?')) return;
+    fetch('/api/landing-templates/' + templateId, { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function() { loadTemplateModal(); })
+    .catch(function(e) { alert('Errore: ' + e); });
+}
+
+function escHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // =============================================
 // INIT

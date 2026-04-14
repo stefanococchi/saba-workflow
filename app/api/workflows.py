@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, WorkflowStatus, Execution, ExecutionStatus
+from app.models import Workflow, WorkflowStep, Participant, WorkflowStatus, Execution, ExecutionStatus, ActivityLog
 from app.services import TokenService, EmailService
 from app.services.activity_service import log_activity
 from datetime import datetime
@@ -56,16 +56,19 @@ def create_workflow():
         participants_data = data.get('participants', [])
         participants_added = 0
         for p_data in participants_data:
-            name = p_data.get('name', '').strip()
+            first_name = p_data.get('first_name', '').strip()
+            last_name = p_data.get('last_name', '').strip()
             email = p_data.get('email', '').strip() or None
-            if not name and not email:
+            if not first_name and not last_name and not email:
                 continue
 
             participant = Participant(
                 workflow_id=workflow.id,
                 email=email,
-                name=name,
+                first_name=first_name,
+                last_name=last_name,
                 phone=p_data.get('phone', ''),
+                sabaform_data=p_data.get('sabaform_data', {}),
             )
             db.add(participant)
             db.flush()
@@ -193,16 +196,34 @@ def update_workflow(workflow_id):
 
         # Aggiorna steps se presenti (elimina vecchi, ricrea)
         if 'steps' in data:
-            # Rimuovi step esistenti (cascade elimina anche executions)
+            # Salva dati landing page dai vecchi step (indicizzati per order)
+            old_landing_data = {}
+            for old_step in workflow.steps:
+                if old_step.landing_html or old_step.landing_css or old_step.landing_gjs_data:
+                    old_landing_data[old_step.order] = {
+                        'landing_html': old_step.landing_html,
+                        'landing_css': old_step.landing_css,
+                        'landing_gjs_data': old_step.landing_gjs_data,
+                    }
+
+            # Scollega partecipanti dai vecchi step
+            old_step_ids = [s.id for s in workflow.steps]
+            if old_step_ids:
+                db.query(Participant).filter(
+                    Participant.current_step_id.in_(old_step_ids)
+                ).update({Participant.current_step_id: None}, synchronize_session='fetch')
+
+            # Rimuovi step esistenti
             for old_step in list(workflow.steps):
                 db.delete(old_step)
             db.flush()
 
             for step_data in data['steps']:
+                order = step_data.get('order', 1)
                 step = WorkflowStep(
                     workflow_id=workflow.id,
-                    order=step_data.get('order', 1),
-                    name=step_data.get('name', f"Step {step_data.get('order', 1)}"),
+                    order=order,
+                    name=step_data.get('name', f"Step {order}"),
                     type=step_data.get('type', 'email'),
                     template_name=step_data.get('template_name'),
                     subject=step_data.get('subject', ''),
@@ -211,32 +232,48 @@ def update_workflow(workflow_id):
                     skip_conditions=step_data.get('skip_conditions'),
                     landing_page_config=step_data.get('landing_page_config')
                 )
+                # Ripristina landing page dallo step con lo stesso order
+                landing = old_landing_data.get(order)
+                if landing:
+                    step.landing_html = landing['landing_html']
+                    step.landing_css = landing['landing_css']
+                    step.landing_gjs_data = landing['landing_gjs_data']
+
                 db.add(step)
 
         # Aggiungi nuovi partecipanti (non elimina quelli esistenti)
         participants_data = data.get('participants', [])
         for p_data in participants_data:
-            name = p_data.get('name', '').strip()
+            first_name = p_data.get('first_name', '').strip()
+            last_name = p_data.get('last_name', '').strip()
             email = p_data.get('email', '').strip() or None
-            if not name and not email:
+            if not first_name and not last_name and not email:
                 continue
 
             # Deduplicazione
             if email:
                 existing = db.query(Participant).filter_by(workflow_id=workflow_id, email=email).first()
-            elif name:
-                existing = db.query(Participant).filter_by(workflow_id=workflow_id, name=name).first()
+            elif first_name or last_name:
+                existing = db.query(Participant).filter_by(
+                    workflow_id=workflow_id, first_name=first_name, last_name=last_name
+                ).first()
             else:
                 existing = None
 
             if existing:
+                # Aggiorna sabaform_data se presente
+                sf_data = p_data.get('sabaform_data')
+                if sf_data:
+                    existing.sabaform_data = sf_data
                 continue
 
             participant = Participant(
                 workflow_id=workflow.id,
                 email=email,
-                name=name,
+                first_name=first_name,
+                last_name=last_name,
                 phone=p_data.get('phone', ''),
+                sabaform_data=p_data.get('sabaform_data', {}),
             )
             db.add(participant)
             db.flush()
@@ -276,7 +313,10 @@ def delete_workflow(workflow_id):
         # Verifica se può essere eliminato
         if workflow.status == WorkflowStatus.ACTIVE:
             return jsonify({'error': 'Non puoi eliminare workflow attivo'}), 400
-        
+
+        # Elimina activity_log collegati (non hanno cascade)
+        db.query(ActivityLog).filter_by(workflow_id=workflow_id).delete()
+
         db.delete(workflow)
         db.commit()
         
@@ -346,7 +386,9 @@ def simulate_workflow(workflow_id):
             # Contesto template
             context = {
                 'participant': {
-                    'name': participant.name,
+                    'name': participant.full_name,
+                    'first_name': participant.first_name,
+                    'last_name': participant.last_name,
                     'email': participant.email,
                 },
                 'landing_url': landing_url or '',
@@ -380,7 +422,7 @@ def simulate_workflow(workflow_id):
         log_activity(
             workflow_id=workflow_id,
             event_type='simulation',
-            description=f'Simulazione invio per {participant.name or participant.email}',
+            description=f'Simulazione invio per {participant.full_name or participant.email}',
             participant_id=participant.id,
             details={'steps_count': len([s for s in steps_preview if not s.get('skipped')])}
         )
@@ -388,7 +430,8 @@ def simulate_workflow(workflow_id):
         return jsonify({
             'participant': {
                 'id': participant.id,
-                'name': participant.name,
+                'first_name': participant.first_name,
+                'last_name': participant.last_name,
                 'email': participant.email,
             },
             'steps': steps_preview

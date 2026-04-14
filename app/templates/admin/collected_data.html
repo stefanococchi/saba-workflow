@@ -192,6 +192,25 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Edit Partecipante -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil"></i> Modifica Partecipante</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="editModalBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" onclick="saveParticipant()">
+                    <i class="bi bi-check-lg"></i> Salva
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -203,14 +222,16 @@ var ALL_DATA = [
     {% for p in participants %}
     {
         id: {{ p.id }},
-        name: {{ p.name | default('', true) | tojson }},
+        first_name: {{ p.first_name | default('', true) | tojson }},
+        last_name: {{ p.last_name | default('', true) | tojson }},
         email: {{ p.email | default('', true) | tojson }},
         phone: {{ p.phone | default('', true) | tojson }},
         workflow: {{ p.workflow.name | tojson }},
         workflow_id: {{ p.workflow_id }},
         status: {{ p.status.value | tojson }},
         completed_at: {{ p.completed_at|localtime | tojson if p.completed_at else 'null' }},
-        collected_data: {{ p.collected_data | tojson if p.collected_data else '{}' }}
+        collected_data: {{ p.collected_data | tojson if p.collected_data else '{}' }},
+        sabaform_data: {{ p.sabaform_data | tojson if p.sabaform_data else '{}' }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
@@ -219,7 +240,8 @@ var ALL_DATA = [
 // COLUMNS — base + dynamic from collected_data
 // =============================================
 var ALL_COLUMNS = [
-    { key: 'name', label: 'Nome', default: true },
+    { key: 'first_name', label: 'Nome', default: true },
+    { key: 'last_name', label: 'Cognome', default: true },
     { key: 'email', label: 'Email', default: true },
     { key: 'phone', label: 'Telefono', default: false },
     { key: 'workflow', label: 'Workflow', default: true },
@@ -322,7 +344,7 @@ function applyFilters() {
     if (search) {
         rows = rows.filter(function(p) {
             // Search across all fields including collected_data
-            var haystack = [p.name, p.email, p.phone, p.workflow].join(' ').toLowerCase();
+            var haystack = [(p.first_name || ''), (p.last_name || ''), p.email, p.phone, p.workflow].join(' ').toLowerCase();
             if (p.collected_data) {
                 haystack += ' ' + Object.values(p.collected_data).join(' ').toLowerCase();
             }
@@ -404,7 +426,11 @@ function renderTable(rows) {
             return '<td>' + esc(val || '—') + '</td>';
         }).join('');
 
-        var actions = '<td><button class="btn btn-sm btn-outline-info" onclick="viewData(' + p.id + ')" title="Vedi tutti i dati"><i class="bi bi-file-text"></i></button></td>';
+        var actions = '<td><div class="btn-group btn-group-sm">' +
+            '<button class="btn btn-outline-info" onclick="viewData(' + p.id + ')" title="Dati"><i class="bi bi-file-text"></i></button>' +
+            '<button class="btn btn-outline-primary" onclick="editParticipant(' + p.id + ')" title="Modifica"><i class="bi bi-pencil"></i></button>' +
+            '<button class="btn btn-outline-danger" onclick="deleteParticipant(' + p.id + ')" title="Elimina"><i class="bi bi-trash"></i></button>' +
+            '</div></td>';
         return '<tr>' + cells + actions + '</tr>';
     }).join('');
 }
@@ -424,19 +450,73 @@ function viewData(id) {
     var p = ALL_DATA.find(function(x) { return x.id === id; });
     if (!p) return;
     var body = document.getElementById('dataModalBody');
-    document.getElementById('dataModalTitle').textContent = 'Dati — ' + (p.name || p.email || '#' + p.id);
+    document.getElementById('dataModalTitle').textContent = 'Dati — ' + (((p.first_name || '') + ' ' + (p.last_name || '')).trim() || p.email || '#' + p.id);
 
+    var html = '';
+
+    // Dati originali del partecipante
+    html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-person"></i> Dati Partecipante</h6>';
+    html += '<dl class="row" style="font-size:14px">';
+    var origFields = [
+        { key: 'first_name', label: 'Nome' },
+        { key: 'last_name', label: 'Cognome' },
+        { key: 'email', label: 'Email' },
+        { key: 'phone', label: 'Telefono' },
+        { key: 'workflow', label: 'Workflow' },
+        { key: 'status', label: 'Stato' },
+        { key: 'completed_at', label: 'Completato' }
+    ];
+    origFields.forEach(function(f) {
+        var val = p[f.key];
+        if (val !== null && val !== undefined && val !== '') {
+            html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(f.label) + '</dt>';
+            html += '<dd class="col-sm-8">' + esc(val) + '</dd>';
+        }
+    });
+    html += '</dl>';
+
+    // Dati importati da Saba Form
+    if (p.sabaform_data && Object.keys(p.sabaform_data).length > 0) {
+        var sfLabels = {
+            'id': 'ID Saba Form', 'first_name': 'Nome', 'last_name': 'Cognome',
+            'email': 'Email', 'phone': 'Telefono', 'company': 'Azienda',
+            'birth_date': 'Data di nascita', 'gender': 'Sesso',
+            'nucleo': 'Nucleo Familiare',
+            'doc_type': 'Tipo Documento', 'doc_number': 'Numero Documento',
+            'doc_expiry': 'Scadenza Documento',
+            'volo_arrivo': 'Volo Arrivo', 'volo_partenza': 'Volo Partenza',
+            'notes': 'Note',
+            'confirmed': 'Confermato', 'status': 'Stato'
+        };
+        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-cloud-download"></i> Dati Saba Form (originali)</h6>';
+        html += '<dl class="row" style="font-size:14px">';
+        for (var k in p.sabaform_data) {
+            var val = p.sabaform_data[k];
+            if (val !== null && val !== undefined && val !== '') {
+                html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(sfLabels[k] || k) + '</dt>';
+                html += '<dd class="col-sm-8">' + esc(val) + '</dd>';
+            }
+        }
+        html += '</dl>';
+    }
+
+    // Dati raccolti dal workflow
     if (p.collected_data && Object.keys(p.collected_data).length > 0) {
-        var html = '<dl class="row" style="font-size:14px">';
+        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-collection"></i> Dati Raccolti</h6>';
+        html += '<dl class="row" style="font-size:14px">';
         for (var k in p.collected_data) {
             html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(k) + '</dt>';
             html += '<dd class="col-sm-8">' + esc(p.collected_data[k]) + '</dd>';
         }
         html += '</dl>';
-        body.innerHTML = html;
     } else {
-        body.innerHTML = '<p style="color:var(--md-on-surface-variant)">Nessun dato raccolto</p>';
+        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+        html += '<p style="color:var(--md-on-surface-variant);font-size:14px"><i class="bi bi-info-circle"></i> Nessun dato raccolto</p>';
     }
+
+    body.innerHTML = html;
     new bootstrap.Modal(document.getElementById('dataModal')).show();
 }
 
@@ -457,6 +537,108 @@ function exportCSV() {
     link.href = URL.createObjectURL(blob);
     link.download = 'dati_raccolti_' + new Date().toISOString().slice(0, 10) + '.csv';
     link.click();
+}
+
+// =============================================
+// EDIT / DELETE
+// =============================================
+var _editSfLabels = {
+    'id': 'ID Saba Form', 'first_name': 'Nome (SF)', 'last_name': 'Cognome (SF)',
+    'email': 'Email (SF)', 'phone': 'Telefono (SF)', 'company': 'Azienda',
+    'birth_date': 'Data di nascita', 'gender': 'Sesso',
+    'nucleo': 'Nucleo Familiare',
+    'doc_type': 'Tipo Documento', 'doc_number': 'N. Documento',
+    'doc_expiry': 'Scadenza Documento',
+    'volo_arrivo': 'Volo Arrivo', 'volo_partenza': 'Volo Partenza',
+    'notes': 'Note', 'confirmed': 'Confermato'
+};
+
+function buildEditForm(p) {
+    var html = '<input type="hidden" id="editId" value="' + p.id + '">';
+    html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-person"></i> Dati Partecipante</h6>';
+    html += '<div class="row">';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Nome</label><input type="text" class="form-control" id="editFirstName" value="' + esc(p.first_name || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Cognome</label><input type="text" class="form-control" id="editLastName" value="' + esc(p.last_name || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Email</label><input type="email" class="form-control" id="editEmail" value="' + esc(p.email || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Telefono</label><input type="text" class="form-control" id="editPhone" value="' + esc(p.phone || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">Stato</label><select class="form-select" id="editStatus">';
+    ['pending','in_progress','completed','bounced','unsubscribed'].forEach(function(s) {
+        html += '<option value="'+s+'"'+(p.status===s?' selected':'')+'>'+s+'</option>';
+    });
+    html += '</select></div></div>';
+    var sf = p.sabaform_data;
+    if (sf && Object.keys(sf).length > 0) {
+        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-cloud-download"></i> Dati Saba Form</h6>';
+        html += '<div class="row">';
+        for (var k in sf) {
+            var label = _editSfLabels[k] || k;
+            var val = sf[k] !== null && sf[k] !== undefined ? sf[k] : '';
+            html += '<div class="col-md-6 mb-3"><label class="form-label">' + esc(label) + '</label>';
+            html += '<input type="text" class="form-control form-control-sm edit-sf-field" data-sf-key="' + esc(k) + '" value="' + esc(String(val)) + '"></div>';
+        }
+        html += '</div>';
+    }
+    return html;
+}
+
+function editParticipant(id) {
+    var p = ALL_DATA.find(function(x) { return x.id === id; });
+    if (!p) return;
+    document.getElementById('editModalBody').innerHTML = buildEditForm(p);
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+function saveParticipant() {
+    var id = document.getElementById('editId').value;
+    var data = {
+        first_name: document.getElementById('editFirstName').value,
+        last_name: document.getElementById('editLastName').value,
+        email: document.getElementById('editEmail').value,
+        phone: document.getElementById('editPhone').value,
+        status: document.getElementById('editStatus').value
+    };
+    var sfFields = document.querySelectorAll('.edit-sf-field');
+    if (sfFields.length > 0) {
+        var sfData = {};
+        sfFields.forEach(function(el) { sfData[el.dataset.sfKey] = el.value; });
+        data.sabaform_data = sfData;
+    }
+    fetch('/api/participants/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Errore'); });
+        return r.json();
+    })
+    .then(function() {
+        var p = ALL_DATA.find(function(x) { return x.id === parseInt(id); });
+        if (p) {
+            p.first_name = data.first_name; p.last_name = data.last_name; p.email = data.email; p.phone = data.phone; p.status = data.status;
+            if (data.sabaform_data) p.sabaform_data = data.sabaform_data;
+        }
+        bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+        applyFilters();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
+}
+
+function deleteParticipant(id) {
+    var p = ALL_DATA.find(function(x) { return x.id === id; });
+    if (!p) return;
+    if (!confirm('Eliminare ' + (((p.first_name || '') + ' ' + (p.last_name || '')).trim() || p.email || '#' + p.id) + '?')) return;
+    fetch('/api/participants/' + id, { method: 'DELETE' })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Errore'); });
+        return r.json();
+    })
+    .then(function() {
+        ALL_DATA = ALL_DATA.filter(function(x) { return x.id !== id; });
+        applyFilters();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
 }
 </script>
 {% endblock %}
