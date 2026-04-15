@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe -c \"\nfrom sqlalchemy import create_engine, text\nengine = create_engine\\('postgresql://postgres:123456@localhost:5432/sabaform'\\)\nwith engine.connect\\(\\) as conn:\n    r = conn.execute\\(text\\('SELECT count\\(*\\) FROM events'\\)\\)\n    print\\('Eventi:', r.scalar\\(\\)\\)\n    r = conn.execute\\(text\\('SELECT count\\(*\\) FROM participants'\\)\\)\n    print\\('Partecipanti:', r.scalar\\(\\)\\)\n\" 2>&1)",
+      "Bash(curl -s http://localhost:5001/api/sabaform/events)",
+      "Bash(.venv/Scripts/python.exe -c \"\nimport os\nos.environ['DATABASE_URL'] = 'postgresql://postgres:123456@localhost:5432/saba_workflow'\nfrom app import create_app\napp = create_app\\(\\)\nwith app.app_context\\(\\):\n    from app.services.sabaform_service import get_events\n    events = get_events\\(\\)\n    print\\(f'Eventi trovati: {len\\(events\\)}'\\)\n    for e in events[:3]:\n        print\\(f'  - {e[\\\\\"name\\\\\"]} \\({e[\\\\\"participant_count\\\\\"]} partecipanti\\)'\\)\n\" 2>&1)",
+      "Bash(.venv/Scripts/python.exe -c \"\nfrom sqlalchemy import create_engine, text\nengine = create_engine\\('postgresql://postgres:123456@localhost:5432/sabaform'\\)\nwith engine.connect\\(\\) as conn:\n    r = conn.execute\\(text\\(\\\\\"SELECT column_name FROM information_schema.columns WHERE table_name = 'events' ORDER BY ordinal_position\\\\\"\\)\\)\n    for row in r:\n        print\\(row[0]\\)\n\" 2>&1)",
+      "Bash(.venv/Scripts/python.exe -c \"\nimport os\nos.environ['DATABASE_URL'] = 'postgresql://postgres:123456@localhost:5432/saba_workflow'\nfrom app import create_app\napp = create_app\\(\\)\nwith app.app_context\\(\\):\n    from app.services.sabaform_service import get_events\n    events = get_events\\(\\)\n    print\\(f'Eventi trovati: {len\\(events\\)}'\\)\n    for e in events[:5]:\n        print\\(f'  - [{e[\\\\\"id\\\\\"]}] {e[\\\\\"name\\\\\"]} | {e[\\\\\"client\\\\\"]} | {e[\\\\\"participant_count\\\\\"]} part.'\\)\n\" 2>&1)",
+      "Bash(xargs grep:*)",
+      "Bash(python -c \"import jwt; print\\(jwt.__version__\\)\")",
+      "Bash(python:*)"
+    ]
+  }
+}

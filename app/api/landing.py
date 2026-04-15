@@ -102,6 +102,22 @@ def submit_landing_data(token):
         # Salva dati
         form_data = request.get_json()
 
+        # Validazione file upload (base64 in JSON)
+        ALLOWED_MIME = {'application/pdf', 'image/jpeg', 'image/png',
+                        'application/msword',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'application/vnd.ms-excel',
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
+        MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
+
+        for key, value in form_data.items():
+            if isinstance(value, dict) and 'data' in value and 'filename' in value:
+                # È un file upload
+                if value.get('mime') not in ALLOWED_MIME:
+                    return jsonify({'error': f'Tipo file non consentito: {value.get("mime")}'}), 400
+                if value.get('size', 0) > MAX_FILE_SIZE:
+                    return jsonify({'error': 'File troppo grande (max 20 MB)'}), 400
+
         # Merge con dati esistenti (riassegnazione per trigger change detection SQLAlchemy)
         existing = dict(participant.collected_data or {})
         existing.update(form_data)

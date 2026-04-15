@@ -701,6 +701,7 @@ function renderFields() {
                 '<option value="radio"' + (f.type==='radio'?' selected':'') + '>Scelta singola</option>' +
                 '<option value="checkbox"' + (f.type==='checkbox'?' selected':'') + '>Checkbox</option>' +
                 '<option value="hidden"' + (f.type==='hidden'?' selected':'') + '>Nascosto</option>' +
+                '<option value="file"' + (f.type==='file'?' selected':'') + '>File upload</option>' +
             '</select></td>' +
             '<td><input type="text" value="' + esc(isChoice ? f.options : f.placeholder) + '" class="form-control form-control-sm" placeholder="' + (isChoice ? 'opt1, opt2, opt3' : 'Placeholder...') + '" onchange="updateField(' + i + ',\'' + (isChoice ? 'options' : 'placeholder') + '\',this.value)"></td>' +
             '<td class="text-center"><input type="checkbox" class="form-check-input"' + (f.required ? ' checked' : '') + ' onchange="updateField(' + i + ',\'required\',this.checked)"></td>' +
@@ -828,6 +829,9 @@ function generateHTML() {
                 opt = opt.trim();
                 if (opt) fieldsHtml += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:400;color:' + textColor + ';font-size:14px;cursor:pointer"><input type="checkbox" name="' + esc(f.name) + '" value="' + esc(opt) + '"> ' + esc(opt) + '</label>';
             });
+        } else if (f.type === 'file') {
+            fieldsHtml += '<input type="file" name="' + esc(f.name) + '" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"' + (f.required ? ' required' : '') + ' style="' + inputStyle + '">';
+            fieldsHtml += '<small style="color:' + textColor + ';opacity:0.6;font-size:12px;margin-top:4px;display:block">Max 20 MB — PDF, JPG, PNG, DOC, XLS</small>';
         } else if (f.type === 'hidden') {
             fieldsHtml += '<input type="hidden" name="' + esc(f.name) + '" value="' + esc(f.placeholder) + '">';
         } else {
@@ -881,7 +885,8 @@ function saveConfig() {
     var html = generateHTML();
 
     // Inietta script submit nel HTML
-    var submitScript = '<scr' + 'ipt>(function(){var forms=document.querySelectorAll(".saba-landing-form");forms.forEach(function(f){f.addEventListener("submit",function(e){e.preventDefault();var btn=f.querySelector("[type=submit]");if(btn){btn.disabled=true;btn.textContent="Invio...";}var fd=new FormData(f);var d={};fd.forEach(function(v,k){if(d[k]){if(!Array.isArray(d[k]))d[k]=[d[k]];d[k].push(v);}else{d[k]=v;}});fetch(window.location.pathname,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}).then(function(r){if(r.ok){var s=document.querySelector(".saba-success-msg");if(s)s.style.display="block";f.style.display="none";}else{var em=document.querySelector(".saba-error-msg");if(em)em.style.display="block";if(btn){btn.disabled=false;btn.textContent="' + (document.getElementById('cfgButtonText').value || 'Invia') + '";}}}).catch(function(){var em=document.querySelector(".saba-error-msg");if(em)em.style.display="block";if(btn){btn.disabled=false;btn.textContent="' + (document.getElementById('cfgButtonText').value || 'Invia') + '";}});});});})();</scr' + 'ipt>';
+    var btnLabel = document.getElementById('cfgButtonText').value || 'Invia';
+    var submitScript = '<scr' + 'ipt>(function(){function readFileB64(file){return new Promise(function(ok,fail){var r=new FileReader();r.onload=function(){ok(r.result)};r.onerror=fail;r.readAsDataURL(file)});}var forms=document.querySelectorAll(".saba-landing-form");forms.forEach(function(f){f.addEventListener("submit",function(e){e.preventDefault();var btn=f.querySelector("[type=submit]");if(btn){btn.disabled=true;btn.textContent="Invio...";}var fd=new FormData(f);var d={};var fps=[];fd.forEach(function(v,k){if(v instanceof File&&v.size>0){if(v.size>20*1024*1024){alert("File troppo grande (max 20 MB)");if(btn){btn.disabled=false;btn.textContent="' + btnLabel + '";}return;}fps.push(readFileB64(v).then(function(b){d[k]={filename:v.name,mime:v.type,size:v.size,data:b};}));}else if(v instanceof File){/*empty file,skip*/}else if(d[k]){if(!Array.isArray(d[k]))d[k]=[d[k]];d[k].push(v);}else{d[k]=v;}});Promise.all(fps).then(function(){return fetch(window.location.pathname,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)});}).then(function(r){if(r.ok){var s=document.querySelector(".saba-success-msg");if(s)s.style.display="block";f.style.display="none";}else{var em=document.querySelector(".saba-error-msg");if(em)em.style.display="block";if(btn){btn.disabled=false;btn.textContent="' + btnLabel + '";}}}).catch(function(){var em=document.querySelector(".saba-error-msg");if(em)em.style.display="block";if(btn){btn.disabled=false;btn.textContent="' + btnLabel + '";}});});});})();</scr' + 'ipt>';
     html = html.replace('</body>', submitScript + '</body>');
 
     fetch(SAVE_URL, {

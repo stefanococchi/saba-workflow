@@ -97,31 +97,31 @@ function getDefaultConfig(type) {
         // PLACEHOLDER STEPS
         condition: {
             field: '',
+            field_source: 'sabaform_data',
             operator: 'equals',
             value: '',
-            _placeholder: true
+            if_true: 'continue',
+            if_true_step: 0,
+            if_false: 'continue',
+            if_false_step: 0,
         },
         engagement_tracker: {
             track_opens: true,
             track_clicks: true,
             action_on_open: 'mark_engaged',
-            action_on_no_open_hours: 48,
-            _placeholder: true
+            action_on_no_open_hours: 48
         },
         survey: {
-            questions: [],
-            _placeholder: true
+            questions: []
         },
         file_upload: {
             required_files: [],
             max_size_mb: 10,
-            allowed_types: ['pdf', 'jpg', 'png'],
-            _placeholder: true
+            allowed_types: ['pdf', 'jpg', 'png']
         },
         human_approval: {
             approver_email: '',
-            timeout_hours: 48,
-            _placeholder: true
+            timeout_hours: 48
         },
         export_data: {
             format: 'csv',
@@ -176,25 +176,37 @@ function renderStep(step, index) {
     };
     
     const colors = {
-        email: '#0d6efd',
-        wait_until: '#fee140',
-        condition: '#00f2fe',
-        goal_check: '#330867',
-        engagement_tracker: '#fed6e3',
-        survey: '#fecfef',
-        file_upload: '#fcb69f',
-        human_approval: '#bfe9ff',
-        export_data: '#8ec5fc'
+        email: '#bbb',
+        wait_until: '#999',
+        condition: '#777',
+        goal_check: '#888',
+        engagement_tracker: '#aaa',
+        survey: '#9a9a9a',
+        file_upload: '#b0b0b0',
+        human_approval: '#808080',
+        export_data: '#a3a3a3'
+    };
+
+    const bgColors = {
+        email: '#f7f7f7',
+        wait_until: '#efefef',
+        condition: '#e5e5e5',
+        goal_check: '#eaeaea',
+        engagement_tracker: '#f2f2f2',
+        survey: '#ededed',
+        file_upload: '#f4f4f4',
+        human_approval: '#e8e8e8',
+        export_data: '#f0f0f0'
     };
     
-    const isPlaceholder = step.config._placeholder;
+    const isPlaceholder = false; // Legacy, kept for template compatibility
     const placeholderBadge = isPlaceholder ? ' <span class="badge bg-warning">Placeholder</span>' : '';
     
     return `
         <div class="workflow-step${isPlaceholder ? ' step-placeholder-canvas' : ''}" 
              data-step-id="${step.id}" 
              data-step-index="${index}"
-             style="border-color: ${colors[step.type]}">
+             style="border-color: ${colors[step.type]}; background: ${bgColors[step.type]}">
             <div class="step-header">
                 <div class="d-flex align-items-center">
                     <div class="step-drag-handle" title="Trascina per riordinare" style="cursor:grab;padding:8px 6px;margin-right:4px;color:#aaa;font-size:18px"><i class="bi bi-grip-vertical"></i></div>
@@ -238,26 +250,6 @@ function renderStep(step, index) {
 
 // Render step summary
 function renderStepSummary(step) {
-    // Check if placeholder
-    if (step.config._placeholder) {
-        const descriptions = {
-            condition: 'Split workflow into branches based on participant data',
-            wait_until: 'Wait until a specific date, time, or day of week',
-            goal_check: 'Check if participant reached goal (form submitted, email opened, etc.)',
-            engagement_tracker: 'Track email opens and clicks, trigger actions based on engagement',
-            survey: 'Send multi-question survey with conditional logic',
-            file_upload: 'Request participant to upload documents or files',
-            human_approval: 'Pause workflow until human approves continuation',
-            export_data: 'Export collected data to CSV/Excel and send via email'
-        };
-        return `
-            <div class="alert alert-warning mb-0">
-                <i class="bi bi-info-circle"></i> <strong>Placeholder Feature</strong><br>
-                ${descriptions[step.type] || 'This feature will be implemented when needed.'}
-            </div>
-        `;
-    }
-    
     switch(step.type) {
         case 'email':
             return `
@@ -283,7 +275,15 @@ function renderStepSummary(step) {
             const actionDesc = step.config.if_met === 'complete' ? '→ STOP workflow' : '→ Continue';
             return `<p class="mb-0"><strong>Check:</strong> ${goalDesc[step.config.goal] || 'Not configured'} ${actionDesc}</p>`;
         case 'condition':
-            return `<p class="mb-0"><strong>If:</strong> ${step.config.field || 'field'} ${step.config.operator} ${step.config.value || 'value'}</p>`;
+            var opLabels = {equals:'=', not_equals:'≠', contains:'contiene', not_empty:'non vuoto', empty:'vuoto', greater_than:'>', less_than:'<'};
+            var opLabel = opLabels[step.config.operator] || step.config.operator;
+            var valPart = ['not_empty','empty'].indexOf(step.config.operator) !== -1 ? '' : ' "' + (step.config.value || '?') + '"';
+            function descAction(act, stepOrder) {
+                if (act === 'jump') return 'vai a Step ' + (stepOrder || '?');
+                if (act === 'stop') return 'ferma';
+                return 'continua';
+            }
+            return `<p class="mb-0"><strong>Se</strong> ${step.config.field || '?'} ${opLabel}${valPart}<br><small class="text-success">✓ ${descAction(step.config.if_true, step.config.if_true_step)}</small> · <small class="text-danger">✗ ${descAction(step.config.if_false, step.config.if_false_step)}</small></p>`;
         case 'export_data':
             const exportTo = step.config.send_to || 'No email configured';
             return `<p class="mb-0"><strong>Export:</strong> ${step.config.format.toUpperCase()} → ${exportTo}</p>`;
@@ -299,37 +299,26 @@ function editStep(index) {
     const modal = new bootstrap.Modal(document.getElementById('stepEditModal'));
     const content = document.getElementById('stepEditContent');
     
-    // Check if placeholder
-    if (step.config._placeholder) {
-        content.innerHTML = `
-            <div class="alert alert-warning">
-                <h5><i class="bi bi-star"></i> Placeholder Feature</h5>
-                <p>This step type is not yet implemented. It will be developed based on your needs.</p>
-                <p class="mb-0"><strong>Step Type:</strong> ${capitalize(step.type)}</p>
-            </div>
-            <div class="alert alert-info">
-                <strong>What happens now?</strong><br>
-                You can add this step to your workflow, but it won't execute until implemented.
-                Contact support to request implementation of this feature.
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Step Name</label>
-                <input type="text" class="form-control" id="editStepName" value="${step.name}">
-            </div>
-        `;
-    } else {
-        content.innerHTML = renderStepEditForm(step);
-        // Init Summernote for email body
-        if (step.type === 'email') {
-            initEmailEditor();
-        }
-        // Populate landing field dropdowns for goal_check and condition steps
-        if (step.type === 'goal_check') {
-            populateLandingFieldSelect('editGoalFieldName', step.config.field_name, 'goalFieldNameLoading');
-        }
-        if (step.type === 'condition') {
-            populateLandingFieldSelect('editConditionField', step.config.field, 'conditionFieldLoading');
-        }
+    content.innerHTML = renderStepEditForm(step, index);
+    // Init Summernote for email body
+    if (step.type === 'email') {
+        initEmailEditor();
+    }
+    // Populate landing field dropdowns for goal_check and condition steps
+    if (step.type === 'goal_check') {
+        populateLandingFieldSelect('editGoalFieldName', step.config.field_name, 'goalFieldNameLoading');
+    }
+    if (step.type === 'condition') {
+        onConditionSourceChange();
+        // Pre-seleziona il campo dopo il caricamento
+        setTimeout(function() {
+            var sel = document.getElementById('editConditionField');
+            var custom = document.getElementById('editConditionFieldCustom');
+            if (sel && step.config.field) {
+                sel.value = step.config.field;
+                if (!sel.value && custom) custom.value = step.config.field;
+            }
+        }, 300);
     }
     
     // Destroy Summernote when modal closes
@@ -341,7 +330,7 @@ function editStep(index) {
 }
 
 // Render edit form based on step type
-function renderStepEditForm(step) {
+function renderStepEditForm(step, index) {
     const common = `
         <div class="mb-3">
             <label class="form-label">Step Name</label>
@@ -539,6 +528,14 @@ function renderStepEditForm(step) {
         case 'condition':
             return common + `
                 <div class="mb-3">
+                    <label class="form-label">Sorgente dati</label>
+                    <select class="form-select" id="editConditionSource" onchange="onConditionSourceChange()">
+                        <option value="sabaform_data" ${step.config.field_source === 'sabaform_data' ? 'selected' : ''}>Dati Saba Form (importati)</option>
+                        <option value="collected_data" ${step.config.field_source === 'collected_data' ? 'selected' : ''}>Dati raccolti (landing page)</option>
+                        <option value="participant" ${step.config.field_source === 'participant' ? 'selected' : ''}>Dati partecipante (nome, email, stato)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
                     <label class="form-label">Campo da verificare</label>
                     <select class="form-select" id="editConditionField">
                         <option value="">-- Seleziona campo --</option>
@@ -546,19 +543,61 @@ function renderStepEditForm(step) {
                     <div id="conditionFieldLoading" class="form-text text-muted">
                         <i class="bi bi-hourglass-split"></i> Caricamento campi...
                     </div>
+                    <input type="text" class="form-control mt-2" id="editConditionFieldCustom"
+                           value="${step.config.field || ''}" placeholder="Oppure scrivi il nome del campo manualmente"
+                           style="font-size:13px">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Operator</label>
+                    <label class="form-label">Operatore</label>
                     <select class="form-select" id="editConditionOperator">
-                        <option value="equals" ${step.config.operator === 'equals' ? 'selected' : ''}>Equals</option>
-                        <option value="not_equals" ${step.config.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option>
-                        <option value="contains" ${step.config.operator === 'contains' ? 'selected' : ''}>Contains</option>
+                        <option value="equals" ${step.config.operator === 'equals' ? 'selected' : ''}>Uguale a</option>
+                        <option value="not_equals" ${step.config.operator === 'not_equals' ? 'selected' : ''}>Diverso da</option>
+                        <option value="contains" ${step.config.operator === 'contains' ? 'selected' : ''}>Contiene</option>
+                        <option value="not_empty" ${step.config.operator === 'not_empty' ? 'selected' : ''}>Non vuoto</option>
+                        <option value="empty" ${step.config.operator === 'empty' ? 'selected' : ''}>Vuoto</option>
+                        <option value="greater_than" ${step.config.operator === 'greater_than' ? 'selected' : ''}>Maggiore di</option>
+                        <option value="less_than" ${step.config.operator === 'less_than' ? 'selected' : ''}>Minore di</option>
                     </select>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Value</label>
-                    <input type="text" class="form-control" id="editConditionValue" 
-                           value="${step.config.value || ''}" placeholder="e.g., active">
+                <div class="mb-3" id="conditionValueRow">
+                    <label class="form-label">Valore</label>
+                    <input type="text" class="form-control" id="editConditionValue"
+                           value="${step.config.value || ''}" placeholder="es. FIAT, M, completed...">
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-success"><i class="bi bi-check-circle"></i> Se VERO</label>
+                        <select class="form-select" id="editConditionIfTrue" onchange="toggleJumpStep('True')">
+                            <option value="continue" ${step.config.if_true === 'continue' ? 'selected' : ''}>Continua (step successivo)</option>
+                            <option value="jump" ${step.config.if_true === 'jump' ? 'selected' : ''}>Salta a step...</option>
+                            <option value="stop" ${step.config.if_true === 'stop' ? 'selected' : ''}>Ferma workflow</option>
+                        </select>
+                        <div id="jumpTrueRow" class="mt-2" ${step.config.if_true === 'jump' ? '' : 'style="display:none"'}>
+                            <select class="form-select form-select-sm" id="editConditionIfTrueStep">
+                                ${buildStepOptions(step.config.if_true_step, index)}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-danger"><i class="bi bi-x-circle"></i> Se FALSO</label>
+                        <select class="form-select" id="editConditionIfFalse" onchange="toggleJumpStep('False')">
+                            <option value="continue" ${step.config.if_false === 'continue' ? 'selected' : ''}>Continua (step successivo)</option>
+                            <option value="jump" ${step.config.if_false === 'jump' ? 'selected' : ''}>Salta a step...</option>
+                            <option value="stop" ${step.config.if_false === 'stop' ? 'selected' : ''}>Ferma workflow</option>
+                        </select>
+                        <div id="jumpFalseRow" class="mt-2" ${step.config.if_false === 'jump' ? '' : 'style="display:none"'}>
+                            <select class="form-select form-select-sm" id="editConditionIfFalseStep">
+                                ${buildStepOptions(step.config.if_false_step, index)}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <small><i class="bi bi-info-circle"></i>
+                    La condizione viene valutata sui dati del partecipante al momento dell'esecuzione.<br>
+                    <strong>Esempio:</strong> Se campo "company" uguale a "FIAT" → continua, altrimenti → salta prossimo step.
+                    </small>
                 </div>
             `;
         case 'export_data':
@@ -567,7 +606,7 @@ function renderStepEditForm(step) {
                     <label class="form-label">Export Format</label>
                     <select class="form-select" id="editExportFormat">
                         <option value="csv" ${step.config.format === 'csv' ? 'selected' : ''}>CSV</option>
-                        <option value="excel" ${step.config.format === 'excel' ? 'selected' : ''} disabled>Excel (coming soon)</option>
+                        <option value="excel" ${step.config.format === 'excel' ? 'selected' : ''}>Excel</option>
                     </select>
                 </div>
                 
@@ -661,6 +700,58 @@ function insertVariable(variable) {
 }
 
 // Update wait until form based on type
+function buildStepOptions(selectedOrder, currentIndex) {
+    var html = '<option value="0">-- Seleziona step --</option>';
+    workflowSteps.forEach(function(s, i) {
+        if (i === currentIndex) return; // Non mostrare se stesso
+        var sel = (parseInt(selectedOrder) === s.order) ? ' selected' : '';
+        html += '<option value="' + s.order + '"' + sel + '>Step ' + s.order + ': ' + s.name + '</option>';
+    });
+    return html;
+}
+
+function toggleJumpStep(which) {
+    var action = document.getElementById('editConditionIf' + which).value;
+    var row = document.getElementById('jump' + which + 'Row');
+    if (row) row.style.display = action === 'jump' ? 'block' : 'none';
+}
+
+function onConditionSourceChange() {
+    var source = document.getElementById('editConditionSource').value;
+    var sel = document.getElementById('editConditionField');
+    sel.innerHTML = '<option value="">-- Seleziona campo --</option>';
+    var loading = document.getElementById('conditionFieldLoading');
+    if (loading) loading.style.display = 'block';
+
+    if (source === 'participant') {
+        ['first_name','last_name','email','phone','status'].forEach(function(f) {
+            sel.innerHTML += '<option value="' + f + '">' + f + '</option>';
+        });
+        if (loading) loading.style.display = 'none';
+    } else if (source === 'collected_data') {
+        // Carica campi landing page
+        var wfId = window._currentWorkflowId;
+        if (wfId) {
+            fetch('/api/landing-fields/workflow/' + wfId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                (data.fields || []).forEach(function(f) {
+                    sel.innerHTML += '<option value="' + f.name + '">' + (f.label || f.name) + '</option>';
+                });
+                if (loading) loading.style.display = 'none';
+            }).catch(function() { if (loading) loading.style.display = 'none'; });
+        } else {
+            if (loading) loading.innerHTML = 'Salva prima il workflow';
+        }
+    } else {
+        // sabaform_data — campi comuni
+        ['company','gender','birth_date','nucleo','doc_type','doc_number','doc_expiry','volo_arrivo','volo_partenza','notes','first_name','last_name','email','phone'].forEach(function(f) {
+            sel.innerHTML += '<option value="' + f + '">' + f + '</option>';
+        });
+        if (loading) loading.style.display = 'none';
+    }
+}
+
 function updateWaitUntilForm() {
     const waitType = document.getElementById('editWaitType').value;
 
@@ -766,9 +857,14 @@ function saveStepEdit() {
             step.config.status_value = document.getElementById('editGoalStatusValue')?.value || 'completed';
             break;
         case 'condition':
-            step.config.field = document.getElementById('editConditionField').value;
+            step.config.field_source = document.getElementById('editConditionSource').value;
+            step.config.field = document.getElementById('editConditionField').value || document.getElementById('editConditionFieldCustom').value;
             step.config.operator = document.getElementById('editConditionOperator').value;
             step.config.value = document.getElementById('editConditionValue').value;
+            step.config.if_true = document.getElementById('editConditionIfTrue').value;
+            step.config.if_true_step = parseInt(document.getElementById('editConditionIfTrueStep')?.value) || 0;
+            step.config.if_false = document.getElementById('editConditionIfFalse').value;
+            step.config.if_false_step = parseInt(document.getElementById('editConditionIfFalseStep')?.value) || 0;
             break;
         case 'export_data':
             step.config.format = document.getElementById('editExportFormat').value;
@@ -960,16 +1056,6 @@ function generateReview() {
 
 // Save workflow
 function saveWorkflow() {
-    // Check for placeholder steps
-    const placeholderSteps = workflowSteps.filter(s => s.config._placeholder);
-    
-    if (placeholderSteps.length > 0) {
-        const stepNames = placeholderSteps.map(s => s.name).join(', ');
-        if (!confirm(`Warning: This workflow contains ${placeholderSteps.length} placeholder step(s) (${stepNames}) that are not yet implemented.\n\nThese steps will be saved but won't execute.\n\nContinue anyway?`)) {
-            return;
-        }
-    }
-    
     const data = {
         name: document.getElementById('workflowName').value,
         description: document.getElementById('workflowDescription').value,
@@ -1015,6 +1101,20 @@ function saveWorkflow() {
                 };
             }
             
+            // For condition steps, store config in skip_conditions
+            if (step.type === 'condition') {
+                stepData.skip_conditions = {
+                    field_source: step.config.field_source,
+                    field: step.config.field,
+                    operator: step.config.operator,
+                    value: step.config.value,
+                    if_true: step.config.if_true,
+                    if_true_step: step.config.if_true_step,
+                    if_false: step.config.if_false,
+                    if_false_step: step.config.if_false_step
+                };
+            }
+
             // For export_data steps, store config in skip_conditions
             if (step.type === 'export_data') {
                 stepData.skip_conditions = {
@@ -1359,6 +1459,7 @@ function renderLpFields() {
                 '<option value="select"' + (f.type==='select'?' selected':'') + '>Menu</option>' +
                 '<option value="radio"' + (f.type==='radio'?' selected':'') + '>Radio</option>' +
                 '<option value="checkbox"' + (f.type==='checkbox'?' selected':'') + '>Checkbox</option>' +
+                '<option value="file"' + (f.type==='file'?' selected':'') + '>File upload</option>' +
             '</select></td>' +
             '<td class="text-center"><input type="checkbox" class="form-check-input"' + (f.required ? ' checked' : '') + ' onchange="lpFields[' + i + '].required=this.checked;updateLpPreview()"></td>' +
             '<td><button type="button" class="btn btn-sm text-danger p-0" onclick="removeLpField(' + i + ')"><i class="bi bi-trash"></i></button></td>';
@@ -1408,7 +1509,10 @@ function generateLpHtml() {
         fieldsHtml += '<div style="margin-bottom:20px">';
         fieldsHtml += '<label style="display:block;margin-bottom:6px;font-weight:600;color:' + p.labelColor + ';font-size:14px">' + escHtml(f.label) + (f.required ? ' <span style="color:#ef4444">*</span>' : '') + '</label>';
         var is = 'width:100%;padding:14px 16px;border:2px solid ' + p.inputBorder + ';border-radius:' + br + ';font-size:15px;box-sizing:border-box;outline:none;font-family:inherit;background:' + inputBg + ';color:' + p.titleColor;
-        if (f.type === 'textarea') {
+        if (f.type === 'file') {
+            fieldsHtml += '<input type="file" name="' + escHtml(f.name) + '" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" style="' + is + '"' + (f.required ? ' required' : '') + '>';
+            fieldsHtml += '<small style="color:' + p.textColor + ';opacity:0.6;font-size:12px;margin-top:4px;display:block">Max 20 MB — PDF, JPG, PNG, DOC, XLS</small>';
+        } else if (f.type === 'textarea') {
             fieldsHtml += '<textarea name="' + escHtml(f.name) + '" rows="3" style="' + is + ';resize:vertical"></textarea>';
         } else if (f.type === 'select') {
             fieldsHtml += '<select name="' + escHtml(f.name) + '" style="' + is + '"><option value="">Seleziona...</option>';
@@ -1470,7 +1574,7 @@ function saveLpConfig() {
 
     var html = generateLpHtml();
     // Inietta script submit
-    var submitScript = '<scr' + 'ipt>(function(){var forms=document.querySelectorAll(".saba-landing-form");forms.forEach(function(f){f.addEventListener("submit",function(e){e.preventDefault();var btn=f.querySelector("[type=submit]");if(btn){btn.disabled=true;btn.textContent="Invio...";}var fd=new FormData(f);var d={};fd.forEach(function(v,k){d[k]=v;});fetch(window.location.pathname,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}).then(function(r){if(r.ok){var s=document.querySelector(".saba-success-msg");if(s)s.style.display="block";f.style.display="none";}}).catch(function(){alert("Errore");});});});})();</scr' + 'ipt>';
+    var submitScript = '<scr' + 'ipt>(function(){function readFileAsBase64(file){return new Promise(function(resolve,reject){var reader=new FileReader();reader.onload=function(){resolve(reader.result)};reader.onerror=reject;reader.readAsDataURL(file)});}var forms=document.querySelectorAll(".saba-landing-form");forms.forEach(function(f){f.addEventListener("submit",function(e){e.preventDefault();var btn=f.querySelector("[type=submit]");if(btn){btn.disabled=true;btn.textContent="Invio...";}var fd=new FormData(f);var d={};var filePromises=[];fd.forEach(function(v,k){if(v instanceof File&&v.size>0){if(v.size>20*1024*1024){alert("File troppo grande (max 20 MB)");btn.disabled=false;btn.textContent=btn.dataset.origText||"Invia";return;}filePromises.push(readFileAsBase64(v).then(function(b64){d[k]={filename:v.name,mime:v.type,size:v.size,data:b64};}));}else if(!(v instanceof File)){d[k]=v;}});Promise.all(filePromises).then(function(){return fetch(window.location.pathname,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)});}).then(function(r){if(r.ok){var s=document.querySelector(".saba-success-msg");if(s)s.style.display="block";f.style.display="none";}else{alert("Errore nel salvataggio");if(btn){btn.disabled=false;btn.textContent="Invia";}}}).catch(function(){alert("Errore");if(btn){btn.disabled=false;btn.textContent="Invia";}});});});})();</scr' + 'ipt>';
     html = html.replace('</body>', submitScript + '</body>');
 
     fetch('/api/landing-builder/' + lpCurrentStepId, {

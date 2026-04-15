@@ -71,6 +71,9 @@ class ExportService:
                 # Add collected_data fields
                 for field in sorted(all_fields):
                     value = p.collected_data.get(field, '') if p.collected_data else ''
+                    # Per file upload mostra solo il nome file, non il blob base64
+                    if isinstance(value, dict) and 'filename' in value and 'data' in value:
+                        value = f"[file: {value['filename']}]"
                     row.append(value)
                 
                 writer.writerow(row)

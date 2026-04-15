@@ -43,8 +43,16 @@
                           {% if field.required %}required{% endif %}
                           {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}></textarea>
             
+            {% elif field.type == 'file' %}
+                <input type="file"
+                       id="{{ field.name }}"
+                       name="{{ field.name }}"
+                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                       {% if field.required %}required{% endif %}>
+                <small style="color: #888; font-size: 12px; margin-top: 4px; display: block;">Max 20 MB — PDF, JPG, PNG, DOC, XLS</small>
+
             {% elif field.type == 'select' %}
-                <select id="{{ field.name }}" 
+                <select id="{{ field.name }}"
                         name="{{ field.name }}"
                         {% if field.required %}required{% endif %}>
                     <option value="">Seleziona...</option>
@@ -97,48 +105,65 @@
 
 {% block extra_js %}
 <script>
+function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
 document.getElementById('landingForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const submitBtn = document.getElementById('submitBtn');
     const successMsg = document.getElementById('successMessage');
     const errorMsg = document.getElementById('errorMessage');
-    
-    // Disabilita button
+
     submitBtn.disabled = true;
     submitBtn.textContent = 'Invio in corso...';
-    
-    // Nascondi messaggi precedenti
+
     successMsg.style.display = 'none';
     errorMsg.style.display = 'none';
-    
-    // Raccogli dati form
+
     const formData = new FormData(e.target);
     const data = {};
+    const filePromises = [];
+
     formData.forEach((value, key) => {
-        data[key] = value;
+        if (value instanceof File && value.size > 0) {
+            if (value.size > 20 * 1024 * 1024) {
+                errorMsg.textContent = 'File troppo grande (max 20 MB).';
+                errorMsg.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Invia';
+                return;
+            }
+            filePromises.push(
+                readFileAsBase64(value).then(b64 => {
+                    data[key] = { filename: value.name, mime: value.type, size: value.size, data: b64 };
+                })
+            );
+        } else if (!(value instanceof File)) {
+            data[key] = value;
+        }
     });
-    
+
     try {
+        await Promise.all(filePromises);
+
         const response = await fetch('/landing/{{ token }}', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        
+
         if (response.ok) {
             successMsg.style.display = 'block';
             e.target.reset();
-            
-            // Scroll to success message
             successMsg.scrollIntoView({ behavior: 'smooth' });
-            
-            // Nasconde form dopo 2 secondi
-            setTimeout(() => {
-                e.target.style.display = 'none';
-            }, 2000);
+            setTimeout(() => { e.target.style.display = 'none'; }, 2000);
         } else {
             const error = await response.json();
             errorMsg.textContent = error.error || 'Errore durante il salvataggio.';

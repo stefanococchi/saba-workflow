@@ -182,6 +182,11 @@ class SchedulerService:
                 logger.error(f"Error parsing time for day_of_week: {e}")
                 return now_utc
         
+        elif wait_type == 'delay_hours':
+            # Wait X hours after previous step
+            delay = config.get('delay_hours', 0)
+            return now_utc + timedelta(hours=int(delay))
+
         else:
             logger.warning(f"Unknown wait_type: {wait_type}, executing immediately")
             return now_utc
@@ -239,18 +244,31 @@ class SchedulerService:
                 elif step.type.value == 'goal_check':
                     # Goal check step
                     success = SchedulerService._execute_goal_check_step(participant, step, execution)
+                elif step.type.value == 'condition':
+                    # Condition step — branching
+                    success = SchedulerService._execute_condition_step(participant, step, execution)
+                    # Condition handles its own next-step scheduling
+                    if success:
+                        execution.status = ExecutionStatus.SENT
+                        execution.sent_at = datetime.utcnow()
+                        participant.last_interaction = datetime.utcnow()
+                    else:
+                        execution.status = ExecutionStatus.FAILED
+                        execution.error_message = "Condition evaluation failed"
+                    db.commit()
+                    return  # Don't use default next-step logic
                 elif step.type.value == 'export_data':
                     # Export data step
                     success = SchedulerService._execute_export_data_step(participant, step, execution)
                 else:
                     logger.warning(f"⚠ Unsupported step type: {step.type}")
-                
+
                 # Update status
                 if success:
                     execution.status = ExecutionStatus.SENT
                     execution.sent_at = datetime.utcnow()
                     participant.last_interaction = datetime.utcnow()
-                    
+
                     # Schedule next step
                     SchedulerService._schedule_next_step(participant, step)
                 else:
@@ -441,6 +459,126 @@ class SchedulerService:
             logger.error(f"✗ Export data error: {str(e)}")
             return False
     
+    @staticmethod
+    def _execute_condition_step(participant, step, execution):
+        """
+        Evaluate condition and decide branching.
+
+        Reads field from sabaform_data, collected_data, or participant fields.
+        Based on result, either continues, skips next step, or stops workflow.
+
+        Returns:
+            bool: True if evaluation succeeded (regardless of condition result)
+        """
+        try:
+            from app.services.activity_service import log_activity
+
+            config = step.skip_conditions or {}
+            field_source = config.get('field_source', 'sabaform_data')
+            field = config.get('field', '')
+            operator = config.get('operator', 'equals')
+            expected = config.get('value', '')
+            if_true = config.get('if_true', 'continue')
+            if_true_step = config.get('if_true_step', 0)
+            if_false = config.get('if_false', 'continue')
+            if_false_step = config.get('if_false_step', 0)
+
+            # Get actual value from the right source
+            actual = None
+            if field_source == 'sabaform_data':
+                actual = (participant.sabaform_data or {}).get(field)
+            elif field_source == 'collected_data':
+                actual = (participant.collected_data or {}).get(field)
+            elif field_source == 'participant':
+                actual = getattr(participant, field, None)
+                if hasattr(actual, 'value'):  # Enum (e.g. status)
+                    actual = actual.value
+
+            actual_str = str(actual or '').strip()
+            expected_str = str(expected or '').strip()
+
+            # Evaluate condition
+            if operator == 'equals':
+                result = actual_str.lower() == expected_str.lower()
+            elif operator == 'not_equals':
+                result = actual_str.lower() != expected_str.lower()
+            elif operator == 'contains':
+                result = expected_str.lower() in actual_str.lower()
+            elif operator == 'not_empty':
+                result = bool(actual_str)
+            elif operator == 'empty':
+                result = not bool(actual_str)
+            elif operator == 'greater_than':
+                try:
+                    result = float(actual_str) > float(expected_str)
+                except (ValueError, TypeError):
+                    result = actual_str > expected_str
+            elif operator == 'less_than':
+                try:
+                    result = float(actual_str) < float(expected_str)
+                except (ValueError, TypeError):
+                    result = actual_str < expected_str
+            else:
+                logger.warning(f"Unknown operator: {operator}")
+                result = False
+
+            action = if_true if result else if_false
+
+            execution.result_data = {
+                'field': field,
+                'field_source': field_source,
+                'operator': operator,
+                'expected': expected,
+                'actual': actual_str,
+                'result': result,
+                'action': action,
+            }
+
+            logger.info(f"✓ Condition: {field} ({actual_str}) {operator} {expected_str} → {result} → {action}")
+
+            log_activity(
+                workflow_id=step.workflow_id,
+                event_type='condition_evaluated',
+                description=f'Condizione "{field} {operator} {expected}": {"VERO" if result else "FALSO"} → {action}',
+                participant_id=participant.id,
+                step_id=step.id,
+                details=execution.result_data
+            )
+
+            # Determine target step order for jump
+            jump_target = if_true_step if result else if_false_step
+
+            # Execute the action
+            if action == 'stop':
+                SchedulerService.cancel_scheduled_executions(participant.id)
+                participant.status = ParticipantStatus.COMPLETED
+                db.commit()
+                logger.info(f"✓ Workflow STOPPED for participant {participant.id} by condition")
+            elif action == 'jump' and jump_target:
+                # Jump to specific step
+                target_step = db.query(WorkflowStep).filter_by(
+                    workflow_id=step.workflow_id,
+                    order=jump_target
+                ).first()
+                if target_step:
+                    SchedulerService.schedule_step(participant, target_step, delay_hours=target_step.delay_hours)
+                    participant.current_step_id = target_step.id
+                    participant.status = ParticipantStatus.IN_PROGRESS
+                    db.commit()
+                    logger.info(f"→ Jumped to step {target_step.order}: {target_step.name}")
+                else:
+                    logger.warning(f"⚠ Jump target step order {jump_target} not found, continuing normally")
+                    SchedulerService._schedule_next_step(participant, step)
+            else:
+                # continue — schedule next step normally
+                SchedulerService._schedule_next_step(participant, step)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"✗ Condition error: {str(e)}")
+            return False
+
     @staticmethod
     def _should_skip(participant, step):
         """

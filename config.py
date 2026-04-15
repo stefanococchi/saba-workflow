@@ -36,6 +36,9 @@ class Config:
     SCHEDULER_API_ENABLED = True
     SCHEDULER_TIMEZONE = 'Europe/Rome'
     
+    # Upload
+    MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20 MB
+
     # Landing page URL base
     LANDING_BASE_URL = os.getenv('LANDING_BASE_URL', 'http://localhost:5001/landing')
 
