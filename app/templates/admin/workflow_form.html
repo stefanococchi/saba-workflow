@@ -551,6 +551,7 @@ try {
             subject: {{ step.subject | default('', true) | tojson }},
             body_template: {{ step.body_template | default('', true) | tojson }},
             delay_hours: {{ step.delay_hours or 0 }},
+            has_landing: {{ 'true' if step.landing_page_config or (step.skip_conditions and step.skip_conditions.get('has_landing')) else 'false' }},
             wait_type: _skipCond.wait_type || 'date',
             target_date: _skipCond.target_date || '',
             target_time: _skipCond.target_time || '09:00',

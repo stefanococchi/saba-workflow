@@ -19,14 +19,12 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = DEBUG
     
-    # SMTP
-    SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com')
-    SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
-    SMTP_USER = os.getenv('SMTP_USER', '')
-    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
-    SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'True').lower() == 'true'
-    SMTP_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL', SMTP_USER)
-    SMTP_FROM_NAME = os.getenv('SMTP_FROM_NAME', 'Saba Workflow')
+    # Microsoft Graph Mail
+    MS_GRAPH_TENANT_ID = os.getenv('MS_GRAPH_TENANT_ID', '')
+    MS_GRAPH_CLIENT_ID = os.getenv('MS_GRAPH_CLIENT_ID', '')
+    MS_GRAPH_CLIENT_SECRET = os.getenv('MS_GRAPH_CLIENT_SECRET', '')
+    MAIL_FROM_EMAIL = os.getenv('MAIL_FROM_EMAIL', '')
+    MAIL_FROM_NAME = os.getenv('MAIL_FROM_NAME', 'Saba Workflow')
     
     # JWT
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
@@ -38,6 +36,7 @@ class Config:
     
     # Upload
     MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20 MB
+    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app', 'static', 'uploads')
 
     # Landing page URL base
     LANDING_BASE_URL = os.getenv('LANDING_BASE_URL', 'http://localhost:5001/landing')

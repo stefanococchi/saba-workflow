@@ -1,9 +1,15 @@
 from datetime import datetime, timedelta
-from app import db_session as db, scheduler
+import threading
+import app as _app
 from app.models import Execution, ExecutionStatus, ParticipantStatus, WorkflowStep
 from app.services.email_service import EmailService
 from app.services.token_service import TokenService
 import logging
+
+
+def _db():
+    """Accesso dinamico a db_session (evita riferimento stale)"""
+    return _app.db_session
 
 logger = logging.getLogger(__name__)
 
@@ -48,142 +54,142 @@ class SchedulerService:
                 scheduled_at=scheduled_at
             )
             
-            db.add(execution)
-            db.flush()  # Get ID
-            
+            _db().add(execution)
+            _db().flush()  # Get ID
+
             # Unique job ID
             job_id = f"exec_{execution.id}_{participant.id}_{step.id}"
             execution.job_id = job_id
-            
+
+            # Commit prima di schedulare il job (il job gira in un thread separato
+            # e ha bisogno di trovare l'Execution nel DB)
+            _db().commit()
+
             # Schedule job
             now = datetime.utcnow()
             if scheduled_at <= now:
-                # Execute immediately
-                scheduler.add_job(
-                    func=SchedulerService._execute_step,
-                    args=[execution.id],
-                    id=job_id,
-                    replace_existing=True
-                )
-                logger.info(f"✓ Scheduled step {step.id} for immediate execution")
+                # Esecuzione immediata in thread separato (evita problemi timezone con APScheduler)
+                def _run_delayed(exec_id):
+                    import time
+                    time.sleep(3)  # Attende che il chiamante faccia commit
+                    SchedulerService._execute_step(exec_id)
+
+                t = threading.Thread(target=_run_delayed, args=[execution.id], daemon=True)
+                t.start()
+                logger.info(f"✓ Scheduled step {step.id} for immediate execution (3s delay)")
             else:
-                # Schedule with delay
-                scheduler.add_job(
+                # Converti UTC → locale per APScheduler (configurato Europe/Rome)
+                import pytz
+                local_tz = pytz.timezone('Europe/Rome')
+                run_date_local = pytz.utc.localize(scheduled_at).astimezone(local_tz)
+
+                _app.scheduler.add_job(
                     func=SchedulerService._execute_step,
                     args=[execution.id],
                     trigger='date',
-                    run_date=scheduled_at,
+                    run_date=run_date_local,
                     id=job_id,
                     replace_existing=True
                 )
                 time_until = (scheduled_at - now).total_seconds() / 3600
-                logger.info(f"✓ Scheduled step {step.id} for {scheduled_at} ({time_until:.1f}h from now)")
-            
-            db.commit()
-            
+                logger.info(f"✓ Scheduled step {step.id} for {run_date_local.strftime('%d/%m/%Y %H:%M')} local ({time_until:.1f}h from now)")
+
             return execution
-            
+
         except Exception as e:
-            db.rollback()
+            _db().rollback()
             logger.error(f"✗ Error scheduling step: {str(e)}")
             raise
     
     @staticmethod
     def _calculate_wait_until(step):
         """
-        Calculate target datetime for wait_until step
-        
-        Args:
-            step: WorkflowStep with wait_until configuration
-            
+        Calculate target datetime for wait_until step.
+        L'utente inserisce orari in ora locale (Europe/Rome),
+        vengono convertiti in UTC per lo storage.
+
         Returns:
             datetime: Target execution time (UTC)
         """
-        from datetime import datetime
-        
-        # Get configuration from skip_conditions (used for storing step config)
+        import pytz
+
         config = step.skip_conditions or {}
         wait_type = config.get('wait_type', 'date')
-        
-        # For simplicity, ignore timezone for now (assume UTC)
-        # In production, you'd use pytz here
-        
+
+        local_tz = pytz.timezone('Europe/Rome')
+        now_local = datetime.now(local_tz)
         now_utc = datetime.utcnow()
-        
+
         if wait_type == 'date':
-            # Wait until specific date and time
             target_date = config.get('target_date')  # YYYY-MM-DD
             target_time = config.get('target_time', '09:00')  # HH:MM
-            
+
             if not target_date:
                 logger.warning("No target_date specified for wait_until, using current time")
                 return now_utc
-            
+
             try:
-                # Parse datetime
                 datetime_str = f"{target_date} {target_time}"
-                target_dt = datetime.strptime(datetime_str, '%Y-%m-%d %H:%M')
-                
-                # If target is in the past, execute immediately
-                if target_dt < now_utc:
-                    logger.warning(f"Target date {target_dt} is in the past, executing immediately")
+                naive_dt = datetime.strptime(datetime_str, '%Y-%m-%d %H:%M')
+                # Interpreta come ora locale e converti in UTC
+                local_dt = local_tz.localize(naive_dt)
+                utc_dt = local_dt.astimezone(pytz.utc).replace(tzinfo=None)
+
+                if utc_dt < now_utc:
+                    logger.warning(f"Target date {naive_dt} (local) is in the past, executing immediately")
                     return now_utc
-                
-                return target_dt
-                
+
+                return utc_dt
+
             except ValueError as e:
                 logger.error(f"Error parsing wait_until date: {e}")
                 return now_utc
-            
+
         elif wait_type == 'time':
-            # Wait until specific time today (or tomorrow if already passed)
             target_time = config.get('target_time', '09:00')  # HH:MM
-            
+
             try:
                 hour, minute = map(int, target_time.split(':'))
-                
-                target_dt = now_utc.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                
-                # If time already passed today, schedule for tomorrow
-                if target_dt <= now_utc:
-                    target_dt += timedelta(days=1)
-                
-                return target_dt
-                
+                target_local = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+                if target_local <= now_local:
+                    target_local += timedelta(days=1)
+
+                utc_dt = target_local.astimezone(pytz.utc).replace(tzinfo=None)
+                return utc_dt
+
             except (ValueError, AttributeError) as e:
                 logger.error(f"Error parsing time: {e}")
                 return now_utc
-            
+
         elif wait_type == 'day_of_week':
-            # Wait until next occurrence of specific day
             target_day = config.get('target_day', 'monday').lower()
             target_time = config.get('target_time', '09:00')
-            
+
             days_map = {
                 'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
                 'friday': 4, 'saturday': 5, 'sunday': 6
             }
-            
+
             target_weekday = days_map.get(target_day, 0)
-            current_weekday = now_utc.weekday()
-            
-            # Calculate days until target
+            current_weekday = now_local.weekday()
+
             days_ahead = target_weekday - current_weekday
-            if days_ahead <= 0:  # Target day already happened this week
+            if days_ahead <= 0:
                 days_ahead += 7
-            
-            target_dt = now_utc + timedelta(days=days_ahead)
-            
+
+            target_local = now_local + timedelta(days=days_ahead)
+
             try:
                 hour, minute = map(int, target_time.split(':'))
-                target_dt = target_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                return target_dt
+                target_local = target_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                utc_dt = target_local.astimezone(pytz.utc).replace(tzinfo=None)
+                return utc_dt
             except (ValueError, AttributeError) as e:
                 logger.error(f"Error parsing time for day_of_week: {e}")
                 return now_utc
-        
+
         elif wait_type == 'delay_hours':
-            # Wait X hours after previous step
             delay = config.get('delay_hours', 0)
             return now_utc + timedelta(hours=int(delay))
 
@@ -206,7 +212,7 @@ class SchedulerService:
         
         with app.app_context():
             try:
-                execution = db.get(Execution, execution_id)
+                execution = _db().get(Execution, execution_id)
                 if not execution:
                     logger.error(f"✗ Execution {execution_id} not found")
                     return
@@ -220,7 +226,7 @@ class SchedulerService:
                 if participant.status == ParticipantStatus.COMPLETED:
                     execution.status = ExecutionStatus.SKIPPED
                     execution.result_data = {'reason': 'Participant already completed'}
-                    db.commit()
+                    _db().commit()
                     logger.info(f"⊘ Skipped: participant {participant.id} already completed")
                     return
                 
@@ -228,7 +234,7 @@ class SchedulerService:
                 if SchedulerService._should_skip(participant, step):
                     execution.status = ExecutionStatus.SKIPPED
                     execution.result_data = {'reason': 'Skip conditions met'}
-                    db.commit()
+                    _db().commit()
                     logger.info(f"⊘ Skipped: conditions met for step {step.id}")
                     return
                 
@@ -255,7 +261,7 @@ class SchedulerService:
                     else:
                         execution.status = ExecutionStatus.FAILED
                         execution.error_message = "Condition evaluation failed"
-                    db.commit()
+                    _db().commit()
                     return  # Don't use default next-step logic
                 elif step.type.value == 'export_data':
                     # Export data step
@@ -275,11 +281,11 @@ class SchedulerService:
                     execution.status = ExecutionStatus.FAILED
                     execution.error_message = "Execution failed"
                 
-                db.commit()
+                _db().commit()
                 
             except Exception as e:
                 logger.error(f"✗ Error executing step {execution_id}: {str(e)}")
-                db.rollback()
+                _db().rollback()
     
     @staticmethod
     def _execute_email_step(participant, step, execution):
@@ -290,9 +296,12 @@ class SchedulerService:
             bool: success
         """
         try:
-            # Generate landing URL if step requires it
+            # Generate landing URL if step has landing config or template references it
             landing_url = None
-            if step.landing_page_config:
+            body = step.body_template or ''
+            skip_cond = step.skip_conditions or {}
+            has_landing = step.landing_page_config or skip_cond.get('has_landing') or '{{ landing_url }}' in body or '{{landing_url}}' in body
+            if has_landing:
                 landing_url = TokenService.generate_landing_url(participant)
             
             # Send email
@@ -339,7 +348,7 @@ class SchedulerService:
                     
                     # Mark participant as completed
                     participant.status = ParticipantStatus.COMPLETED
-                    db.commit()
+                    _db().commit()
                     
                     logger.info(f"✓ Workflow COMPLETED for participant {participant.id}")
                     
@@ -552,11 +561,11 @@ class SchedulerService:
             if action == 'stop':
                 SchedulerService.cancel_scheduled_executions(participant.id)
                 participant.status = ParticipantStatus.COMPLETED
-                db.commit()
+                _db().commit()
                 logger.info(f"✓ Workflow STOPPED for participant {participant.id} by condition")
             elif action == 'jump' and jump_target:
                 # Jump to specific step
-                target_step = db.query(WorkflowStep).filter_by(
+                target_step = _db().query(WorkflowStep).filter_by(
                     workflow_id=step.workflow_id,
                     order=jump_target
                 ).first()
@@ -564,7 +573,7 @@ class SchedulerService:
                     SchedulerService.schedule_step(participant, target_step, delay_hours=target_step.delay_hours)
                     participant.current_step_id = target_step.id
                     participant.status = ParticipantStatus.IN_PROGRESS
-                    db.commit()
+                    _db().commit()
                     logger.info(f"→ Jumped to step {target_step.order}: {target_step.name}")
                 else:
                     logger.warning(f"⚠ Jump target step order {jump_target} not found, continuing normally")
@@ -606,7 +615,7 @@ class SchedulerService:
         """
         try:
             # Find next step
-            next_step = db.query(WorkflowStep).filter_by(
+            next_step = _db().query(WorkflowStep).filter_by(
                 workflow_id=current_step.workflow_id,
                 order=current_step.order + 1
             ).first()
@@ -622,7 +631,7 @@ class SchedulerService:
                 # Update participant current step
                 participant.current_step_id = next_step.id
                 participant.status = ParticipantStatus.IN_PROGRESS
-                db.commit()
+                _db().commit()
                 
                 logger.info(f"→ Scheduled next step {next_step.id} for participant {participant.id}")
             else:
@@ -640,7 +649,7 @@ class SchedulerService:
             participant_id: Participant ID
         """
         try:
-            executions = db.query(Execution).filter_by(
+            executions = _db().query(Execution).filter_by(
                 participant_id=participant_id,
                 status=ExecutionStatus.SCHEDULED
             ).all()
@@ -648,7 +657,7 @@ class SchedulerService:
             for execution in executions:
                 if execution.job_id:
                     try:
-                        scheduler.remove_job(execution.job_id)
+                        _app.scheduler.remove_job(execution.job_id)
                         logger.info(f"✓ Cancelled job {execution.job_id}")
                     except Exception as e:
                         logger.warning(f"⚠ Job {execution.job_id} not found: {str(e)}")
@@ -656,9 +665,9 @@ class SchedulerService:
                 execution.status = ExecutionStatus.SKIPPED
                 execution.result_data = {'reason': 'Cancelled by user action'}
             
-            db.commit()
+            _db().commit()
             logger.info(f"✓ Cancelled {len(executions)} executions for participant {participant_id}")
             
         except Exception as e:
             logger.error(f"✗ Error cancelling executions: {str(e)}")
-            db.rollback()
+            _db().rollback()

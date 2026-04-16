@@ -225,6 +225,22 @@
     </div>
 </div>
 
+<!-- Modal Rollback -->
+<div class="modal fade" id="rollbackModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise"></i> Retrocedi Partecipante</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="rollbackInfo" class="text-muted"></p>
+                <div class="list-group" id="rollbackSteps"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Dati Raccolti -->
 <div class="modal fade" id="dataModal" tabindex="-1">
     <div class="modal-dialog">
@@ -320,6 +336,8 @@ var ALL_PARTICIPANTS = [
         workflow: {{ p.workflow.name | tojson }},
         workflow_id: {{ p.workflow_id }},
         status: {{ p.status.value | tojson }},
+        current_step: {{ (p.current_step.name if p.current_step else '') | tojson }},
+        current_step_order: {{ p.current_step.order if p.current_step else 'null' }},
         enrolled_at: {{ p.enrolled_at|localtime | tojson }},
         last_interaction: {{ p.last_interaction|localtime | tojson if p.last_interaction else 'null' }},
         completed_at: {{ p.completed_at|localtime | tojson if p.completed_at else 'null' }},
@@ -341,6 +359,7 @@ var ALL_COLUMNS = [
     { key: 'phone', label: 'Telefono', default: false },
     { key: 'workflow', label: 'Workflow', default: true },
     { key: 'status', label: 'Stato', default: true },
+    { key: 'current_step', label: 'Step', default: true },
     { key: 'enrolled_at', label: 'Iscritto', default: true },
     { key: 'last_interaction', label: 'Ultima interazione', default: false },
     { key: 'completed_at', label: 'Completato', default: false },
@@ -604,13 +623,20 @@ function renderTable(rows) {
             var val = getFieldValue(p, c.key);
             if (c.key === 'id') return '<td><strong>#' + val + '</strong></td>';
             if (c.key === 'status') return '<td><span class="status-badge status-' + val + '">' + val + '</span></td>';
+            if (c.key === 'current_step') {
+                if (!val) return '<td><small class="text-muted">—</small></td>';
+                return '<td><small><i class="bi bi-signpost-split" style="opacity:0.5"></i> ' + esc(val) + '</small></td>';
+            }
             if (c.key === 'workflow') return '<td><a href="/admin/workflows/' + p.workflow_id + '">' + esc(val) + '</a></td>';
             if (c.key === 'email' && val) return '<td><i class="bi bi-envelope" style="opacity:0.4;margin-right:4px"></i>' + esc(val) + '</td>';
             return '<td>' + esc(val || '-') + '</td>';
         }).join('');
 
-        var actions = '<td class="table-actions"><div class="btn-group btn-group-sm">' +
-            '<button class="btn btn-outline-info" onclick="viewData(' + p.id + ')" title="Dati"><i class="bi bi-file-text"></i></button>' +
+        var actions = '<td class="table-actions"><div class="btn-group btn-group-sm">';
+        if (p.status === 'in_progress' || p.status === 'completed' || p.status === 'pending') {
+            actions += '<button class="btn btn-outline-warning" onclick="rollbackParticipant(' + p.id + ')" title="Retrocedi"><i class="bi bi-arrow-counterclockwise"></i></button>';
+        }
+        actions += '<button class="btn btn-outline-info" onclick="viewData(' + p.id + ')" title="Dati"><i class="bi bi-file-text"></i></button>' +
             '<button class="btn btn-outline-primary" onclick="editParticipant(' + p.id + ')" title="Modifica"><i class="bi bi-pencil"></i></button>' +
             '<button class="btn btn-outline-danger" onclick="deleteParticipant(' + p.id + ')" title="Elimina"><i class="bi bi-trash"></i></button>';
         if (p.token) {
@@ -865,6 +891,61 @@ function deleteParticipant(id) {
         ALL_PARTICIPANTS = ALL_PARTICIPANTS.filter(function(x) { return x.id !== id; });
         applyFilters();
         updateCounts();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
+}
+
+var _rollbackParticipantId = null;
+var STEP_ICONS = { email: 'bi-envelope', wait_until: 'bi-calendar-check', goal_check: 'bi-trophy', export_data: 'bi-download', condition: 'bi-shuffle' };
+
+function rollbackParticipant(participantId) {
+    _rollbackParticipantId = participantId;
+    var stepsDiv = document.getElementById('rollbackSteps');
+    stepsDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+    document.getElementById('rollbackInfo').textContent = 'Caricamento...';
+    new bootstrap.Modal(document.getElementById('rollbackModal')).show();
+
+    var p = ALL_PARTICIPANTS.find(function(x) { return x.id === participantId; });
+    document.getElementById('rollbackInfo').textContent = 'Riporta ' + (((p.first_name||'') + ' ' + (p.last_name||p.email||'')).trim()) + ' a:';
+
+    fetch('/api/workflows/' + p.workflow_id)
+    .then(function(r) { return r.json(); })
+    .then(function(wf) {
+        var html = '<button class="list-group-item list-group-item-action list-group-item-warning" onclick="doRollback(0)">';
+        html += '<i class="bi bi-arrow-counterclockwise"></i> <strong>Reset a PENDING</strong>';
+        html += '<br><small class="text-muted">Rimuove tutte le esecuzioni e riporta allo stato iniziale</small></button>';
+        wf.steps.forEach(function(s) {
+            var icon = STEP_ICONS[s.type] || 'bi-circle';
+            html += '<button class="list-group-item list-group-item-action" onclick="doRollback('+s.order+')">';
+            html += '<i class="bi '+icon+'"></i> <strong>Step '+s.order+':</strong> '+esc(s.name);
+            html += '<br><small class="text-muted">'+s.type+(s.delay_hours?' — delay '+s.delay_hours+'h':'')+'</small></button>';
+        });
+        stepsDiv.innerHTML = html;
+    })
+    .catch(function(e) {
+        stepsDiv.innerHTML = '<div class="alert alert-danger">Errore: ' + esc(e.message) + '</div>';
+    });
+}
+
+function doRollback(stepOrder) {
+    if (!confirm(stepOrder === 0
+        ? 'Riportare il partecipante a PENDING?'
+        : 'Riportare il partecipante allo step ' + stepOrder + '?'))
+        return;
+
+    fetch('/api/participants/' + _rollbackParticipantId + '/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step_order: stepOrder || null })
+    })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Errore'); });
+        return r.json();
+    })
+    .then(function(data) {
+        bootstrap.Modal.getInstance(document.getElementById('rollbackModal')).hide();
+        alert(data.message);
+        location.reload();
     })
     .catch(function(e) { alert('Errore: ' + e.message); });
 }

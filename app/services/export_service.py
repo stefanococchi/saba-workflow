@@ -4,7 +4,7 @@ Export Service - Generate CSV/Excel exports of workflow data
 import csv
 from io import StringIO
 from datetime import datetime
-from app import db_session as db
+import app as _app
 from app.models import Participant, Workflow
 from app.services.email_service import EmailService
 import logging
@@ -28,13 +28,13 @@ class ExportService:
             tuple: (success: bool, csv_content: str, filename: str)
         """
         try:
-            workflow = db.get(Workflow, workflow_id)
+            workflow = _app.db_session.get(Workflow, workflow_id)
             if not workflow:
                 logger.error(f"Workflow {workflow_id} not found")
                 return (False, None, None)
             
             # Get all participants
-            participants = db.query(Participant).filter_by(workflow_id=workflow_id).all()
+            participants = _app.db_session.query(Participant).filter_by(workflow_id=workflow_id).all()
             
             if not participants:
                 logger.warning(f"No participants found for workflow {workflow_id}")
@@ -101,8 +101,8 @@ class ExportService:
     @staticmethod
     def _send_csv_email(to_email, csv_content, filename, workflow_name):
         """
-        Send CSV as email attachment
-        
+        Send CSV export notification via email (Microsoft Graph)
+
         Args:
             to_email: Recipient email
             csv_content: CSV file content
@@ -110,49 +110,24 @@ class ExportService:
             workflow_name: Name of workflow
         """
         try:
-            import smtplib
-            from email.mime.multipart import MIMEMultipart
-            from email.mime.text import MIMEText
-            from email.mime.base import MIMEBase
-            from email import encoders
-            from config import Config
-            
-            # Create message
-            msg = MIMEMultipart()
-            msg['From'] = Config.SMTP_USER
-            msg['To'] = to_email
-            msg['Subject'] = f"Workflow Export: {workflow_name}"
-            
-            # Email body
-            body = f"""
+            body_html = f"""
             <html>
             <body>
                 <h2>Workflow Data Export</h2>
-                <p>Attached is the CSV export for workflow: <strong>{workflow_name}</strong></p>
-                <p>Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC</p>
-                <p>This is an automated export from Saba Workflow.</p>
+                <p>Export generato per il workflow: <strong>{workflow_name}</strong></p>
+                <p>File: {filename}</p>
+                <p>Generato il: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC</p>
+                <p><em>Saba Workflow</em></p>
             </body>
             </html>
             """
-            
-            msg.attach(MIMEText(body, 'html'))
-            
-            # Attach CSV
-            attachment = MIMEBase('application', 'octet-stream')
-            attachment.set_payload(csv_content.encode('utf-8'))
-            encoders.encode_base64(attachment)
-            attachment.add_header('Content-Disposition', f'attachment; filename={filename}')
-            msg.attach(attachment)
-            
-            # Send email
-            with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT) as server:
-                server.starttls()
-                server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
-                server.send_message(msg)
-            
-            logger.info(f"✓ CSV sent via email to {to_email}")
-            return True
-            
+
+            return EmailService.send_email(
+                to_email=to_email,
+                subject=f"Workflow Export: {workflow_name}",
+                body_html=body_html
+            )
+
         except Exception as e:
             logger.error(f"✗ Error sending CSV email: {str(e)}")
             return False

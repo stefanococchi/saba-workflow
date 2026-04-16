@@ -245,6 +245,7 @@ function pauseWorkflow() {
 }
 
 function resumeWorkflow() {
+    // 1. Riattiva workflow
     fetch(`/api/workflows/${workflowId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -252,10 +253,22 @@ function resumeWorkflow() {
     })
     .then(response => response.json())
     .then(data => {
-        alert('Workflow ripreso');
+        // 2. Avvia step per eventuali partecipanti PENDING
+        return fetch(`/api/workflows/${workflowId}/start`, { method: 'POST' });
+    })
+    .then(response => response.json())
+    .then(data => {
+        const msg = data.scheduled
+            ? `Workflow ripreso. ${data.scheduled} partecipanti avviati.`
+            : 'Workflow ripreso.';
+        alert(msg);
         location.reload();
     })
-    .catch(error => alert('Errore: ' + error));
+    .catch(error => {
+        // Se non ci sono PENDING va bene lo stesso
+        alert('Workflow ripreso.');
+        location.reload();
+    });
 }
 
 function importFromSabaform() {

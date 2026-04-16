@@ -303,11 +303,13 @@ def get_participant(participant_id):
             return jsonify({'error': 'Partecipante non trovato'}), 404
         return jsonify({
             'id': p.id,
+            'workflow_id': p.workflow_id,
             'first_name': p.first_name,
             'last_name': p.last_name,
             'email': p.email,
             'phone': p.phone,
             'status': p.status.value,
+            'current_step_id': p.current_step_id,
             'sabaform_data': p.sabaform_data or {},
         }), 200
     except Exception as e:
@@ -371,6 +373,91 @@ def delete_participant(participant_id):
     except Exception as e:
         db.rollback()
         logger.error(f"Errore eliminazione partecipante: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/participants/<int:participant_id>/rollback', methods=['POST'])
+def rollback_participant(participant_id):
+    """Riporta un partecipante a uno step precedente (o a PENDING)"""
+    try:
+        participant = db.get(Participant, participant_id)
+        if not participant:
+            return jsonify({'error': 'Partecipante non trovato'}), 404
+
+        data = request.get_json()
+        target_step_order = data.get('step_order')  # None = reset a PENDING
+
+        # Cancella esecuzioni schedulate
+        SchedulerService.cancel_scheduled_executions(participant_id)
+
+        if target_step_order is None or target_step_order == 0:
+            # Reset completo a PENDING
+            participant.status = ParticipantStatus.PENDING
+            participant.current_step_id = None
+            participant.last_interaction = None
+            db.commit()
+
+            log_activity(
+                workflow_id=participant.workflow_id,
+                event_type='status_changed',
+                description=f'Partecipante riportato a PENDING',
+                participant_id=participant_id,
+                details={'action': 'rollback', 'target': 'pending'}
+            )
+
+            logger.info(f"Rollback partecipante {participant_id} a PENDING")
+            return jsonify({'status': 'pending', 'message': 'Partecipante riportato a PENDING'}), 200
+        else:
+            # Riporta a uno step specifico
+            from app.models import WorkflowStep
+            target_step = db.query(WorkflowStep).filter_by(
+                workflow_id=participant.workflow_id,
+                order=target_step_order
+            ).first()
+
+            if not target_step:
+                return jsonify({'error': f'Step {target_step_order} non trovato'}), 404
+
+            # Elimina esecuzioni dallo step target in poi
+            steps_to_clear = db.query(WorkflowStep).filter(
+                WorkflowStep.workflow_id == participant.workflow_id,
+                WorkflowStep.order >= target_step_order
+            ).all()
+            step_ids = [s.id for s in steps_to_clear]
+
+            if step_ids:
+                db.query(Execution).filter(
+                    Execution.participant_id == participant_id,
+                    Execution.step_id.in_(step_ids)
+                ).delete(synchronize_session='fetch')
+
+            # Aggiorna partecipante
+            participant.status = ParticipantStatus.IN_PROGRESS
+            participant.current_step_id = target_step.id
+            db.commit()
+
+            # Schedula lo step target
+            SchedulerService.schedule_step(participant, target_step, delay_hours=0)
+
+            log_activity(
+                workflow_id=participant.workflow_id,
+                event_type='status_changed',
+                description=f'Partecipante riportato a step {target_step.order}: {target_step.name}',
+                participant_id=participant_id,
+                step_id=target_step.id,
+                details={'action': 'rollback', 'target_step': target_step.order, 'target_name': target_step.name}
+            )
+
+            logger.info(f"Rollback partecipante {participant_id} a step {target_step.order}: {target_step.name}")
+            return jsonify({
+                'status': 'in_progress',
+                'step': target_step.name,
+                'message': f'Partecipante riportato a: {target_step.name}'
+            }), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore rollback partecipante: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -1,8 +1,11 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from app import db_session as db
 from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus
 from sqlalchemy import func
+from werkzeug.utils import secure_filename
 import logging
+import os
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -265,11 +268,13 @@ def executions_monitor():
             wf_name = ''
             if ex.participant and ex.participant.workflow:
                 wf_name = ex.participant.workflow.name
+            # Usa sent_at se disponibile, altrimenti scheduled_at
+            display_time = ex.sent_at or ex.scheduled_at
             timeline.append({
                 'type': 'execution',
                 'entry_id': ex.id,
                 'participant_id': ex.participant_id,
-                'time': ex.scheduled_at,
+                'time': display_time,
                 'event_type': 'email_failed' if ex.status.value == 'failed' else 'email_' + ex.status.value,
                 'description': f'{ex.step.name}: {ex.status.value}' if ex.step else ex.status.value,
                 'participant_name': (ex.participant.full_name or ex.participant.email or '—') if ex.participant else '—',
@@ -312,3 +317,31 @@ def executions_monitor():
                              timeline=[],
                              workflows=[],
                              current_workflow_id=None)
+
+
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
+
+
+@admin_bp.route('/upload-image', methods=['POST'])
+def upload_image():
+    """Upload immagine per landing page (logo o sfondo)"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'Nessun file selezionato'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Nessun file selezionato'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({'error': f'Formato non consentito. Usa: {", ".join(ALLOWED_IMAGE_EXTENSIONS)}'}), 400
+
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    os.makedirs(upload_folder, exist_ok=True)
+
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    filepath = os.path.join(upload_folder, filename)
+    file.save(filepath)
+
+    url = url_for('static', filename=f'uploads/{filename}', _external=False)
+    return jsonify({'url': url}), 200

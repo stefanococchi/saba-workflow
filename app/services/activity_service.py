@@ -1,8 +1,12 @@
-from app import db_session as db
+import app as _app
 from app.models import ActivityLog
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _db():
+    return _app.db_session
 
 
 def log_activity(workflow_id, event_type, description, participant_id=None, step_id=None, details=None):
@@ -16,11 +20,11 @@ def log_activity(workflow_id, event_type, description, participant_id=None, step
             description=description,
             details=details,
         )
-        db.add(entry)
-        db.commit()
+        _db().add(entry)
+        _db().commit()
     except Exception as e:
         logger.error(f"Errore log activity: {e}")
         try:
-            db.rollback()
+            _db().rollback()
         except Exception:
             pass

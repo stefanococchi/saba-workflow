@@ -149,6 +149,22 @@
     </div>
 </div>
 
+<!-- Modal Rollback Partecipante -->
+<div class="modal fade" id="rollbackModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise"></i> Retrocedi Partecipante</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="rollbackInfo" class="text-muted"></p>
+                <div class="list-group" id="rollbackSteps"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Edit Partecipante -->
 <div class="modal fade" id="editModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -366,6 +382,7 @@ function renderTable(rows) {
         var actions = '<div class="btn-group btn-group-sm">';
         if (r.error) actions += '<button class="btn btn-outline-danger" onclick="showError('+idx+')" title="Errore"><i class="bi bi-exclamation-triangle"></i></button>';
         else if (r.details) actions += '<button class="btn btn-outline-info" onclick="showDetails('+idx+')" title="Dettagli"><i class="bi bi-info-circle"></i></button>';
+        if (r.participant_id) actions += '<button class="btn btn-outline-warning" onclick="rollbackParticipant('+r.participant_id+')" title="Retrocedi"><i class="bi bi-arrow-counterclockwise"></i></button>';
         if (r.participant_id) actions += '<button class="btn btn-outline-primary" onclick="editParticipant('+r.participant_id+')" title="Modifica partecipante"><i class="bi bi-pencil"></i></button>';
         actions += '<button class="btn btn-outline-danger" onclick="deleteEntry('+idx+')" title="Elimina"><i class="bi bi-trash"></i></button>';
         actions += '</div>';
@@ -537,6 +554,66 @@ function deleteEntry(idx) {
         if (globalIdx !== -1) ALL_TIMELINE.splice(globalIdx, 1);
         applyFilters();
         updateCounts();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
+}
+
+// =============================================
+// ROLLBACK
+// =============================================
+var _rollbackParticipantId = null;
+
+function rollbackParticipant(participantId) {
+    _rollbackParticipantId = participantId;
+    var stepsDiv = document.getElementById('rollbackSteps');
+    stepsDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+    document.getElementById('rollbackInfo').textContent = 'Caricamento...';
+    new bootstrap.Modal(document.getElementById('rollbackModal')).show();
+
+    // Trova il workflow del partecipante
+    fetch('/api/participants/' + participantId)
+    .then(function(r) { return r.json(); })
+    .then(function(p) {
+        document.getElementById('rollbackInfo').textContent = 'Riporta ' + (p.first_name || '') + ' ' + (p.last_name || p.email) + ' a:';
+        return fetch('/api/workflows/' + p.workflow_id);
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(wf) {
+        var html = '<button class="list-group-item list-group-item-action list-group-item-warning" onclick="doRollback(0)">';
+        html += '<i class="bi bi-arrow-counterclockwise"></i> <strong>Reset a PENDING</strong>';
+        html += '<br><small class="text-muted">Rimuove tutte le esecuzioni e riporta allo stato iniziale</small></button>';
+        wf.steps.forEach(function(s) {
+            var icon = STEP_ICONS[s.type] || 'bi-circle';
+            html += '<button class="list-group-item list-group-item-action" onclick="doRollback('+s.order+')">';
+            html += '<i class="bi '+icon+'"></i> <strong>Step '+s.order+':</strong> '+esc(s.name);
+            html += '<br><small class="text-muted">'+s.type+(s.delay_hours?' — delay '+s.delay_hours+'h':'')+'</small></button>';
+        });
+        stepsDiv.innerHTML = html;
+    })
+    .catch(function(e) {
+        stepsDiv.innerHTML = '<div class="alert alert-danger">Errore: ' + esc(e.message) + '</div>';
+    });
+}
+
+function doRollback(stepOrder) {
+    if (!confirm(stepOrder === 0
+        ? 'Riportare il partecipante a PENDING? Le esecuzioni schedulate verranno cancellate.'
+        : 'Riportare il partecipante allo step ' + stepOrder + '? Le esecuzioni da questo step in poi verranno eliminate e lo step verrà ri-schedulato.'))
+        return;
+
+    fetch('/api/participants/' + _rollbackParticipantId + '/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step_order: stepOrder || null })
+    })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Errore'); });
+        return r.json();
+    })
+    .then(function(data) {
+        bootstrap.Modal.getInstance(document.getElementById('rollbackModal')).hide();
+        alert(data.message);
+        location.reload();
     })
     .catch(function(e) { alert('Errore: ' + e.message); });
 }

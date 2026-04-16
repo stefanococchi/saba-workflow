@@ -1115,6 +1115,13 @@ function saveWorkflow() {
                 };
             }
 
+            // For email steps, store has_landing in skip_conditions
+            if (step.type === 'email') {
+                stepData.skip_conditions = {
+                    has_landing: !!step.config.has_landing
+                };
+            }
+
             // For export_data steps, store config in skip_conditions
             if (step.type === 'export_data') {
                 stepData.skip_conditions = {

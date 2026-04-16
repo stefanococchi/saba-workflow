@@ -19,8 +19,9 @@ APScheduler==3.10.4
 # JWT tokens
 PyJWT==2.8.0
 
-# Email
+# Email (Microsoft Graph)
 Jinja2==3.1.2
+msal==1.31.0
 
 # HTTP client
 requests==2.31.0
