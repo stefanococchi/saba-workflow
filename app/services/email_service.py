@@ -1,3 +1,6 @@
+import base64
+import re
+import uuid
 import msal
 import requests
 from jinja2 import Template
@@ -8,6 +11,12 @@ logger = logging.getLogger(__name__)
 
 # Cache token a livello di modulo
 _token_cache = msal.SerializableTokenCache()
+
+# Regex per trovare immagini base64 nell'HTML
+_BASE64_IMG_RE = re.compile(
+    r'(<img\s[^>]*?)src="data:image/([\w+]+);base64,([^"]+)"',
+    re.IGNORECASE
+)
 
 
 class EmailService:
@@ -25,7 +34,6 @@ class EmailService:
             token_cache=_token_cache,
         )
 
-        # Prova prima dalla cache
         result = app.acquire_token_silent(
             scopes=["https://graph.microsoft.com/.default"],
             account=None,
@@ -43,9 +51,53 @@ class EmailService:
         raise Exception(f"Impossibile ottenere token Microsoft Graph: {error}")
 
     @staticmethod
+    def _extract_inline_images(body_html):
+        """
+        Estrae immagini base64 dall'HTML e le converte in allegati inline (cid:).
+
+        Returns:
+            tuple: (html_modificato, lista_allegati)
+        """
+        attachments = []
+
+        def replace_match(match):
+            prefix = match.group(1)
+            img_type = match.group(2)
+            b64_data = match.group(3)
+
+            content_id = str(uuid.uuid4()).replace('-', '')[:16]
+
+            # Mappa tipo immagine → content type
+            content_type_map = {
+                'png': 'image/png',
+                'jpeg': 'image/jpeg',
+                'jpg': 'image/jpeg',
+                'gif': 'image/gif',
+                'webp': 'image/webp',
+                'svg+xml': 'image/svg+xml',
+            }
+            content_type = content_type_map.get(img_type.lower(), f'image/{img_type}')
+
+            attachments.append({
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": f"image_{content_id}.{img_type.split('+')[0]}",
+                "contentType": content_type,
+                "contentBytes": b64_data,
+                "contentId": content_id,
+                "isInline": True
+            })
+
+            return f'{prefix}src="cid:{content_id}"'
+
+        modified_html = _BASE64_IMG_RE.sub(replace_match, body_html)
+        return modified_html, attachments
+
+    @staticmethod
     def send_email(to_email, subject, body_html, body_text=None, from_email=None, from_name=None):
         """
-        Invia email tramite Microsoft Graph API
+        Invia email tramite Microsoft Graph API.
+        Le immagini base64 nel body vengono convertite automaticamente
+        in allegati inline (cid:).
 
         Args:
             to_email: destinatario
@@ -68,6 +120,9 @@ class EmailService:
 
             token = EmailService._get_access_token()
 
+            # Estrai immagini base64 e converti in allegati inline
+            body_html, inline_attachments = EmailService._extract_inline_images(body_html)
+
             # Payload Microsoft Graph
             message = {
                 "message": {
@@ -87,6 +142,10 @@ class EmailService:
                 "saveToSentItems": "true"
             }
 
+            # Aggiungi allegati inline se presenti
+            if inline_attachments:
+                message["message"]["attachments"] = inline_attachments
+
             # Invio tramite Graph API
             response = requests.post(
                 f"https://graph.microsoft.com/v1.0/users/{from_email}/sendMail",
@@ -99,7 +158,7 @@ class EmailService:
             )
 
             if response.status_code == 202:
-                logger.info(f"Email inviata a {to_email}: {subject}")
+                logger.info(f"Email inviata a {to_email}: {subject} ({len(inline_attachments)} immagini inline)")
                 return True
             else:
                 logger.error(

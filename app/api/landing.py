@@ -35,20 +35,26 @@ def show_landing_page(token):
             return render_template('landing/already_completed.html',
                                  participant=participant)
         
-        # Ottieni step: da current_step del partecipante, o da step_id nel token, o primo step con landing
-        current_step = participant.current_step
+        # Ottieni step con landing page configurata
+        # Priorità: primo step con landing_html/gjs_data nel workflow
+        current_step = None
+        for s in sorted(participant.workflow.steps, key=lambda x: x.order):
+            if s.landing_html or s.landing_gjs_data:
+                current_step = s
+                break
+
+        # Fallback: step dal token o current_step del partecipante
         if not current_step and payload.get('step_id'):
             current_step = db.get(WorkflowStep, payload['step_id'])
         if not current_step:
-            # Fallback: primo step del workflow con landing configurata
-            for s in participant.workflow.steps:
-                if s.landing_html or s.landing_gjs_data or s.landing_page_config:
-                    current_step = s
-                    break
+            current_step = participant.current_step
+
+        logger.info(f"Landing page: participant={participant.id}, step={current_step.id if current_step else None}, "
+                     f"has_html={bool(current_step.landing_html) if current_step else False}")
 
         landing_config = current_step.landing_page_config if current_step else {}
 
-        # Se lo step ha un design custom (config template o GrapesJS), usa quello
+        # Se lo step ha un design custom (HTML pre-generato), usa quello
         landing_html = None
         if current_step and current_step.landing_html:
             landing_html = current_step.landing_html
