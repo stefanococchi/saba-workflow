@@ -36,7 +36,6 @@ class Config:
     
     # Upload
     MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20 MB
-    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app', 'static', 'uploads')
 
     # Landing page URL base
     LANDING_BASE_URL = os.getenv('LANDING_BASE_URL', 'http://localhost:5001/landing')

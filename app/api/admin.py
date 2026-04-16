@@ -1,10 +1,8 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus
+from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage
 from sqlalchemy import func
-from werkzeug.utils import secure_filename
 import logging
-import os
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -321,10 +319,19 @@ def executions_monitor():
 
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
 
+MIME_TYPES = {
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'svg': 'image/svg+xml',
+}
+
 
 @admin_bp.route('/upload-image', methods=['POST'])
 def upload_image():
-    """Upload immagine per landing page (logo o sfondo)"""
+    """Upload immagine per landing page (logo o sfondo) — salva in DB"""
     if 'file' not in request.files:
         return jsonify({'error': 'Nessun file selezionato'}), 400
 
@@ -336,12 +343,27 @@ def upload_image():
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         return jsonify({'error': f'Formato non consentito. Usa: {", ".join(ALLOWED_IMAGE_EXTENSIONS)}'}), 400
 
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    os.makedirs(upload_folder, exist_ok=True)
-
     filename = f"{uuid.uuid4().hex}.{ext}"
-    filepath = os.path.join(upload_folder, filename)
-    file.save(filepath)
+    image = UploadedImage(
+        filename=filename,
+        mime_type=MIME_TYPES.get(ext, 'application/octet-stream'),
+        data=file.read()
+    )
+    db.add(image)
+    db.commit()
 
-    url = url_for('static', filename=f'uploads/{filename}', _external=False)
+    url = url_for('admin.serve_image', image_id=image.id, _external=False)
     return jsonify({'url': url}), 200
+
+
+@admin_bp.route('/images/<int:image_id>')
+def serve_image(image_id):
+    """Serve immagine dal DB"""
+    image = db.query(UploadedImage).get(image_id)
+    if not image:
+        return 'Not found', 404
+    return Response(
+        image.data,
+        mimetype=image.mime_type,
+        headers={'Cache-Control': 'public, max-age=31536000'}
+    )

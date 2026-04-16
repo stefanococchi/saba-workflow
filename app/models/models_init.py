@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, LargeBinary, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from app import Base
 
@@ -217,3 +217,17 @@ class ActivityLog(Base):
 
     def __repr__(self):
         return f'<ActivityLog {self.id}: {self.event_type}>'
+
+
+class UploadedImage(Base):
+    """Immagine caricata (logo, sfondo landing page) salvata in DB"""
+    __tablename__ = 'uploaded_images'
+
+    id = Column(Integer, primary_key=True)
+    filename = Column(String(255), nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<UploadedImage {self.id}: {self.filename}>'
