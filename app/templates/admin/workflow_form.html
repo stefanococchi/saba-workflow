@@ -251,15 +251,15 @@
         <div class="d-flex">
             <div class="wizard-step active" data-step="1">
                 <div class="wizard-step-circle"><i class="bi bi-info-circle"></i></div>
-                <div><small>Basic Info</small></div>
+                <div><small>{{ t.basic_info }}</small></div>
             </div>
             <div class="wizard-step" data-step="2">
                 <div class="wizard-step-circle"><i class="bi bi-diagram-3"></i></div>
-                <div><small>Build Steps</small></div>
+                <div><small>{{ t.build_steps }}</small></div>
             </div>
             <div class="wizard-step" data-step="3">
                 <div class="wizard-step-circle"><i class="bi bi-check-circle"></i></div>
-                <div><small>Review</small></div>
+                <div><small>{{ t.review }}</small></div>
             </div>
         </div>
     </div>
@@ -268,41 +268,41 @@
     <div class="wizard-content" data-step="1">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Workflow Information</h5>
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> {{ t.workflow_info }}</h5>
             </div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label for="workflowName" class="form-label">Workflow Name *</label>
+                        <label for="workflowName" class="form-label">{{ t.workflow_name }}</label>
                         <input type="text" class="form-control" id="workflowName" 
                                placeholder="e.g., Welcome Campaign" required
                                value="{% if workflow %}{{ workflow.name }}{% endif %}">
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label for="workflowStatus" class="form-label">Status</label>
+                        <label for="workflowStatus" class="form-label">{{ t.status }}</label>
                         <select class="form-select" id="workflowStatus">
-                            <option value="draft" selected>Draft</option>
-                            <option value="active">Active</option>
-                            <option value="paused">Paused</option>
+                            <option value="draft" selected>{{ t.draft }}</option>
+                            <option value="active">{{ t.active }}</option>
+                            <option value="paused">{{ t.paused }}</option>
                         </select>
                     </div>
                 </div>
                 <div class="row">
                     <div class="col-md-8 mb-3">
                         <label for="sabaformEvent" class="form-label">
-                            <i class="bi bi-link-45deg"></i> Collega a Evento Saba Form
+                            <i class="bi bi-link-45deg"></i> {{ t.link_sabaform }}
                         </label>
                         <select class="form-select" id="sabaformEvent" onchange="onEventSelected()">
-                            <option value="">-- Nessun evento collegato --</option>
+                            <option value="">{{ t.no_event_linked }}</option>
                         </select>
-                        <div class="form-text">I partecipanti dell'evento potranno essere importati nel workflow.</div>
+                        <div class="form-text">{{ t.get('sabaform_import_help', "I partecipanti dell'evento potranno essere importati nel workflow.") }}</div>
                     </div>
                     <div class="col-md-4 mb-3 d-flex align-items-end gap-2">
                         <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadSabaformEvents()">
-                            <i class="bi bi-arrow-clockwise"></i> Ricarica
+                            <i class="bi bi-arrow-clockwise"></i> {{ t.refresh }}
                         </button>
                         <button type="button" class="btn btn-primary btn-sm" id="btnImportWizard" onclick="importFromEvent()" style="display:none">
-                            <i class="bi bi-download"></i> Importa partecipanti
+                            <i class="bi bi-download"></i> {{ t.import_participants }}
                         </button>
                     </div>
                 </div>
@@ -311,42 +311,42 @@
                 <div id="importedParticipantsArea" style="display:none" class="mb-3">
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center py-2">
-                            <h6 class="mb-0"><i class="bi bi-people"></i> Partecipanti importati (<span id="importedCount">0</span>)</h6>
+                            <h6 class="mb-0"><i class="bi bi-people"></i> {{ t.imported_participants }} (<span id="importedCount">0</span>)</h6>
                             <button type="button" class="btn btn-outline-danger btn-sm" onclick="clearImportedParticipants()">
-                                <i class="bi bi-trash"></i> Svuota
+                                <i class="bi bi-trash"></i> {{ t.clear }}
                             </button>
                         </div>
                         <div class="card-body p-0" style="max-height:250px;overflow-y:auto">
                             <table class="table table-sm mb-0" style="font-size:13px">
-                                <thead><tr><th>Nome</th><th>Cognome</th><th>Email</th><th>Telefono</th></tr></thead>
+                                <thead><tr><th>{{ t.name }}</th><th>{{ t.last_name }}</th><th>{{ t.email }}</th><th>{{ t.phone }}</th></tr></thead>
                                 <tbody id="importedParticipantsBody"></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
                 <div class="mb-3">
-                    <label for="workflowDescription" class="form-label">Description</label>
+                    <label for="workflowDescription" class="form-label">{{ t.description }}</label>
                     <textarea class="form-control" id="workflowDescription" rows="3"
                               placeholder="Describe what this workflow does...">{% if workflow %}{{ workflow.description }}{% endif %}</textarea>
                 </div>
                 <div class="mb-3">
                     <label for="tokenExpiration" class="form-label">
-                        <i class="bi bi-clock-history"></i> Scadenza link landing (ore)
+                        <i class="bi bi-clock-history"></i> {{ t.landing_expiry }}
                     </label>
                     <input type="number" class="form-control" id="tokenExpiration"
                            value="{% if workflow and workflow.token_expiration_hours %}{{ workflow.token_expiration_hours }}{% endif %}"
                            placeholder="Default globale se vuoto" min="1">
-                    <div class="form-text">Dopo quante ore i link nelle email non saranno più validi. Lascia vuoto per usare il default di sistema.</div>
+                    <div class="form-text">{{ t.landing_expiry_help }}</div>
                 </div>
             </div>
         </div>
         
         <div class="mt-3 d-flex justify-content-between">
             <button type="button" class="btn btn-success" onclick="saveWorkflow()">
-                <i class="bi bi-save"></i> Salva
+                <i class="bi bi-save"></i> {{ t.save }}
             </button>
             <button type="button" class="btn btn-primary" onclick="nextStep()">
-                Next: Build Steps <i class="bi bi-arrow-right"></i>
+                {{ t.next }}: {{ t.build_steps }} <i class="bi bi-arrow-right"></i>
             </button>
         </div>
     </div>
@@ -357,15 +357,15 @@
             <!-- Step Palette -->
             <div class="col-md-3">
                 <div class="step-palette">
-                    <h6 class="mb-3"><i class="bi bi-plus-circle"></i> Add Step</h6>
+                    <h6 class="mb-3"><i class="bi bi-plus-circle"></i> {{ t.add_step }}</h6>
                     
                     <!-- WORKING STEPS -->
                     <div class="step-template" draggable="true" data-type="email"
                          style="background: #f7f7f7; border-color: #bbb;">
                         <i class="bi bi-envelope"></i>
                         <div>
-                            <strong>Email Step</strong><br>
-                            <small>Send email to participants</small>
+                            <strong>{{ t.email_step }}</strong><br>
+                            <small>{{ t.send_email }}</small>
                         </div>
                     </div>
                     
@@ -373,8 +373,8 @@
                          style="background: #efefef; border-color: #999;">
                         <i class="bi bi-calendar-check"></i>
                         <div>
-                            <strong>Wait Until</strong><br>
-                            <small>Wait until specific date/time</small>
+                            <strong>{{ t.wait_until }}</strong><br>
+                            <small>{{ t.wait_until_desc }}</small>
                         </div>
                     </div>
 
@@ -382,8 +382,8 @@
                          style="background: #eaeaea; border-color: #888;">
                         <i class="bi bi-trophy"></i>
                         <div>
-                            <strong>Goal Check</strong><br>
-                            <small>Verify goal reached</small>
+                            <strong>{{ t.goal_check }}</strong><br>
+                            <small>{{ t.goal_check_desc }}</small>
                         </div>
                     </div>
 
@@ -391,21 +391,21 @@
                          style="background: #f0f0f0; border-color: #a3a3a3;">
                         <i class="bi bi-download"></i>
                         <div>
-                            <strong>Export Data</strong><br>
-                            <small>Export to CSV/Excel</small>
+                            <strong>{{ t.export_data }}</strong><br>
+                            <small>{{ t.export_data_desc }}</small>
                         </div>
                     </div>
 
                     <!-- ADVANCED STEPS -->
                     <hr class="my-3">
-                    <small class="text-muted d-block mb-2">Funzionalità avanzate</small>
+                    <small class="text-muted d-block mb-2">{{ t.advanced_features }}</small>
 
                     <div class="step-template" draggable="true" data-type="condition"
                          style="background: #e5e5e5; border-color: #777;">
                         <i class="bi bi-shuffle"></i>
                         <div>
-                            <strong>Condition</strong><br>
-                            <small>Branch based on data</small>
+                            <strong>{{ t.condition_step }}</strong><br>
+                            <small>{{ t.condition_desc }}</small>
                         </div>
                     </div>
 
@@ -413,8 +413,8 @@
                          style="background: #ededed; border-color: #9a9a9a;">
                         <i class="bi bi-ui-checks"></i>
                         <div>
-                            <strong>Survey</strong><br>
-                            <small>Multi-question form</small>
+                            <strong>{{ t.survey_step }}</strong><br>
+                            <small>{{ t.survey_desc }}</small>
                         </div>
                     </div>
 
@@ -422,8 +422,8 @@
                          style="background: #f4f4f4; border-color: #b0b0b0;">
                         <i class="bi bi-file-earmark-arrow-up"></i>
                         <div>
-                            <strong>File Upload</strong><br>
-                            <small>Request documents</small>
+                            <strong>{{ t.file_upload }}</strong><br>
+                            <small>{{ t.file_upload_desc }}</small>
                         </div>
                     </div>
 
@@ -431,19 +431,19 @@
                          style="background: #e8e8e8; border-color: #808080;">
                         <i class="bi bi-person-check"></i>
                         <div>
-                            <strong>Human Approval</strong><br>
-                            <small>Wait for manual approval</small>
+                            <strong>{{ t.human_approval }}</strong><br>
+                            <small>{{ t.human_approval_desc }}</small>
                         </div>
                     </div>
                 </div>
                 
                 <div class="mt-3 p-3 bg-light rounded">
-                    <h6><i class="bi bi-lightbulb"></i> Tips</h6>
+                    <h6><i class="bi bi-lightbulb"></i> {{ t.tips }}</h6>
                     <small class="text-muted">
-                        • Drag steps from here to canvas<br>
-                        • <strong>Drag steps in canvas to reorder</strong><br>
-                        • Use ↑↓ buttons to move steps<br>
-                        • Click to edit details
+                        • {{ t.drag_steps_hint }}<br>
+                        • <strong>{{ t.reorder_hint }}</strong><br>
+                        • {{ t.arrows_hint }}<br>
+                        • {{ t.click_edit_hint }}
                     </small>
                 </div>
             </div>
@@ -453,29 +453,28 @@
                 <div class="workflow-canvas" id="workflowCanvas">
                     <div class="empty-canvas" id="emptyState">
                         <i class="bi bi-diagram-3"></i>
-                        <h4>Start Building Your Workflow</h4>
-                        <p class="text-muted">Drag steps from the left panel to start</p>
+                        <h4>{{ t.start_building }}</h4>
+                        <p class="text-muted">{{ t.drag_steps_start }}</p>
                     </div>
                 </div>
                 
                 <!-- Feature Info Panel -->
                 <div class="alert alert-info mt-3">
-                    <i class="bi bi-info-circle"></i> <strong>Note:</strong> 
-                    Trascina gli step nel canvas per costruire il workflow.
+                    <i class="bi bi-info-circle"></i> {{ t.drag_steps_start }}
                 </div>
             </div>
         </div>
         
         <div class="mt-3 d-flex justify-content-between">
             <button type="button" class="btn btn-outline-secondary" onclick="prevStep()">
-                <i class="bi bi-arrow-left"></i> Back
+                <i class="bi bi-arrow-left"></i> {{ t.back }}
             </button>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-success" onclick="saveWorkflow()">
-                    <i class="bi bi-save"></i> Salva
+                    <i class="bi bi-save"></i> {{ t.save }}
                 </button>
                 <button type="button" class="btn btn-primary" onclick="nextStep()">
-                    Next: Review <i class="bi bi-arrow-right"></i>
+                    {{ t.next }}: {{ t.review }} <i class="bi bi-arrow-right"></i>
                 </button>
             </div>
         </div>
@@ -485,7 +484,7 @@
     <div class="wizard-content" data-step="3" style="display: none;">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-check-circle"></i> Review & Save</h5>
+                <h5 class="mb-0"><i class="bi bi-check-circle"></i> {{ t.review_save }}</h5>
             </div>
             <div class="card-body">
                 <div id="reviewContent"></div>
@@ -494,10 +493,10 @@
         
         <div class="mt-3 d-flex justify-content-between">
             <button type="button" class="btn btn-outline-secondary" onclick="prevStep()">
-                <i class="bi bi-arrow-left"></i> Back
+                <i class="bi bi-arrow-left"></i> {{ t.back }}
             </button>
             <button type="button" class="btn btn-success btn-lg" onclick="saveWorkflow()">
-                <i class="bi bi-save"></i> Save Workflow
+                <i class="bi bi-save"></i> {{ t.save_workflow }}
             </button>
         </div>
     </div>
@@ -508,13 +507,13 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit Step</h5>
+                <h5 class="modal-title">{{ t.edit_step }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="stepEditContent"></div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="saveStepEdit()">Save Changes</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cancel }}</button>
+                <button type="button" class="btn btn-primary" onclick="saveStepEdit()">{{ t.save_changes }}</button>
             </div>
         </div>
     </div>
