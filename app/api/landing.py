@@ -30,6 +30,14 @@ def show_landing_page(token):
             return render_template('landing/error.html',
                                  error='Partecipante non trovato'), 404
         
+        # Log landing page opened
+        log_activity(
+            workflow_id=participant.workflow_id,
+            event_type='landing_opened',
+            description=f'{participant.full_name or participant.email} opened landing page',
+            participant_id=participant.id,
+        )
+
         # Verifica se già completato
         if participant.status == ParticipantStatus.COMPLETED:
             return render_template('landing/already_completed.html',

@@ -425,7 +425,7 @@ def participant_timeline(participant_id):
         if not participant:
             return jsonify({'error': 'Not found'}), 404
 
-        USER_EVENTS = {'form_submitted', 'survey_submitted', 'unsubscribed'}
+        USER_EVENTS = {'form_submitted', 'survey_submitted', 'unsubscribed', 'landing_opened'}
 
         events = []
 
@@ -452,7 +452,7 @@ def participant_timeline(participant_id):
             }
 
             events.append({
-                'timestamp': ts.isoformat() if ts else None,
+                'timestamp': ts.isoformat() + 'Z' if ts else None,
                 'category': 'system',
                 'event_type': ex.status.value if ex.status else 'unknown',
                 'description': f'{step_name}',
@@ -476,6 +476,7 @@ def participant_timeline(participant_id):
                 'status_changed': 'arrow-repeat',
                 'condition_evaluated': 'shuffle',
                 'simulation': 'eye',
+                'landing_opened': 'box-arrow-up-right',
             }
             color_map = {
                 'workflow_started': '#0d6efd',
@@ -485,10 +486,11 @@ def participant_timeline(participant_id):
                 'status_changed': '#6c757d',
                 'condition_evaluated': '#6c757d',
                 'simulation': '#ffc107',
+                'landing_opened': '#ff9800',
             }
 
             events.append({
-                'timestamp': a.created_at.isoformat() if a.created_at else None,
+                'timestamp': a.created_at.isoformat() + 'Z' if a.created_at else None,
                 'category': category,
                 'event_type': a.event_type,
                 'description': a.description or a.event_type,
@@ -506,8 +508,8 @@ def participant_timeline(participant_id):
                 'name': participant.full_name or participant.email,
                 'email': participant.email,
                 'status': participant.status.value,
-                'enrolled_at': participant.enrolled_at.isoformat() if participant.enrolled_at else None,
-                'completed_at': participant.completed_at.isoformat() if participant.completed_at else None,
+                'enrolled_at': participant.enrolled_at.isoformat() + 'Z' if participant.enrolled_at else None,
+                'completed_at': participant.completed_at.isoformat() + 'Z' if participant.completed_at else None,
             },
             'events': events
         })

@@ -287,6 +287,8 @@
                                         <span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> Simulazione</span>
                                     {% elif a.event_type == 'survey_submitted' %}
                                         <span class="badge bg-info"><i class="bi bi-ui-checks"></i> Survey</span>
+                                    {% elif a.event_type == 'landing_opened' %}
+                                        <span class="badge" style="background:#ff9800;color:#fff"><i class="bi bi-box-arrow-up-right"></i> Landing Opened</span>
                                     {% elif a.event_type == 'unsubscribed' %}
                                         <span class="badge bg-danger"><i class="bi bi-person-x"></i> Disiscritto</span>
                                     {% else %}
