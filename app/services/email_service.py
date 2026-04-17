@@ -224,6 +224,16 @@ class EmailService:
             # Renderizza body
             body_html = EmailService.render_template(step.body_template, context)
 
+            # Se c'è landing_url ma non è nel template, aggiungilo in fondo
+            if landing_url and '{{ landing_url }}' not in (step.body_template or '') and '{{landing_url}}' not in (step.body_template or '') and landing_url not in body_html:
+                body_html += (
+                    '<div style="text-align:center; margin-top:30px; padding:20px;">'
+                    f'<a href="{landing_url}" style="background-color:#795548; color:#fff; '
+                    'padding:14px 32px; text-decoration:none; border-radius:8px; '
+                    'font-size:16px; font-weight:600; display:inline-block;">'
+                    'Accedi alla pagina</a></div>'
+                )
+
             # Renderizza subject
             subject = EmailService.render_template(step.subject, context)
 
