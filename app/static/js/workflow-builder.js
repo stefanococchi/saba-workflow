@@ -105,14 +105,15 @@ function getDefaultConfig(type) {
             if_false: 'continue',
             if_false_step: 0,
         },
-        engagement_tracker: {
-            track_opens: true,
-            track_clicks: true,
-            action_on_open: 'mark_engaged',
-            action_on_no_open_hours: 48
-        },
         survey: {
-            questions: []
+            subject: '',
+            body_template: '',
+            delay_hours: 0,
+            question: 'Come valuti l\'evento?',
+            response_type: 'choices',
+            choices: ['Ottimo', 'Buono', 'Sufficiente', 'Scarso'],
+            scale_max: 5,
+            allow_comment: true
         },
         file_upload: {
             required_files: [],
@@ -284,6 +285,16 @@ function renderStepSummary(step) {
                 return 'continua';
             }
             return `<p class="mb-0"><strong>Se</strong> ${step.config.field || '?'} ${opLabel}${valPart}<br><small class="text-success">✓ ${descAction(step.config.if_true, step.config.if_true_step)}</small> · <small class="text-danger">✗ ${descAction(step.config.if_false, step.config.if_false_step)}</small></p>`;
+        case 'survey':
+            const surveyQ = step.config.question || 'Non configurata';
+            const surveyType = step.config.response_type === 'scale'
+                ? `Scala 1-${step.config.scale_max || 5}`
+                : (step.config.choices || []).join(' / ');
+            return `
+                <p class="mb-1"><strong>Subject:</strong> ${step.config.subject || '<em class="text-muted">Not set</em>'}</p>
+                <p class="mb-1"><strong>Domanda:</strong> ${surveyQ}</p>
+                <p class="mb-0"><strong>Risposte:</strong> ${surveyType}</p>
+            `;
         case 'export_data':
             const exportTo = step.config.send_to || 'No email configured';
             return `<p class="mb-0"><strong>Export:</strong> ${step.config.format.toUpperCase()} → ${exportTo}</p>`;
@@ -300,8 +311,8 @@ function editStep(index) {
     const content = document.getElementById('stepEditContent');
     
     content.innerHTML = renderStepEditForm(step, index);
-    // Init Summernote for email body
-    if (step.type === 'email') {
+    // Init Summernote for email/survey body
+    if (step.type === 'email' || step.type === 'survey') {
         initEmailEditor();
     }
     // Populate landing field dropdowns for goal_check and condition steps
@@ -600,6 +611,85 @@ function renderStepEditForm(step, index) {
                     </small>
                 </div>
             `;
+        case 'survey':
+            var choicesHtml = (step.config.choices || []).map(function(c, i) {
+                return `<div class="input-group input-group-sm mb-1">
+                    <input type="text" class="form-control survey-choice-input" value="${c}" placeholder="Opzione ${i+1}">
+                    <button class="btn btn-outline-danger" type="button" onclick="this.closest('.input-group').remove()"><i class="bi bi-x"></i></button>
+                </div>`;
+            }).join('');
+            return common + `
+                <div class="mb-3">
+                    <label class="form-label">Oggetto email</label>
+                    <input type="text" class="form-control" id="editSurveySubject"
+                           value="${step.config.subject || ''}"
+                           placeholder="es. Dicci cosa ne pensi!">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Corpo email</label>
+                    <div class="variable-bar">
+                        <span class="variable-bar-label"><i class="bi bi-plus-circle"></i> Inserisci:</span>
+                        <span class="variable-badge" onclick="insertVariable('workflow_name')" title="Il nome del workflow/evento">
+                            <i class="bi bi-bookmark"></i> Nome Evento
+                        </span>
+                        <span class="variable-badge" onclick="insertVariable('participant.first_name')" title="Nome del partecipante">
+                            <i class="bi bi-person"></i> Nome
+                        </span>
+                        <span class="variable-badge" onclick="insertVariable('participant.last_name')" title="Cognome del partecipante">
+                            <i class="bi bi-person"></i> Cognome
+                        </span>
+                        <span class="variable-badge" onclick="insertVariable('participant.full_name')" title="Nome completo del partecipante">
+                            <i class="bi bi-person-badge"></i> Nome Completo
+                        </span>
+                    </div>
+                    <textarea class="form-control template-editor" id="editEmailBody" rows="8"
+                              placeholder="Scrivi il testo introduttivo dell'email. I bottoni del survey verranno aggiunti automaticamente in fondo.">${step.config.body_template || ''}</textarea>
+                    <div class="form-text">I bottoni di risposta al survey verranno aggiunti automaticamente sotto questo testo.</div>
+                </div>
+                <hr>
+                <h6><i class="bi bi-ui-checks"></i> Configurazione Survey</h6>
+                <div class="mb-3">
+                    <label class="form-label">Domanda</label>
+                    <input type="text" class="form-control" id="editSurveyQuestion"
+                           value="${step.config.question || ''}"
+                           placeholder="es. Come valuti l'evento?">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Tipo di risposta</label>
+                    <select class="form-select" id="editSurveyResponseType" onchange="toggleSurveyType()">
+                        <option value="choices" ${step.config.response_type === 'choices' ? 'selected' : ''}>Scelta singola (bottoni)</option>
+                        <option value="scale" ${step.config.response_type === 'scale' ? 'selected' : ''}>Scala numerica</option>
+                    </select>
+                </div>
+                <div id="surveyChoicesSection" ${step.config.response_type === 'scale' ? 'style="display:none"' : ''}>
+                    <label class="form-label">Opzioni</label>
+                    <div id="surveyChoicesList">${choicesHtml}</div>
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-1" onclick="addSurveyChoice()">
+                        <i class="bi bi-plus"></i> Aggiungi opzione
+                    </button>
+                </div>
+                <div id="surveyScaleSection" ${step.config.response_type !== 'scale' ? 'style="display:none"' : ''}>
+                    <div class="mb-3">
+                        <label class="form-label">Scala da 1 a</label>
+                        <select class="form-select" id="editSurveyScaleMax">
+                            <option value="5" ${(step.config.scale_max || 5) == 5 ? 'selected' : ''}>5</option>
+                            <option value="10" ${(step.config.scale_max || 5) == 10 ? 'selected' : ''}>10</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="editSurveyAllowComment"
+                           ${step.config.allow_comment ? 'checked' : ''}>
+                    <label class="form-check-label" for="editSurveyAllowComment">
+                        Abilita campo commento/feedback
+                    </label>
+                </div>
+                <div class="mb-3 mt-3">
+                    <label class="form-label">Ritardo (ore dopo lo step precedente)</label>
+                    <input type="number" class="form-control" id="editSurveyDelay"
+                           value="${step.config.delay_hours || 0}" min="0">
+                </div>
+            `;
         case 'export_data':
             return common + `
                 <div class="mb-3">
@@ -697,6 +787,24 @@ function insertVariable(variable) {
             $editor.summernote('editor.insertText', tag);
         }
     }
+}
+
+// Survey helpers
+function toggleSurveyType() {
+    var type = document.getElementById('editSurveyResponseType').value;
+    document.getElementById('surveyChoicesSection').style.display = type === 'choices' ? 'block' : 'none';
+    document.getElementById('surveyScaleSection').style.display = type === 'scale' ? 'block' : 'none';
+}
+
+function addSurveyChoice() {
+    var list = document.getElementById('surveyChoicesList');
+    var count = list.querySelectorAll('.input-group').length + 1;
+    var div = document.createElement('div');
+    div.className = 'input-group input-group-sm mb-1';
+    div.innerHTML = '<input type="text" class="form-control survey-choice-input" value="" placeholder="Opzione ' + count + '">' +
+        '<button class="btn btn-outline-danger" type="button" onclick="this.closest(\'.input-group\').remove()"><i class="bi bi-x"></i></button>';
+    list.appendChild(div);
+    div.querySelector('input').focus();
 }
 
 // Update wait until form based on type
@@ -865,6 +973,24 @@ function saveStepEdit() {
             step.config.if_true_step = parseInt(document.getElementById('editConditionIfTrueStep')?.value) || 0;
             step.config.if_false = document.getElementById('editConditionIfFalse').value;
             step.config.if_false_step = parseInt(document.getElementById('editConditionIfFalseStep')?.value) || 0;
+            break;
+        case 'survey':
+            step.config.subject = document.getElementById('editSurveySubject').value;
+            const $surveyBody = $('#editEmailBody');
+            step.config.body_template = ($surveyBody.length && $.fn.summernote) ? $surveyBody.summernote('code') : document.getElementById('editEmailBody').value;
+            step.config.delay_hours = parseInt(document.getElementById('editSurveyDelay').value);
+            step.config.question = document.getElementById('editSurveyQuestion').value;
+            step.config.response_type = document.getElementById('editSurveyResponseType').value;
+            step.config.scale_max = parseInt(document.getElementById('editSurveyScaleMax')?.value || 5);
+            step.config.allow_comment = document.getElementById('editSurveyAllowComment').checked;
+            // Collect choices
+            var choiceInputs = document.querySelectorAll('.survey-choice-input');
+            step.config.choices = [];
+            choiceInputs.forEach(function(input) {
+                var v = input.value.trim();
+                if (v) step.config.choices.push(v);
+            });
+            destroyEmailEditor();
             break;
         case 'export_data':
             step.config.format = document.getElementById('editExportFormat').value;
@@ -1119,6 +1245,17 @@ function saveWorkflow() {
             if (step.type === 'email') {
                 stepData.skip_conditions = {
                     has_landing: !!step.config.has_landing
+                };
+            }
+
+            // For survey steps, store config in skip_conditions
+            if (step.type === 'survey') {
+                stepData.skip_conditions = {
+                    question: step.config.question,
+                    response_type: step.config.response_type,
+                    choices: step.config.choices,
+                    scale_max: step.config.scale_max,
+                    allow_comment: step.config.allow_comment
                 };
             }
 

@@ -263,6 +263,8 @@ class SchedulerService:
                         execution.error_message = "Condition evaluation failed"
                     _db().commit()
                     return  # Don't use default next-step logic
+                elif step.type.value == 'survey':
+                    success = SchedulerService._execute_survey_step(participant, step, execution)
                 elif step.type.value == 'export_data':
                     # Export data step
                     success = SchedulerService._execute_export_data_step(participant, step, execution)
@@ -313,6 +315,79 @@ class SchedulerService:
             logger.error(f"✗ Email error: {str(e)}")
             return False
     
+    @staticmethod
+    def _execute_survey_step(participant, step, execution):
+        """Execute survey step — sends email with survey buttons"""
+        try:
+            from flask import current_app
+            from urllib.parse import quote
+            config = step.skip_conditions or {}
+            question = config.get('question', '')
+            response_type = config.get('response_type', 'choices')
+            choices = config.get('choices', [])
+            scale_max = config.get('scale_max', 5)
+
+            # Generate survey URL (reuse token system)
+            base_url = current_app.config.get('LANDING_BASE_URL', 'http://localhost:5001/landing')
+            survey_base = base_url.rsplit('/landing', 1)[0] + '/survey'
+            token = TokenService.generate_landing_url(participant)
+            token_value = token.rsplit('/', 1)[-1]  # Extract just the token
+            survey_url = f"{survey_base}/{token_value}"
+
+            # Build choices list
+            if response_type == 'scale':
+                choices = [str(i) for i in range(1, scale_max + 1)]
+
+            # Build survey buttons HTML
+            buttons_html = '<div style="text-align:center; margin-top:30px; padding:20px; background:#f5f5f5; border-radius:12px;">'
+            if question:
+                buttons_html += f'<p style="font-size:18px; font-weight:600; margin-bottom:20px; color:#333;">{question}</p>'
+
+            for choice in choices:
+                encoded = quote(choice)
+                btn_url = f"{survey_url}?choice={encoded}"
+                buttons_html += (
+                    f'<a href="{btn_url}" style="display:inline-block; margin:6px; '
+                    f'padding:12px 28px; background-color:#795548; color:#fff; '
+                    f'text-decoration:none; border-radius:8px; font-size:15px; '
+                    f'font-weight:500;">{choice}</a> '
+                )
+
+            buttons_html += '</div>'
+
+            # Render email body with context
+            context = {
+                'participant': {
+                    'name': participant.full_name,
+                    'first_name': participant.first_name,
+                    'last_name': participant.last_name,
+                    'email': participant.email,
+                },
+                'landing_url': '',
+                'workflow_name': participant.workflow.name,
+                'evento': participant.workflow.name,
+                'step_name': step.name,
+            }
+            if participant.workflow.config:
+                context.update(participant.workflow.config)
+
+            body_html = EmailService.render_template(step.body_template or '', context)
+            body_html += buttons_html
+
+            subject = EmailService.render_template(step.subject or '', context)
+
+            success = EmailService.send_email(
+                to_email=participant.email,
+                subject=subject,
+                body_html=body_html
+            )
+
+            return success
+
+        except Exception as e:
+            logger.error(f"✗ Survey error: {str(e)}")
+            return False
+
     @staticmethod
     def _execute_goal_check_step(participant, step, execution):
         """

@@ -23,6 +23,7 @@ class StepType(str, Enum):
     GOAL_CHECK = 'goal_check'
     EXPORT_DATA = 'export_data'
     CONDITION = 'condition'
+    SURVEY = 'survey'
 
 
 class ParticipantStatus(str, Enum):

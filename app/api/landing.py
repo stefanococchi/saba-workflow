@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, render_template, render_template_string
 from markupsafe import Markup
 from app import db_session as db
-from app.models import Participant, WorkflowStep, ParticipantStatus
+from app.models import Participant, WorkflowStep, ParticipantStatus, StepType
 from app.services import TokenService, SchedulerService
 from app.services.activity_service import log_activity
 from datetime import datetime
@@ -206,3 +206,62 @@ def unsubscribe_from_landing(token):
         db.rollback()
         logger.error(f"Errore unsubscribe landing: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@landing_bp.route('/survey/<token>', methods=['GET'])
+def show_survey(token):
+    """Click dall'email — salva la risposta immediatamente e mostra Grazie"""
+    try:
+        payload = TokenService.verify_token(token)
+        if not payload:
+            return render_template('landing/error.html', error='Link scaduto o non valido'), 400
+
+        participant = db.get(Participant, payload['participant_id'])
+        if not participant:
+            return render_template('landing/error.html', error='Partecipante non trovato'), 404
+
+        choice = request.args.get('choice', '')
+        if not choice:
+            return render_template('landing/error.html', error='Nessuna risposta selezionata'), 400
+
+        # Trova lo step survey per il nome
+        survey_step = None
+        for s in sorted(participant.workflow.steps, key=lambda x: x.order):
+            if s.type == StepType.SURVEY:
+                survey_step = s
+                break
+        if not survey_step and payload.get('step_id'):
+            survey_step = db.get(WorkflowStep, payload['step_id'])
+
+        step_name = survey_step.name if survey_step else 'survey'
+        config = survey_step.skip_conditions or {} if survey_step else {}
+        question = config.get('question', '')
+
+        # Salva risposta immediatamente
+        existing = dict(participant.collected_data or {})
+        existing[f'survey_{step_name}'] = choice
+        participant.collected_data = existing
+        participant.last_interaction = datetime.utcnow()
+
+        db.commit()
+
+        logger.info(f"Survey response from participant {participant.id}: {choice}")
+
+        log_activity(
+            workflow_id=participant.workflow_id,
+            event_type='survey_submitted',
+            description=f'{participant.full_name or participant.email} ha risposto al survey: {choice}',
+            participant_id=participant.id,
+            details={'step': step_name, 'choice': choice, 'question': question}
+        )
+
+        return render_template('landing/survey_thanks.html',
+                             participant=participant,
+                             workflow=participant.workflow,
+                             question=question,
+                             choice=choice)
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore survey: {str(e)}")
+        return render_template('landing/error.html', error='Errore salvataggio risposta'), 500
