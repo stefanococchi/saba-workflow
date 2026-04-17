@@ -449,15 +449,27 @@ function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt
 
 function isFileObj(val) { return val && typeof val === 'object' && val.filename && val.data; }
 
+function downloadFile(filename, mime, el) {
+    var b64 = el.getAttribute('data-b64');
+    // b64 is a data URL like "data:image/png;base64,..."
+    var link = document.createElement('a');
+    link.href = b64;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 function renderFileValue(val, mode) {
     if (!isFileObj(val)) return esc(val);
     var mime = val.mime || '';
-    if (mode === 'cell') return '<i class="bi bi-paperclip"></i> ' + esc(val.filename);
+    if (mode === 'cell') return '<a href="#" onclick="downloadFile(\'' + esc(val.filename) + '\',\'' + esc(val.mime) + '\',this);return false;" data-b64="' + val.data + '" style="text-decoration:none"><i class="bi bi-paperclip"></i> ' + esc(val.filename) + '</a>';
     // modal mode — show preview for images, download link for others
+    var dlBtn = ' <a href="#" onclick="downloadFile(\'' + esc(val.filename) + '\',\'' + esc(val.mime) + '\',this);return false;" data-b64="' + val.data + '" class="btn btn-sm btn-outline-primary mt-1"><i class="bi bi-download"></i> Scarica</a>';
     if (mime.startsWith('image/')) {
-        return '<div><img src="' + val.data + '" style="max-width:100%;max-height:200px;border-radius:8px;margin-bottom:4px" alt="' + esc(val.filename) + '"><br><small>' + esc(val.filename) + '</small></div>';
+        return '<div><img src="' + val.data + '" style="max-width:100%;max-height:200px;border-radius:8px;margin-bottom:4px" alt="' + esc(val.filename) + '"><br><small>' + esc(val.filename) + '</small><br>' + dlBtn + '</div>';
     }
-    return '<a href="' + val.data + '" download="' + esc(val.filename) + '" class="btn btn-sm btn-outline-primary"><i class="bi bi-download"></i> ' + esc(val.filename) + '</a>';
+    return '<div><i class="bi bi-file-earmark"></i> ' + esc(val.filename) + '<br>' + dlBtn + '</div>';
 }
 
 // =============================================
