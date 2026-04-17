@@ -1,11 +1,11 @@
 {% extends "admin/base.html" %}
 
-{% block title %}Workflows - Saba Workflow Admin{% endblock %}
-{% block page_title %}Gestione Workflows{% endblock %}
+{% block title %}{{ t.workflows }} - Saba Workflow Admin{% endblock %}
+{% block page_title %}{{ t.workflow_management }}{% endblock %}
 
 {% block page_actions %}
 <a href="{{ url_for('admin.workflow_create') }}" class="btn btn-primary">
-    <i class="bi bi-plus-circle"></i> Nuovo Workflow
+    <i class="bi bi-plus-circle"></i> {{ t.new_workflow }}
 </a>
 {% endblock %}
 
@@ -15,20 +15,20 @@
     <div class="card-body">
         <form method="get" class="row g-3">
             <div class="col-md-4">
-                <label class="form-label">Filtra per stato</label>
+                <label class="form-label">{{ t.filter_by_status }}</label>
                 <select name="status" class="form-select" onchange="this.form.submit()">
-                    <option value="">Tutti</option>
-                    <option value="draft" {% if current_filter == 'draft' %}selected{% endif %}>Draft</option>
-                    <option value="active" {% if current_filter == 'active' %}selected{% endif %}>Attivo</option>
-                    <option value="paused" {% if current_filter == 'paused' %}selected{% endif %}>Pausa</option>
-                    <option value="completed" {% if current_filter == 'completed' %}selected{% endif %}>Completato</option>
-                    <option value="archived" {% if current_filter == 'archived' %}selected{% endif %}>Archiviato</option>
+                    <option value="">{{ t.all }}</option>
+                    <option value="draft" {% if current_filter == 'draft' %}selected{% endif %}>{{ t.draft }}</option>
+                    <option value="active" {% if current_filter == 'active' %}selected{% endif %}>{{ t.active }}</option>
+                    <option value="paused" {% if current_filter == 'paused' %}selected{% endif %}>{{ t.paused }}</option>
+                    <option value="completed" {% if current_filter == 'completed' %}selected{% endif %}>{{ t.completed }}</option>
+                    <option value="archived" {% if current_filter == 'archived' %}selected{% endif %}>{{ t.archived }}</option>
                 </select>
             </div>
             <div class="col-md-4 d-flex align-items-end">
                 {% if current_filter %}
                 <a href="{{ url_for('admin.workflows_list') }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-x-circle"></i> Rimuovi filtro
+                    <i class="bi bi-x-circle"></i> {{ t.remove_filter }}
                 </a>
                 {% endif %}
             </div>
@@ -45,13 +45,13 @@
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Nome</th>
-                        <th>Descrizione</th>
-                        <th>Stato</th>
-                        <th>Steps</th>
-                        <th>Partecipanti</th>
-                        <th>Creato</th>
-                        <th>Azioni</th>
+                        <th>{{ t.name }}</th>
+                        <th>{{ t.description }}</th>
+                        <th>{{ t.status }}</th>
+                        <th>{{ t.steps }}</th>
+                        <th>{{ t.participants }}</th>
+                        <th>{{ t.created }}</th>
+                        <th>{{ t.actions }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -59,7 +59,7 @@
                     <tr>
                         <td><strong>#{{ workflow.id }}</strong></td>
                         <td>
-                            <a href="{{ url_for('admin.workflow_detail', workflow_id=workflow.id) }}" 
+                            <a href="{{ url_for('admin.workflow_detail', workflow_id=workflow.id) }}"
                                class="text-decoration-none">
                                 <strong>{{ workflow.name }}</strong>
                             </a>
@@ -68,7 +68,7 @@
                             {% if workflow.description %}
                             <small class="text-muted">{{ workflow.description[:80] }}...</small>
                             {% else %}
-                            <small class="text-muted fst-italic">Nessuna descrizione</small>
+                            <small class="text-muted fst-italic">{{ t.no_description }}</small>
                             {% endif %}
                         </td>
                         <td>
@@ -92,20 +92,20 @@
                         </td>
                         <td class="table-actions">
                             <div class="btn-group btn-group-sm" role="group">
-                                <a href="{{ url_for('admin.workflow_detail', workflow_id=workflow.id) }}" 
-                                   class="btn btn-outline-primary" 
-                                   title="Dettagli">
+                                <a href="{{ url_for('admin.workflow_detail', workflow_id=workflow.id) }}"
+                                   class="btn btn-outline-primary"
+                                   title="{{ t.details }}">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="{{ url_for('admin.workflow_edit', workflow_id=workflow.id) }}" 
-                                   class="btn btn-outline-warning" 
-                                   title="Modifica">
+                                <a href="{{ url_for('admin.workflow_edit', workflow_id=workflow.id) }}"
+                                   class="btn btn-outline-warning"
+                                   title="{{ t.edit }}">
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% if workflow.status.value != 'active' %}
-                                <button class="btn btn-outline-danger" 
-                                        onclick="deleteWorkflow({{ workflow.id }})" 
-                                        title="Elimina">
+                                <button class="btn btn-outline-danger"
+                                        onclick="deleteWorkflow({{ workflow.id }})"
+                                        title="{{ t.delete }}">
                                     <i class="bi bi-trash"></i>
                                 </button>
                                 {% endif %}
@@ -119,16 +119,16 @@
         {% else %}
         <div class="empty-state">
             <i class="bi bi-inbox"></i>
-            <h4>Nessun workflow trovato</h4>
+            <h4>{{ t.no_workflows_found }}</h4>
             {% if current_filter %}
-            <p>Nessun workflow con stato "{{ current_filter }}"</p>
+            <p>{{ t.no_workflows_found }} ({{ current_filter }})</p>
             <a href="{{ url_for('admin.workflows_list') }}" class="btn btn-outline-secondary">
-                Mostra tutti
+                {{ t.show_all }}
             </a>
             {% else %}
-            <p>Inizia creando il tuo primo workflow</p>
+            <p>{{ t.start_creating }}</p>
             <a href="{{ url_for('admin.workflow_create') }}" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> Crea Workflow
+                <i class="bi bi-plus-circle"></i> {{ t.new_workflow }}
             </a>
             {% endif %}
         </div>
@@ -140,24 +140,24 @@
 {% block extra_js %}
 <script>
 function deleteWorkflow(id) {
-    if (!confirm('Sei sicuro di voler eliminare questo workflow?')) {
+    if (!confirm('{{ t.confirm_delete_workflow }}')) {
         return;
     }
-    
-    fetch(`/api/workflows/${id}`, {
+
+    fetch('/api/workflows/' + id, {
         method: 'DELETE'
     })
-    .then(response => response.json())
-    .then(data => {
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
         if (data.message) {
-            alert('Workflow eliminato');
+            alert('{{ t.workflow_deleted }}');
             location.reload();
         } else {
-            alert('Errore: ' + (data.error || 'Impossibile eliminare'));
+            alert('{{ t.error }}: ' + (data.error || '{{ t.cannot_delete }}'));
         }
     })
-    .catch(error => {
-        alert('Errore: ' + error);
+    .catch(function(error) {
+        alert('{{ t.error }}: ' + error);
     });
 }
 </script>
