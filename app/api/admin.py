@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from app import db_session as db
 from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage
 from sqlalchemy import func
+from datetime import datetime
 import logging
 import uuid
 
@@ -51,38 +52,48 @@ def dashboard():
             ActivityLog.created_at.desc()
         ).limit(10).all()
 
-        # Engagement per workflow attivi
-        active_workflows = db.query(Workflow).filter_by(status=WorkflowStatus.ACTIVE).all()
-        engagement_data = []
-        for wf in active_workflows:
-            total_p = len(wf.participants)
-            if total_p == 0:
-                continue
-            completed = sum(1 for p in wf.participants if p.status == ParticipantStatus.COMPLETED)
-            in_progress = sum(1 for p in wf.participants if p.status == ParticipantStatus.IN_PROGRESS)
-            pending = sum(1 for p in wf.participants if p.status == ParticipantStatus.PENDING)
-            bounced = sum(1 for p in wf.participants if p.status == ParticipantStatus.BOUNCED)
-            unsubscribed = sum(1 for p in wf.participants if p.status == ParticipantStatus.UNSUBSCRIBED)
-            emails_sent = db.query(Execution).join(Participant).filter(
-                Participant.workflow_id == wf.id,
-                Execution.status == ExecutionStatus.SENT
-            ).count()
-            emails_failed = db.query(Execution).join(Participant).filter(
-                Participant.workflow_id == wf.id,
-                Execution.status == ExecutionStatus.FAILED
-            ).count()
-            engagement_data.append({
-                'workflow': wf,
-                'total': total_p,
-                'completed': completed,
-                'in_progress': in_progress,
-                'pending': pending,
-                'bounced': bounced,
-                'unsubscribed': unsubscribed,
-                'emails_sent': emails_sent,
-                'emails_failed': emails_failed,
-                'completion_rate': round(completed / total_p * 100) if total_p else 0,
-            })
+        # Engagement — all workflows with participants
+        all_workflows = db.query(Workflow).all()
+        engagement_workflows = [wf for wf in all_workflows if len(wf.participants) > 0]
+
+        # Build participant list with last event info
+        engagement_participants = []
+        for wf in engagement_workflows:
+            for p in wf.participants:
+                last_activity = db.query(ActivityLog).filter_by(
+                    participant_id=p.id
+                ).order_by(ActivityLog.created_at.desc()).first()
+                last_execution = db.query(Execution).filter_by(
+                    participant_id=p.id
+                ).order_by(Execution.created_at.desc()).first()
+
+                # Pick most recent event
+                last_event = None
+                last_event_time = None
+                if last_activity and last_execution:
+                    if (last_activity.created_at or datetime.min) > (last_execution.created_at or datetime.min):
+                        last_event = last_activity.event_type
+                        last_event_time = last_activity.created_at
+                    else:
+                        last_event = last_execution.status.value if last_execution.status else 'unknown'
+                        last_event_time = last_execution.sent_at or last_execution.created_at
+                elif last_activity:
+                    last_event = last_activity.event_type
+                    last_event_time = last_activity.created_at
+                elif last_execution:
+                    last_event = last_execution.status.value if last_execution.status else 'unknown'
+                    last_event_time = last_execution.sent_at or last_execution.created_at
+
+                engagement_participants.append({
+                    'id': p.id,
+                    'name': p.full_name or p.email,
+                    'email': p.email,
+                    'status': p.status.value,
+                    'workflow_id': wf.id,
+                    'workflow_name': wf.name,
+                    'last_event': last_event,
+                    'last_event_time': last_event_time,
+                })
 
         return render_template('admin/dashboard.html',
                              stats=stats,
@@ -92,7 +103,8 @@ def dashboard():
                              participant_status_data=participant_status_data,
                              recent_workflows=recent_workflows,
                              recent_activities=recent_activities,
-                             engagement_data=engagement_data)
+                             engagement_workflows=engagement_workflows,
+                             engagement_participants=engagement_participants)
 
     except Exception as e:
         logger.error(f"Errore dashboard: {str(e)}")
@@ -106,7 +118,8 @@ def dashboard():
                              participant_status_data=[],
                              recent_workflows=[],
                              recent_activities=[],
-                             engagement_data=[])
+                             engagement_workflows=[],
+                             engagement_participants=[])
 
 
 @admin_bp.route('/workflows')
@@ -402,3 +415,103 @@ def serve_image(image_id):
         mimetype=image.mime_type,
         headers={'Cache-Control': 'public, max-age=31536000'}
     )
+
+
+@admin_bp.route('/api/participant/<int:participant_id>/timeline')
+def participant_timeline(participant_id):
+    """Timeline eventi per un partecipante"""
+    try:
+        participant = db.get(Participant, participant_id)
+        if not participant:
+            return jsonify({'error': 'Not found'}), 404
+
+        USER_EVENTS = {'form_submitted', 'survey_submitted', 'unsubscribed'}
+
+        events = []
+
+        # Execution records
+        executions = db.query(Execution).filter_by(participant_id=participant_id).all()
+        for ex in executions:
+            step_name = ex.step.name if ex.step else '?'
+            step_type = ex.step.type.value if ex.step else '?'
+            ts = ex.sent_at or ex.scheduled_at or ex.created_at
+
+            icon = 'envelope'
+            if step_type == 'survey':
+                icon = 'ui-checks'
+            elif step_type == 'goal_check':
+                icon = 'trophy'
+            elif step_type == 'condition':
+                icon = 'shuffle'
+            elif step_type == 'wait_until':
+                icon = 'calendar-check'
+
+            status_colors = {
+                'SCHEDULED': '#6c757d', 'SENT': '#198754', 'FAILED': '#dc3545',
+                'SKIPPED': '#ffc107', 'COMPLETED': '#0d6efd'
+            }
+
+            events.append({
+                'timestamp': ts.isoformat() if ts else None,
+                'category': 'system',
+                'event_type': ex.status.value if ex.status else 'unknown',
+                'description': f'{step_name}',
+                'step_type': step_type,
+                'icon': icon,
+                'color': status_colors.get(ex.status.value if ex.status else '', '#999'),
+                'error': ex.error_message,
+                'details': ex.result_data
+            })
+
+        # ActivityLog records
+        activities = db.query(ActivityLog).filter_by(participant_id=participant_id).all()
+        for a in activities:
+            category = 'user' if a.event_type in USER_EVENTS else 'system'
+
+            icon_map = {
+                'workflow_started': 'play-circle',
+                'form_submitted': 'check2-square',
+                'survey_submitted': 'ui-checks',
+                'unsubscribed': 'person-x',
+                'status_changed': 'arrow-repeat',
+                'condition_evaluated': 'shuffle',
+                'simulation': 'eye',
+            }
+            color_map = {
+                'workflow_started': '#0d6efd',
+                'form_submitted': '#198754',
+                'survey_submitted': '#0dcaf0',
+                'unsubscribed': '#dc3545',
+                'status_changed': '#6c757d',
+                'condition_evaluated': '#6c757d',
+                'simulation': '#ffc107',
+            }
+
+            events.append({
+                'timestamp': a.created_at.isoformat() if a.created_at else None,
+                'category': category,
+                'event_type': a.event_type,
+                'description': a.description or a.event_type,
+                'icon': icon_map.get(a.event_type, 'info-circle'),
+                'color': color_map.get(a.event_type, '#999'),
+                'details': a.details
+            })
+
+        # Sort by timestamp desc
+        events.sort(key=lambda e: e['timestamp'] or '', reverse=True)
+
+        return jsonify({
+            'participant': {
+                'id': participant.id,
+                'name': participant.full_name or participant.email,
+                'email': participant.email,
+                'status': participant.status.value,
+                'enrolled_at': participant.enrolled_at.isoformat() if participant.enrolled_at else None,
+                'completed_at': participant.completed_at.isoformat() if participant.completed_at else None,
+            },
+            'events': events
+        })
+
+    except Exception as e:
+        logger.error(f"Errore timeline: {str(e)}")
+        return jsonify({'error': str(e)}), 500

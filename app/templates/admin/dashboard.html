@@ -134,11 +134,22 @@
                                 <td>{{ workflow.participants|length }}</td>
                                 <td>{{ workflow.created_at|localtime }}</td>
                                 <td class="table-actions">
-                                    <a href="{{ url_for('admin.workflow_detail', workflow_id=workflow.id) }}" 
+                                    {% if workflow.status.value == 'active' %}
+                                    <button class="btn btn-sm btn-outline-danger" title="Pause"
+                                            onclick="toggleWorkflow({{ workflow.id }}, 'paused')">
+                                        <i class="bi bi-pause-circle"></i>
+                                    </button>
+                                    {% elif workflow.status.value in ['draft', 'paused'] %}
+                                    <button class="btn btn-sm btn-outline-success" title="Activate"
+                                            onclick="toggleWorkflow({{ workflow.id }}, 'active')">
+                                        <i class="bi bi-play-circle"></i>
+                                    </button>
+                                    {% endif %}
+                                    <a href="{{ url_for('admin.workflow_detail', workflow_id=workflow.id) }}"
                                        class="btn btn-sm btn-outline-primary" title="Dettagli">
                                         <i class="bi bi-eye"></i>
                                     </a>
-                                    <a href="{{ url_for('admin.workflow_edit', workflow_id=workflow.id) }}" 
+                                    <a href="{{ url_for('admin.workflow_edit', workflow_id=workflow.id) }}"
                                        class="btn btn-sm btn-outline-warning" title="Modifica">
                                         <i class="bi bi-pencil"></i>
                                     </a>
@@ -165,56 +176,48 @@
 <div class="row mt-4">
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-graph-up"></i> Engagement Tracker</h5>
+                <select class="form-select form-select-sm" style="width:auto" id="engagementFilter" onchange="filterEngagement()">
+                    <option value="">All Workflows</option>
+                    {% for wf in engagement_workflows %}
+                    <option value="{{ wf.id }}">{{ wf.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
-            <div class="card-body">
-                {% if engagement_data %}
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
+            <div class="card-body p-0">
+                {% if engagement_participants %}
+                <div class="table-responsive" style="max-height:400px; overflow-y:auto">
+                    <table class="table table-hover table-sm mb-0" id="engagementTable">
+                        <thead style="position:sticky;top:0;background:var(--md-surface-container, #f5f5f5);z-index:1">
                             <tr>
+                                <th>Participant</th>
                                 <th>Workflow</th>
-                                <th class="text-center">Partecipanti</th>
-                                <th class="text-center">Email Inviate</th>
-                                <th class="text-center">Completati</th>
-                                <th class="text-center">In Corso</th>
-                                <th class="text-center">In Attesa</th>
-                                <th class="text-center">Bounced</th>
-                                <th class="text-center">Disiscritti</th>
-                                <th class="text-center">Fallite</th>
-                                <th>Completamento</th>
+                                <th>Status</th>
+                                <th>Last Event</th>
+                                <th>When</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for e in engagement_data %}
-                            <tr>
+                            {% for p in engagement_participants %}
+                            <tr class="engagement-row" data-wf="{{ p.workflow_id }}">
                                 <td>
-                                    <a href="{{ url_for('admin.workflow_detail', workflow_id=e.workflow.id) }}" style="text-decoration:none">
-                                        <strong>{{ e.workflow.name }}</strong>
+                                    <a href="#" onclick="showTimeline({{ p.id }}, '{{ p.name|e }}');return false;" style="text-decoration:none;font-weight:600">
+                                        {{ p.name }}
                                     </a>
+                                    <br><small class="text-muted">{{ p.email }}</small>
                                 </td>
-                                <td class="text-center">{{ e.total }}</td>
-                                <td class="text-center">{{ e.emails_sent }}</td>
-                                <td class="text-center"><span class="badge bg-success">{{ e.completed }}</span></td>
-                                <td class="text-center"><span class="badge bg-primary">{{ e.in_progress }}</span></td>
-                                <td class="text-center"><span class="badge bg-secondary">{{ e.pending }}</span></td>
-                                <td class="text-center">
-                                    {% if e.bounced > 0 %}<span class="badge bg-warning text-dark">{{ e.bounced }}</span>{% else %}—{% endif %}
-                                </td>
-                                <td class="text-center">
-                                    {% if e.unsubscribed > 0 %}<span class="badge bg-danger">{{ e.unsubscribed }}</span>{% else %}—{% endif %}
-                                </td>
-                                <td class="text-center">
-                                    {% if e.emails_failed > 0 %}<span class="badge bg-danger">{{ e.emails_failed }}</span>{% else %}—{% endif %}
+                                <td><small>{{ p.workflow_name }}</small></td>
+                                <td><span class="status-badge status-{{ p.status }}">{{ p.status }}</span></td>
+                                <td>
+                                    {% if p.last_event %}
+                                    <small>{{ p.last_event }}</small>
+                                    {% else %}—{% endif %}
                                 </td>
                                 <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="progress flex-grow-1" style="height:8px; min-width:80px">
-                                            <div class="progress-bar bg-success" style="width:{{ e.completion_rate }}%"></div>
-                                        </div>
-                                        <small class="fw-bold" style="min-width:35px">{{ e.completion_rate }}%</small>
-                                    </div>
+                                    {% if p.last_event_time %}
+                                    <small>{{ p.last_event_time|localtime }}</small>
+                                    {% else %}—{% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -222,11 +225,26 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="empty-state">
+                <div class="empty-state p-4">
                     <i class="bi bi-graph-up"></i>
-                    <p>Nessun workflow attivo con partecipanti</p>
+                    <p>No participants yet</p>
                 </div>
                 {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Timeline Modal -->
+<div class="modal fade" id="timelineModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="timelineModalTitle">Participant Timeline</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="timelineModalBody" style="max-height:70vh;overflow-y:auto">
+                <p class="text-muted text-center">Loading...</p>
             </div>
         </div>
     </div>
@@ -267,6 +285,8 @@
                                         <span class="badge bg-primary"><i class="bi bi-play-circle"></i> Avviato</span>
                                     {% elif a.event_type == 'simulation' %}
                                         <span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> Simulazione</span>
+                                    {% elif a.event_type == 'survey_submitted' %}
+                                        <span class="badge bg-info"><i class="bi bi-ui-checks"></i> Survey</span>
                                     {% elif a.event_type == 'unsubscribed' %}
                                         <span class="badge bg-danger"><i class="bi bi-person-x"></i> Disiscritto</span>
                                     {% else %}
@@ -354,5 +374,96 @@ new Chart(participantStatusCtx, {
         }
     }
 });
+
+// Engagement filter
+function filterEngagement() {
+    var wfId = document.getElementById('engagementFilter').value;
+    document.querySelectorAll('.engagement-row').forEach(function(row) {
+        row.style.display = (!wfId || row.dataset.wf === wfId) ? '' : 'none';
+    });
+}
+
+// Timeline modal
+function showTimeline(participantId, name) {
+    var modal = new bootstrap.Modal(document.getElementById('timelineModal'));
+    document.getElementById('timelineModalTitle').textContent = 'Timeline — ' + name;
+    document.getElementById('timelineModalBody').innerHTML = '<p class="text-muted text-center"><i class="bi bi-hourglass-split"></i> Loading...</p>';
+    modal.show();
+
+    fetch('/admin/api/participant/' + participantId + '/timeline')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                document.getElementById('timelineModalBody').innerHTML = '<p class="text-danger">' + data.error + '</p>';
+                return;
+            }
+            renderTimeline(data);
+        })
+        .catch(function() {
+            document.getElementById('timelineModalBody').innerHTML = '<p class="text-danger">Connection error</p>';
+        });
+}
+
+function renderTimeline(data) {
+    var body = document.getElementById('timelineModalBody');
+    var p = data.participant;
+    var events = data.events;
+
+    var html = '<div class="d-flex justify-content-between align-items-center mb-3 pb-2" style="border-bottom:1px solid var(--md-outline-variant, #ddd)">';
+    html += '<div><strong>' + esc(p.name) + '</strong><br><small class="text-muted">' + esc(p.email) + '</small></div>';
+    html += '<span class="status-badge status-' + p.status + '">' + p.status + '</span>';
+    html += '</div>';
+
+    if (events.length === 0) {
+        html += '<p class="text-muted text-center">No events recorded</p>';
+        body.innerHTML = html;
+        return;
+    }
+
+    html += '<div class="timeline-list">';
+    events.forEach(function(ev) {
+        var catBadge = ev.category === 'user'
+            ? '<span class="badge" style="background:#e3f2fd;color:#1565c0;font-size:10px"><i class="bi bi-person"></i> USER</span>'
+            : '<span class="badge" style="background:#f5f5f5;color:#666;font-size:10px"><i class="bi bi-gear"></i> SYSTEM</span>';
+
+        var ts = ev.timestamp ? new Date(ev.timestamp).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+
+        html += '<div class="d-flex align-items-start gap-3 py-2" style="border-bottom:1px solid #f0f0f0">';
+        html += '<div style="min-width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:' + (ev.color || '#999') + '20;color:' + (ev.color || '#999') + ';font-size:16px"><i class="bi bi-' + (ev.icon || 'circle') + '"></i></div>';
+        html += '<div class="flex-grow-1">';
+        html += '<div class="d-flex justify-content-between align-items-center">';
+        html += '<div><strong style="font-size:13px">' + esc(ev.event_type) + '</strong> ' + catBadge + '</div>';
+        html += '<small class="text-muted">' + ts + '</small>';
+        html += '</div>';
+        html += '<div style="font-size:13px;color:#555">' + esc(ev.description) + '</div>';
+        if (ev.error) html += '<div style="font-size:12px;color:#dc3545"><i class="bi bi-exclamation-triangle"></i> ' + esc(ev.error) + '</div>';
+        if (ev.details && typeof ev.details === 'object') {
+            var detailStr = Object.entries(ev.details).map(function(kv) { return kv[0] + ': ' + kv[1]; }).join(', ');
+            if (detailStr) html += '<div style="font-size:11px;color:#999">' + esc(detailStr) + '</div>';
+        }
+        html += '</div></div>';
+    });
+    html += '</div>';
+
+    body.innerHTML = html;
+}
+
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function toggleWorkflow(id, newStatus) {
+    var action = newStatus === 'ACTIVE' ? 'activate' : 'pause';
+    if (!confirm('Are you sure you want to ' + action + ' this workflow?')) return;
+
+    fetch('/api/workflows/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+    })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Error'); });
+        location.reload();
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
 </script>
 {% endblock %}
