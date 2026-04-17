@@ -1,11 +1,11 @@
 {% extends "admin/base.html" %}
 
-{% block title %}Users - Saba Workflow Admin{% endblock %}
-{% block page_title %}<i class="bi bi-people"></i> Users{% endblock %}
+{% block title %}{{ t.users }} - Saba Workflow Admin{% endblock %}
+{% block page_title %}<i class="bi bi-people"></i> {{ t.users }}{% endblock %}
 
 {% block page_actions %}
 <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createUserModal">
-    <i class="bi bi-plus-circle"></i> New User
+    <i class="bi bi-plus-circle"></i> {{ t.new_user }}
 </button>
 {% endblock %}
 
@@ -17,12 +17,12 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        <th>Username</th>
-                        <th>Email</th>
-                        <th>Role</th>
-                        <th>Assigned Workflows</th>
-                        <th>Created</th>
-                        <th>Actions</th>
+                        <th>{{ t.username }}</th>
+                        <th>{{ t.email }}</th>
+                        <th>{{ t.role }}</th>
+                        <th>{{ t.assigned_workflows }}</th>
+                        <th>{{ t.created }}</th>
+                        <th>{{ t.actions }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -32,14 +32,14 @@
                         <td>{{ user.email or '—' }}</td>
                         <td>
                             {% if user.is_superuser %}
-                            <span class="badge bg-warning text-dark">Superuser</span>
+                            <span class="badge bg-warning text-dark">{{ t.superuser }}</span>
                             {% else %}
-                            <span class="badge bg-secondary">User</span>
+                            <span class="badge bg-secondary">{{ t.user }}</span>
                             {% endif %}
                         </td>
                         <td>
                             {% if user.is_superuser %}
-                            <small class="text-muted">All workflows</small>
+                            <small class="text-muted">{{ t.all_workflows_access }}</small>
                             {% else %}
                             <div class="d-flex flex-wrap gap-1">
                                 {% for wf in user.workflows %}
@@ -50,7 +50,7 @@
                                 {% endfor %}
                                 <div class="dropdown d-inline">
                                     <button class="btn btn-outline-primary btn-sm py-0 px-1" style="font-size:11px"
-                                            data-bs-toggle="dropdown" title="Assign workflow">
+                                            data-bs-toggle="dropdown" title="{{ t.assign_workflow }}">
                                         <i class="bi bi-plus"></i>
                                     </button>
                                     <ul class="dropdown-menu" style="font-size:13px">
@@ -74,7 +74,7 @@
                         <td>
                             {% if not user.is_superuser or user.id != session.get('user_id') %}
                             <form method="POST" action="{{ url_for('admin.user_delete', user_id=user.id) }}"
-                                  onsubmit="return confirm('Delete user {{ user.username }}?')" style="display:inline">
+                                  onsubmit="return confirm('{{ t.confirm_delete_user }} {{ user.username }}?')" style="display:inline">
                                 <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete">
                                     <i class="bi bi-trash"></i>
                                 </button>
@@ -89,7 +89,7 @@
         {% else %}
         <div class="empty-state">
             <i class="bi bi-people"></i>
-            <p>No users yet</p>
+            <p>{{ t.no_users_yet }}</p>
         </div>
         {% endif %}
     </div>
@@ -100,31 +100,31 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-person-plus"></i> New User</h5>
+                <h5 class="modal-title"><i class="bi bi-person-plus"></i> {{ t.new_user }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('admin.user_create') }}">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Username</label>
+                        <label class="form-label">{{ t.username }}</label>
                         <input type="text" class="form-control" name="username" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Email (optional)</label>
+                        <label class="form-label">{{ t.email_optional }}</label>
                         <input type="email" class="form-control" name="email">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Password</label>
+                        <label class="form-label">{{ t.password }}</label>
                         <input type="password" class="form-control" name="password" required minlength="6">
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="is_superuser" id="isSuperuser">
-                        <label class="form-check-label" for="isSuperuser">Superuser (full access)</label>
+                        <label class="form-check-label" for="isSuperuser">{{ t.superuser_full_access }}</label>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Create</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cancel }}</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> {{ t.create }}</button>
                 </div>
             </form>
         </div>
