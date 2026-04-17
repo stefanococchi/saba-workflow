@@ -1,7 +1,7 @@
 {% extends "admin/base.html" %}
 
-{% block title %}Monitor Esecuzioni - Saba Workflow Admin{% endblock %}
-{% block page_title %}Monitor Esecuzioni{% endblock %}
+{% block title %}{{ t.executions }} - Saba Workflow Admin{% endblock %}
+{% block page_title %}{{ t.executions }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -55,9 +55,9 @@
     <div class="card-body">
         <div class="filter-bar">
             <div>
-                <label class="form-label" style="font-size:12px;margin-bottom:4px">Workflow</label>
+                <label class="form-label" style="font-size:12px;margin-bottom:4px">{{ t.workflow }}</label>
                 <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="applyFilters()">
-                    <option value="">Tutti</option>
+                    <option value="">{{ t.all }}</option>
                     {% for workflow in workflows %}
                     <option value="{{ workflow.name }}" {% if current_workflow_id == workflow.id %}selected{% endif %}>
                         {{ workflow.name }}
@@ -66,20 +66,20 @@
                 </select>
             </div>
             <div class="search-input" style="flex:1;min-width:200px">
-                <label class="form-label" style="font-size:12px;margin-bottom:4px">Cerca</label>
+                <label class="form-label" style="font-size:12px;margin-bottom:4px">{{ t.search }}</label>
                 <i class="bi bi-search"></i>
                 <input type="text" class="form-control form-control-sm" id="filterSearch"
-                       placeholder="Partecipante, step, descrizione..." oninput="applyFilters()">
+                       placeholder="{{ t.participant }}, step, {{ t.description }}..." oninput="applyFilters()">
             </div>
             <div class="d-flex align-items-end gap-2">
                 <button class="btn btn-outline-primary btn-sm" onclick="toggleColumns()">
-                    <i class="bi bi-layout-three-columns"></i> Colonne
+                    <i class="bi bi-layout-three-columns"></i> {{ t.columns }}
                 </button>
                 <button class="btn btn-outline-primary btn-sm" onclick="toggleQueryBuilder()">
-                    <i class="bi bi-funnel"></i> Query
+                    <i class="bi bi-funnel"></i> {{ t.query }}
                 </button>
                 <button class="btn btn-primary btn-sm" onclick="exportCSV()">
-                    <i class="bi bi-download"></i> Esporta CSV
+                    <i class="bi bi-download"></i> {{ t.export_csv }}
                 </button>
                 <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
                     <i class="bi bi-arrow-clockwise"></i>
@@ -89,12 +89,12 @@
 
         <!-- Event type chips -->
         <div class="status-chips mt-3">
-            <div class="status-chip active" data-status="all" onclick="filterByType('all')">Tutti <span id="countAll" class="counter-badge ms-1">0</span></div>
-            <div class="status-chip" data-status="form_submitted" onclick="filterByType('form_submitted')">Form compilato</div>
-            <div class="status-chip" data-status="email_failed" onclick="filterByType('email_failed')">Email fallita</div>
-            <div class="status-chip" data-status="simulation" onclick="filterByType('simulation')">Simulazione</div>
-            <div class="status-chip" data-status="workflow_started" onclick="filterByType('workflow_started')">Workflow avviato</div>
-            <div class="status-chip" data-status="status_changed" onclick="filterByType('status_changed')">Stato cambiato</div>
+            <div class="status-chip active" data-status="all" onclick="filterByType('all')">{{ t.all }} <span id="countAll" class="counter-badge ms-1">0</span></div>
+            <div class="status-chip" data-status="form_submitted" onclick="filterByType('form_submitted')">{{ t.form_submitted }}</div>
+            <div class="status-chip" data-status="email_failed" onclick="filterByType('email_failed')">Email Failed</div>
+            <div class="status-chip" data-status="simulation" onclick="filterByType('simulation')">{{ t.simulation }}</div>
+            <div class="status-chip" data-status="workflow_started" onclick="filterByType('workflow_started')">{{ t.workflow_started }}</div>
+            <div class="status-chip" data-status="status_changed" onclick="filterByType('status_changed')">{{ t.status_changed }}</div>
         </div>
 
         <!-- Column toggles -->
@@ -105,10 +105,10 @@
         <!-- Query builder -->
         <div id="queryBuilder" class="query-builder" style="display:none">
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <strong style="font-size:13px"><i class="bi bi-funnel"></i> Query avanzata</strong>
+                <strong style="font-size:13px"><i class="bi bi-funnel"></i> {{ t.advanced_query }}</strong>
                 <div>
-                    <button class="btn btn-sm btn-outline-primary" onclick="addQueryRow()"><i class="bi bi-plus"></i> Condizione</button>
-                    <button class="btn btn-sm btn-primary" onclick="applyFilters()"><i class="bi bi-play"></i> Esegui</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="addQueryRow()"><i class="bi bi-plus"></i> {{ t.condition }}</button>
+                    <button class="btn btn-sm btn-primary" onclick="applyFilters()"><i class="bi bi-play"></i> {{ t.execute }}</button>
                 </div>
             </div>
             <div id="queryRows"></div>
@@ -130,8 +130,8 @@
         </div>
         <div id="emptyState" class="empty-state" style="display:none">
             <i class="bi bi-activity"></i>
-            <h4>Nessuna attività</h4>
-            <p>Le attività appariranno qui quando usi il workflow</p>
+            <h4>{{ t.no_activity_yet }}</h4>
+            <p>{{ t.data_appears_here }}</p>
         </div>
     </div>
 </div>
@@ -154,7 +154,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise"></i> Retrocedi Partecipante</h5>
+                <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise"></i> {{ t.rollback_participant }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -170,14 +170,14 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-pencil"></i> Modifica Partecipante</h5>
+                <h5 class="modal-title"><i class="bi bi-pencil"></i> {{ t.edit_participant }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="editModalBody"><div class="text-center py-4"><i class="bi bi-hourglass-split"></i> Caricamento...</div></div>
+            <div class="modal-body" id="editModalBody"><div class="text-center py-4"><i class="bi bi-hourglass-split"></i> {{ t.loading }}</div></div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cancel }}</button>
                 <button type="button" class="btn btn-primary" onclick="saveParticipant()">
-                    <i class="bi bi-check-lg"></i> Salva
+                    <i class="bi bi-check-lg"></i> {{ t.save }}
                 </button>
             </div>
         </div>
@@ -187,6 +187,7 @@
 
 {% block extra_js %}
 <script>
+var T = {{ t|tojson }};
 // =============================================
 // DATA
 // =============================================
@@ -214,13 +215,13 @@ var ALL_TIMELINE = [
 // COLUMNS
 // =============================================
 var ALL_COLUMNS = [
-    { key: 'time_local', label: 'Quando', default: true },
-    { key: 'event_type', label: 'Evento', default: true },
-    { key: 'participant', label: 'Partecipante', default: true },
+    { key: 'time_local', label: T.when, default: true },
+    { key: 'event_type', label: T.event || 'Event', default: true },
+    { key: 'participant', label: T.participant, default: true },
     { key: 'step', label: 'Step', default: true },
-    { key: 'description', label: 'Descrizione', default: true },
-    { key: 'workflow', label: 'Workflow', default: false },
-    { key: 'step_type', label: 'Tipo Step', default: false },
+    { key: 'description', label: T.description, default: true },
+    { key: 'workflow', label: T.workflow, default: false },
+    { key: 'step_type', label: 'Step Type', default: false },
 ];
 
 var visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(function(c) { return c.key; });
@@ -327,20 +328,22 @@ function applyFilters() {
 // EVENT BADGE RENDERING
 // =============================================
 var EVENT_BADGES = {
-    form_submitted: '<span class="badge bg-success"><i class="bi bi-check2-square"></i> Form compilato</span>',
-    status_changed: '<span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> Stato cambiato</span>',
-    workflow_started: '<span class="badge bg-primary"><i class="bi bi-play-circle"></i> Workflow avviato</span>',
-    simulation: '<span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> Simulazione</span>',
-    unsubscribed: '<span class="badge bg-danger"><i class="bi bi-person-x"></i> Disiscritto</span>',
-    email_sent: '<span class="badge bg-success"><i class="bi bi-envelope-check"></i> Email inviata</span>',
-    email_failed: '<span class="badge bg-danger"><i class="bi bi-envelope-x"></i> Email fallita</span>',
-    email_scheduled: '<span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Schedulata</span>',
-    email_completed: '<span class="badge bg-primary"><i class="bi bi-check-all"></i> Completata</span>',
-    email_skipped: '<span class="badge bg-secondary"><i class="bi bi-skip-forward"></i> Saltata</span>',
-    goal_met: '<span class="badge bg-success"><i class="bi bi-trophy"></i> Goal raggiunto</span>',
-    goal_not_met: '<span class="badge bg-secondary"><i class="bi bi-trophy"></i> Goal non raggiunto</span>',
-    participant_imported: '<span class="badge bg-info"><i class="bi bi-download"></i> Importato</span>',
-    condition_evaluated: '<span class="badge bg-info"><i class="bi bi-shuffle"></i> Condizione valutata</span>',
+    form_submitted: '<span class="badge bg-success"><i class="bi bi-check2-square"></i> ' + T.form_submitted + '</span>',
+    status_changed: '<span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> ' + T.status_changed + '</span>',
+    workflow_started: '<span class="badge bg-primary"><i class="bi bi-play-circle"></i> ' + T.workflow_started + '</span>',
+    simulation: '<span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> ' + T.simulation + '</span>',
+    unsubscribed: '<span class="badge bg-danger"><i class="bi bi-person-x"></i> ' + T.unsubscribed + '</span>',
+    email_sent: '<span class="badge bg-success"><i class="bi bi-envelope-check"></i> Email Sent</span>',
+    email_failed: '<span class="badge bg-danger"><i class="bi bi-envelope-x"></i> Email Failed</span>',
+    email_scheduled: '<span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Scheduled</span>',
+    email_completed: '<span class="badge bg-primary"><i class="bi bi-check-all"></i> ' + T.completed + '</span>',
+    email_skipped: '<span class="badge bg-secondary"><i class="bi bi-skip-forward"></i> Skipped</span>',
+    goal_met: '<span class="badge bg-success"><i class="bi bi-trophy"></i> Goal Met</span>',
+    goal_not_met: '<span class="badge bg-secondary"><i class="bi bi-trophy"></i> Goal Not Met</span>',
+    participant_imported: '<span class="badge bg-info"><i class="bi bi-download"></i> Imported</span>',
+    condition_evaluated: '<span class="badge bg-info"><i class="bi bi-shuffle"></i> Condition Evaluated</span>',
+    landing_opened: '<span class="badge" style="background:#ff9800;color:#fff"><i class="bi bi-box-arrow-up-right"></i> ' + T.landing_opened + '</span>',
+    survey_submitted: '<span class="badge bg-info"><i class="bi bi-ui-checks"></i> ' + T.survey_submitted + '</span>',
 };
 
 var STEP_ICONS = { email: 'bi-envelope', wait_until: 'bi-calendar-check', goal_check: 'bi-trophy', export_data: 'bi-download', condition: 'bi-shuffle' };
@@ -366,7 +369,7 @@ function renderTable(rows) {
         var sorted = sortCol === c.key;
         var icon = sorted ? (sortDir === 'asc' ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-down';
         return '<th class="'+(sorted?'sorted':'')+'" onclick="sortBy(\''+c.key+'\')">'+c.label+' <i class="bi '+icon+' sort-icon"></i></th>';
-    }).join('') + '<th>Azioni</th>';
+    }).join('') + '<th>' + T.actions + '</th>';
 
     tbody.innerHTML = rows.map(function(r, idx) {
         var cells = cols.map(function(c) {
@@ -445,25 +448,25 @@ function exportCSV() {
 // EDIT / DELETE
 // =============================================
 var _editSfLabels = {
-    'id': 'ID Saba Form', 'first_name': 'Nome (SF)', 'last_name': 'Cognome (SF)',
-    'email': 'Email (SF)', 'phone': 'Telefono (SF)', 'company': 'Azienda',
-    'birth_date': 'Data di nascita', 'gender': 'Sesso',
-    'nucleo': 'Nucleo Familiare',
-    'doc_type': 'Tipo Documento', 'doc_number': 'N. Documento',
-    'doc_expiry': 'Scadenza Documento',
-    'volo_arrivo': 'Volo Arrivo', 'volo_partenza': 'Volo Partenza',
-    'notes': 'Note', 'confirmed': 'Confermato'
+    'id': 'ID Saba Form', 'first_name': T.name + ' (SF)', 'last_name': T.last_name + ' (SF)',
+    'email': T.email + ' (SF)', 'phone': T.phone + ' (SF)', 'company': T.company,
+    'birth_date': T.birth_date, 'gender': T.gender,
+    'nucleo': T.family_unit,
+    'doc_type': T.doc_type, 'doc_number': T.doc_number,
+    'doc_expiry': T.doc_expiry,
+    'volo_arrivo': T.arrival_flight, 'volo_partenza': T.departure_flight,
+    'notes': T.notes, 'confirmed': T.confirmed
 };
 
 function buildEditForm(p) {
     var html = '<input type="hidden" id="editId" value="' + p.id + '">';
-    html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-person"></i> Dati Partecipante</h6>';
+    html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-person"></i> ' + T.participant_data + '</h6>';
     html += '<div class="row">';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Nome</label><input type="text" class="form-control" id="editFirstName" value="' + esc(p.first_name || '') + '"></div>';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Cognome</label><input type="text" class="form-control" id="editLastName" value="' + esc(p.last_name || '') + '"></div>';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Email</label><input type="email" class="form-control" id="editEmail" value="' + esc(p.email || '') + '"></div>';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Telefono</label><input type="text" class="form-control" id="editPhone" value="' + esc(p.phone || '') + '"></div>';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Stato</label><select class="form-select" id="editStatus">';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.name + '</label><input type="text" class="form-control" id="editFirstName" value="' + esc(p.first_name || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.last_name + '</label><input type="text" class="form-control" id="editLastName" value="' + esc(p.last_name || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.email + '</label><input type="email" class="form-control" id="editEmail" value="' + esc(p.email || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.phone + '</label><input type="text" class="form-control" id="editPhone" value="' + esc(p.phone || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.status + '</label><select class="form-select" id="editStatus">';
     ['pending','in_progress','completed','bounced','unsubscribed'].forEach(function(s) {
         html += '<option value="'+s+'"'+(p.status===s?' selected':'')+'>'+s+'</option>';
     });
@@ -471,7 +474,7 @@ function buildEditForm(p) {
     var sf = p.sabaform_data;
     if (sf && Object.keys(sf).length > 0) {
         html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-cloud-download"></i> Dati Saba Form</h6>';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-cloud-download"></i> ' + T.sabaform_data + '</h6>';
         html += '<div class="row">';
         for (var k in sf) {
             var label = _editSfLabels[k] || k;
@@ -486,7 +489,7 @@ function buildEditForm(p) {
 
 function editParticipant(participantId) {
     var body = document.getElementById('editModalBody');
-    body.innerHTML = '<div class="text-center py-4"><i class="bi bi-hourglass-split"></i> Caricamento...</div>';
+    body.innerHTML = '<div class="text-center py-4"><i class="bi bi-hourglass-split"></i> ' + T.loading + '</div>';
     new bootstrap.Modal(document.getElementById('editModal')).show();
 
     // Carica dati completi via API
@@ -567,21 +570,21 @@ function rollbackParticipant(participantId) {
     _rollbackParticipantId = participantId;
     var stepsDiv = document.getElementById('rollbackSteps');
     stepsDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
-    document.getElementById('rollbackInfo').textContent = 'Caricamento...';
+    document.getElementById('rollbackInfo').textContent = T.loading;
     new bootstrap.Modal(document.getElementById('rollbackModal')).show();
 
     // Trova il workflow del partecipante
     fetch('/api/participants/' + participantId)
     .then(function(r) { return r.json(); })
     .then(function(p) {
-        document.getElementById('rollbackInfo').textContent = 'Riporta ' + (p.first_name || '') + ' ' + (p.last_name || p.email) + ' a:';
+        document.getElementById('rollbackInfo').textContent = T.rollback_to + ' ' + (p.first_name || '') + ' ' + (p.last_name || p.email);
         return fetch('/api/workflows/' + p.workflow_id);
     })
     .then(function(r) { return r.json(); })
     .then(function(wf) {
         var html = '<button class="list-group-item list-group-item-action list-group-item-warning" onclick="doRollback(0)">';
-        html += '<i class="bi bi-arrow-counterclockwise"></i> <strong>Reset a PENDING</strong>';
-        html += '<br><small class="text-muted">Rimuove tutte le esecuzioni e riporta allo stato iniziale</small></button>';
+        html += '<i class="bi bi-arrow-counterclockwise"></i> <strong>' + T.reset_to_pending + '</strong>';
+        html += '<br><small class="text-muted">' + T.reset_help + '</small></button>';
         wf.steps.forEach(function(s) {
             var icon = STEP_ICONS[s.type] || 'bi-circle';
             html += '<button class="list-group-item list-group-item-action" onclick="doRollback('+s.order+')">';
