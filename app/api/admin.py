@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage
+from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage, User, user_workflows
+from app.api.auth import superuser_required
 from sqlalchemy import func
 from datetime import datetime
 import logging
@@ -9,6 +10,20 @@ import uuid
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+
+def get_visible_workflows(query=None):
+    """Filter workflows based on current user permissions"""
+    from flask import g
+    if query is None:
+        query = db.query(Workflow)
+    user = getattr(g, 'user', None)
+    if user and user.is_superuser:
+        return query
+    if user:
+        wf_ids = [wf.id for wf in user.workflows]
+        return query.filter(Workflow.id.in_(wf_ids)) if wf_ids else query.filter(Workflow.id == -1)
+    return query.filter(Workflow.id == -1)
 
 
 @admin_bp.route('/')
@@ -42,8 +57,8 @@ def dashboard():
         participant_status_labels = [status.value for status, _ in participant_status_query]
         participant_status_data = [count for _, count in participant_status_query]
         
-        # Workflows recenti
-        recent_workflows = db.query(Workflow).order_by(
+        # Workflows recenti (filtered by user)
+        recent_workflows = get_visible_workflows().order_by(
             Workflow.created_at.desc()
         ).limit(5).all()
 
@@ -52,8 +67,8 @@ def dashboard():
             ActivityLog.created_at.desc()
         ).limit(10).all()
 
-        # Engagement — all workflows with participants
-        all_workflows = db.query(Workflow).all()
+        # Engagement — visible workflows with participants
+        all_workflows = get_visible_workflows().all()
         engagement_workflows = [wf for wf in all_workflows if len(wf.participants) > 0]
 
         # Build participant list with last event info
@@ -129,11 +144,11 @@ def workflows_list():
         # Filtri
         status_filter = request.args.get('status')
         
-        query = db.query(Workflow)
-        
+        query = get_visible_workflows()
+
         if status_filter:
             query = query.filter_by(status=WorkflowStatus(status_filter))
-        
+
         workflows = query.order_by(Workflow.created_at.desc()).all()
         
         return render_template('admin/workflows_list.html',
@@ -516,4 +531,96 @@ def participant_timeline(participant_id):
 
     except Exception as e:
         logger.error(f"Errore timeline: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================
+# USER MANAGEMENT (superuser only)
+# =============================================
+
+@admin_bp.route('/users')
+@superuser_required
+def users_list():
+    """Lista utenti"""
+    users = db.query(User).order_by(User.created_at.desc()).all()
+    workflows = db.query(Workflow).order_by(Workflow.name).all()
+    return render_template('admin/users.html', users=users, workflows=workflows)
+
+
+@admin_bp.route('/users/create', methods=['POST'])
+@superuser_required
+def user_create():
+    """Crea nuovo utente"""
+    try:
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        is_superuser = request.form.get('is_superuser') == 'on'
+
+        if not username or not password:
+            flash('Username and password required', 'danger')
+            return redirect(url_for('admin.users_list'))
+
+        if db.query(User).filter_by(username=username).first():
+            flash(f'Username "{username}" already exists', 'danger')
+            return redirect(url_for('admin.users_list'))
+
+        user = User(username=username, email=email, is_superuser=is_superuser)
+        user.set_password(password)
+        db.add(user)
+        db.commit()
+
+        flash(f'User "{username}" created', 'success')
+        return redirect(url_for('admin.users_list'))
+
+    except Exception as e:
+        db.rollback()
+        flash(f'Error: {str(e)}', 'danger')
+        return redirect(url_for('admin.users_list'))
+
+
+@admin_bp.route('/users/<int:user_id>/delete', methods=['POST'])
+@superuser_required
+def user_delete(user_id):
+    """Elimina utente"""
+    try:
+        from flask import g
+        user = db.get(User, user_id)
+        if not user:
+            flash('User not found', 'danger')
+        elif user.id == g.user.id:
+            flash('Cannot delete yourself', 'danger')
+        else:
+            db.delete(user)
+            db.commit()
+            flash(f'User "{user.username}" deleted', 'success')
+        return redirect(url_for('admin.users_list'))
+    except Exception as e:
+        db.rollback()
+        flash(f'Error: {str(e)}', 'danger')
+        return redirect(url_for('admin.users_list'))
+
+
+@admin_bp.route('/users/<int:user_id>/toggle-workflow/<int:workflow_id>', methods=['POST'])
+@superuser_required
+def toggle_user_workflow(user_id, workflow_id):
+    """Assign/remove workflow from user"""
+    try:
+        user = db.get(User, user_id)
+        workflow = db.get(Workflow, workflow_id)
+        if not user or not workflow:
+            return jsonify({'error': 'Not found'}), 404
+
+        if workflow in user.workflows:
+            user.workflows.remove(workflow)
+            assigned = False
+        else:
+            user.workflows.append(workflow)
+            assigned = True
+
+        db.commit()
+        return jsonify({'assigned': assigned}), 200
+
+    except Exception as e:
+        db.rollback()
         return jsonify({'error': str(e)}), 500

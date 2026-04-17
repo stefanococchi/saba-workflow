@@ -51,10 +51,23 @@ def create_app(config_object=None):
     
     # Registra blueprints
     from app.api import workflow_bp, participant_bp, landing_bp, health_bp, admin_bp, landing_builder_api_bp
+    from app.api.auth import auth_bp, login_required, get_current_user
     app.register_blueprint(health_bp)
     app.register_blueprint(workflow_bp, url_prefix='/api')
     app.register_blueprint(participant_bp, url_prefix='/api')
     app.register_blueprint(landing_bp)
+    # Protect admin routes with login (must be before register_blueprint)
+    @admin_bp.before_request
+    def require_login():
+        from flask import session, redirect, url_for, g
+        if not session.get('user_id'):
+            return redirect(url_for('auth.login'))
+        g.user = get_current_user()
+        if not g.user:
+            session.clear()
+            return redirect(url_for('auth.login'))
+
+    app.register_blueprint(auth_bp)  # Auth (login/logout)
     app.register_blueprint(admin_bp)  # Admin interface
     app.register_blueprint(landing_builder_api_bp, url_prefix='/api')  # Landing builder API
     

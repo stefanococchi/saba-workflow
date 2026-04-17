@@ -1,7 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, LargeBinary, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, LargeBinary, Boolean, Table, Enum as SQLEnum
 from sqlalchemy.orm import relationship
+from werkzeug.security import generate_password_hash, check_password_hash
 from app import Base
 
 
@@ -253,3 +254,35 @@ class UploadedImage(Base):
 
     def __repr__(self):
         return f'<UploadedImage {self.id}: {self.filename}>'
+
+
+# Association table for User <-> Workflow
+user_workflows = Table(
+    'user_workflows',
+    Base.metadata,
+    Column('user_id', Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    Column('workflow_id', Integer, ForeignKey('workflows.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
+class User(Base):
+    """Admin user"""
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String(100), unique=True, nullable=False)
+    email = Column(String(255), nullable=True)
+    password_hash = Column(String(255), nullable=False)
+    is_superuser = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    workflows = relationship('Workflow', secondary=user_workflows, backref='users')
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f'<User {self.id}: {self.username}>'
