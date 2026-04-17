@@ -76,6 +76,22 @@ def create_app(config_object=None):
         scheduler.configure(timezone=app.config['SCHEDULER_TIMEZONE'])
         scheduler.start()
     
+    # Language switch route
+    @app.route('/set-lang/<lang>')
+    def set_language(lang):
+        from flask import session, redirect, request as req
+        if lang in ('it', 'en'):
+            session['lang'] = lang
+        return redirect(req.referrer or '/')
+
+    # Inject translations into all templates
+    @app.context_processor
+    def inject_translations():
+        from flask import session
+        from app.translations import get_translations
+        lang = session.get('lang', 'en')
+        return {'t': get_translations(lang), 'current_lang': lang}
+
     # Filtro Jinja2 per convertire UTC → timezone locale
     import pytz
     local_tz = pytz.timezone(app.config.get('SCHEDULER_TIMEZONE', 'Europe/Rome'))

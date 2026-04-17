@@ -44,13 +44,27 @@
                             <i class="bi bi-heart-pulse"></i> Health
                         </a>
                     </li>
+                    <li class="nav-item d-flex align-items-center gap-2 me-3">
+                        <a href="{{ url_for('set_language', lang='it') }}" title="Italiano"
+                           style="opacity:{{ '1' if current_lang == 'it' else '0.35' }};transition:opacity 0.2s">
+                            <svg width="28" height="20" viewBox="0 0 3 2" style="border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,0.2)">
+                                <rect width="1" height="2" fill="#009246"/><rect x="1" width="1" height="2" fill="#fff"/><rect x="2" width="1" height="2" fill="#CE2B37"/>
+                            </svg>
+                        </a>
+                        <a href="{{ url_for('set_language', lang='en') }}" title="English"
+                           style="opacity:{{ '1' if current_lang == 'en' else '0.35' }};transition:opacity 0.2s">
+                            <svg width="28" height="20" viewBox="0 0 60 30" style="border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,0.2)">
+                                <rect width="60" height="30" fill="#012169"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" stroke-width="4"/><path d="M30,0 V30 M0,15 H60" stroke="#fff" stroke-width="10"/><path d="M30,0 V30 M0,15 H60" stroke="#C8102E" stroke-width="6"/>
+                            </svg>
+                        </a>
+                    </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-person-circle"></i> {{ session.get('username', 'User') }}
                             {% if session.get('is_superuser') %}<span class="badge bg-warning text-dark" style="font-size:9px">SUPER</span>{% endif %}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i> {{ t.logout }}</a></li>
                         </ul>
                     </li>
                 </ul>
@@ -67,49 +81,49 @@
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}"
                                href="{{ url_for('admin.dashboard') }}">
-                                <i class="bi bi-speedometer2"></i> Dashboard
+                                <i class="bi bi-speedometer2"></i> {{ t.dashboard }}
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if 'workflow' in (request.endpoint or '') and request.endpoint != 'admin.dashboard' %}active{% endif %}"
                                href="{{ url_for('admin.workflows_list') }}">
-                                <i class="bi bi-diagram-3"></i> Workflows
+                                <i class="bi bi-diagram-3"></i> {{ t.workflows }}
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'admin.participants_list' %}active{% endif %}"
                                href="{{ url_for('admin.participants_list') }}">
-                                <i class="bi bi-people"></i> Partecipanti
+                                <i class="bi bi-people"></i> {{ t.participants }}
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'admin.executions_monitor' %}active{% endif %}"
                                href="{{ url_for('admin.executions_monitor') }}">
-                                <i class="bi bi-activity"></i> Esecuzioni
+                                <i class="bi bi-activity"></i> {{ t.executions }}
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'admin.collected_data' %}active{% endif %}"
                                href="{{ url_for('admin.collected_data') }}">
-                                <i class="bi bi-database"></i> Dati Raccolti
+                                <i class="bi bi-database"></i> {{ t.collected_data }}
                             </a>
                         </li>
                     </ul>
 
                     {% if session.get('is_superuser') %}
                     <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1">
-                        <span>Admin</span>
+                        <span>{{ t.admin }}</span>
                     </h6>
                     <ul class="nav flex-column mb-2">
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'admin.users_list' %}active{% endif %}"
                                href="{{ url_for('admin.users_list') }}">
-                                <i class="bi bi-people"></i> Users
+                                <i class="bi bi-people"></i> {{ t.users }}
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('admin.workflow_create') }}">
-                                <i class="bi bi-plus-circle"></i> Nuovo Workflow
+                                <i class="bi bi-plus-circle"></i> {{ t.new_workflow }}
                             </a>
                         </li>
                     </ul>
