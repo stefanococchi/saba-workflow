@@ -38,6 +38,21 @@ def get_workflow_landing_fields(workflow_id):
         seen = set()
 
         for step in steps:
+            # From landing_page_config (form builder config)
+            if step.landing_page_config and isinstance(step.landing_page_config, dict):
+                config_fields = step.landing_page_config.get('fields', [])
+                if isinstance(config_fields, list):
+                    for f in config_fields:
+                        name = f.get('name', '')
+                        if name and name not in seen:
+                            seen.add(name)
+                            fields.append({
+                                'name': name,
+                                'label': f.get('label', name),
+                                'type': f.get('type', 'text'),
+                                'step_name': step.name
+                            })
+
             # From gjs_data config (template builder)
             if step.landing_gjs_data and isinstance(step.landing_gjs_data, dict):
                 config_fields = step.landing_gjs_data.get('fields', [])

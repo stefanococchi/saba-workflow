@@ -315,9 +315,9 @@ function editStep(index) {
     if (step.type === 'email' || step.type === 'survey') {
         initEmailEditor();
     }
-    // Populate landing field dropdowns for goal_check and condition steps
+    // Populate landing field dropdowns for goal_check — from preceding landing steps
     if (step.type === 'goal_check') {
-        populateLandingFieldSelect('editGoalFieldName', step.config.field_name, 'goalFieldNameLoading');
+        populatFieldsFromPrecedingLanding('editGoalFieldName', step.config.field_name, 'goalFieldNameLoading', index);
     }
     if (step.type === 'condition') {
         onConditionSourceChange();
@@ -786,6 +786,47 @@ function insertVariable(variable) {
         if ($editor.length && $.fn.summernote) {
             $editor.summernote('editor.insertText', tag);
         }
+    }
+}
+
+// Populate fields from preceding landing page steps in the canvas
+function populatFieldsFromPrecedingLanding(selectId, currentValue, loadingId, currentIndex) {
+    var select = document.getElementById(selectId);
+    var loading = loadingId ? document.getElementById(loadingId) : null;
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Select field --</option>';
+
+    // Look at steps before currentIndex that have landing config
+    var fields = [];
+    var seen = {};
+    for (var i = currentIndex - 1; i >= 0; i--) {
+        var s = workflowSteps[i];
+        if (!s) continue;
+
+        // Check if step has landing page with fields (from gjs_data stored in config)
+        // When loaded from DB, landing fields are available via API
+        // When in-canvas (not saved), check config.has_landing
+        if (s.config && s.config.has_landing) {
+            // Found a landing step — try to load its fields from API if workflow is saved
+            if (window._currentWorkflowId) {
+                populateLandingFieldSelect(selectId, currentValue, loadingId);
+                return;
+            }
+        }
+    }
+
+    // Fallback: try loading from API for saved workflows
+    if (window._currentWorkflowId) {
+        populateLandingFieldSelect(selectId, currentValue, loadingId);
+        return;
+    }
+
+    // No fields found
+    select.innerHTML += '<option value="" disabled>Save the workflow first, then configure landing page fields</option>';
+    if (loading) {
+        loading.innerHTML = '<i class="bi bi-info-circle"></i> Save the workflow and configure a landing page before this step.';
+        loading.style.display = '';
     }
 }
 
