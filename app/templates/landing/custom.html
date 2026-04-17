@@ -32,11 +32,38 @@
 
                 var formData = new FormData(form);
                 var data = {};
+                var filePromises = [];
+
                 formData.forEach(function(value, key) {
-                    data[key] = value;
+                    if (value instanceof File && value.size > 0) {
+                        if (value.size > 20 * 1024 * 1024) {
+                            if (errorMsg) {
+                                errorMsg.textContent = 'File troppo grande (max 20 MB).';
+                                errorMsg.style.display = 'block';
+                            }
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = 'Invia';
+                            }
+                            return;
+                        }
+                        filePromises.push(new Promise(function(resolve, reject) {
+                            var reader = new FileReader();
+                            reader.onload = function() {
+                                data[key] = { filename: value.name, mime: value.type, size: value.size, data: reader.result };
+                                resolve();
+                            };
+                            reader.onerror = reject;
+                            reader.readAsDataURL(value);
+                        }));
+                    } else if (!(value instanceof File)) {
+                        data[key] = value;
+                    }
                 });
 
                 try {
+                    await Promise.all(filePromises);
+
                     var response = await fetch('/landing/{{ token }}', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
