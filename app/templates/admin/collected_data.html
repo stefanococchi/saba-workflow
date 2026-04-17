@@ -1,7 +1,7 @@
 {% extends "admin/base.html" %}
 
-{% block title %}Dati Raccolti - Saba Workflow Admin{% endblock %}
-{% block page_title %}<i class="bi bi-database"></i> Dati Raccolti{% endblock %}
+{% block title %}{{ t.collected_data }} - Saba Workflow Admin{% endblock %}
+{% block page_title %}<i class="bi bi-database"></i> {{ t.collected_data }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -110,9 +110,9 @@
     <div class="card-body">
         <div class="filter-bar">
             <div>
-                <label class="form-label" style="font-size:12px;margin-bottom:4px">Workflow</label>
+                <label class="form-label" style="font-size:12px;margin-bottom:4px">{{ t.workflow }}</label>
                 <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="applyFilters()">
-                    <option value="">Tutti</option>
+                    <option value="">{{ t.all }}</option>
                     {% for workflow in workflows %}
                     <option value="{{ workflow.id }}" {% if current_workflow_id == workflow.id %}selected{% endif %}>
                         {{ workflow.name }}
@@ -122,21 +122,21 @@
             </div>
 
             <div class="search-input" style="flex:1;min-width:200px">
-                <label class="form-label" style="font-size:12px;margin-bottom:4px">Cerca</label>
+                <label class="form-label" style="font-size:12px;margin-bottom:4px">{{ t.search }}</label>
                 <i class="bi bi-search"></i>
                 <input type="text" class="form-control form-control-sm" id="filterSearch"
-                       placeholder="Nome, email, qualsiasi campo..." oninput="applyFilters()">
+                       placeholder="{{ t.name }}, {{ t.email }}..." oninput="applyFilters()">
             </div>
 
             <div class="d-flex align-items-end gap-2">
                 <button class="btn btn-outline-primary btn-sm" onclick="toggleColumns()">
-                    <i class="bi bi-layout-three-columns"></i> Colonne
+                    <i class="bi bi-layout-three-columns"></i> {{ t.columns }}
                 </button>
                 <button class="btn btn-outline-primary btn-sm" onclick="toggleQueryBuilder()">
-                    <i class="bi bi-funnel"></i> Query
+                    <i class="bi bi-funnel"></i> {{ t.query }}
                 </button>
                 <button class="btn btn-primary btn-sm" onclick="exportCSV()">
-                    <i class="bi bi-download"></i> Esporta CSV
+                    <i class="bi bi-download"></i> {{ t.export_csv }}
                 </button>
             </div>
         </div>
@@ -149,10 +149,10 @@
         <!-- Query builder -->
         <div id="queryBuilder" class="query-builder" style="display:none">
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <strong style="font-size:13px"><i class="bi bi-funnel"></i> Query avanzata</strong>
+                <strong style="font-size:13px"><i class="bi bi-funnel"></i> {{ t.advanced_query }}</strong>
                 <div>
-                    <button class="btn btn-sm btn-outline-primary" onclick="addQueryRow()"><i class="bi bi-plus"></i> Condizione</button>
-                    <button class="btn btn-sm btn-primary" onclick="applyFilters()"><i class="bi bi-play"></i> Esegui</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="addQueryRow()"><i class="bi bi-plus"></i> {{ t.condition }}</button>
+                    <button class="btn btn-sm btn-primary" onclick="applyFilters()"><i class="bi bi-play"></i> {{ t.execute }}</button>
                 </div>
             </div>
             <div id="queryRows"></div>
@@ -163,7 +163,7 @@
 <!-- Results -->
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center py-2">
-        <h6 class="mb-0"><i class="bi bi-database"></i> Risposte <span id="resultCount" class="counter-badge ms-2">0</span></h6>
+        <h6 class="mb-0"><i class="bi bi-database"></i> {{ t.responses }} <span id="resultCount" class="counter-badge ms-2">0</span></h6>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive" style="max-height: 75vh; overflow-y: auto;">
@@ -174,8 +174,8 @@
         </div>
         <div id="emptyState" class="empty-state" style="display:none">
             <i class="bi bi-database"></i>
-            <h4>Nessun dato raccolto</h4>
-            <p>I dati appariranno qui quando i partecipanti compileranno i form</p>
+            <h4>{{ t.no_data_collected }}</h4>
+            <p>{{ t.data_appears_here }}</p>
         </div>
     </div>
 </div>
@@ -185,7 +185,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="dataModalTitle">Dati Raccolti</h5>
+                <h5 class="modal-title" id="dataModalTitle">{{ t.collected_data_section }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="dataModalBody"></div>
@@ -198,14 +198,14 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-pencil"></i> Modifica Partecipante</h5>
+                <h5 class="modal-title"><i class="bi bi-pencil"></i> {{ t.edit_participant }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="editModalBody"></div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cancel }}</button>
                 <button type="button" class="btn btn-primary" onclick="saveParticipant()">
-                    <i class="bi bi-check-lg"></i> Salva
+                    <i class="bi bi-check-lg"></i> {{ t.save }}
                 </button>
             </div>
         </div>
@@ -215,6 +215,7 @@
 
 {% block extra_js %}
 <script>
+var T = {{ t|tojson }};
 // =============================================
 // DATA
 // =============================================
@@ -240,13 +241,13 @@ var ALL_DATA = [
 // COLUMNS — base + dynamic from collected_data
 // =============================================
 var ALL_COLUMNS = [
-    { key: 'first_name', label: 'Nome', default: true },
-    { key: 'last_name', label: 'Cognome', default: true },
-    { key: 'email', label: 'Email', default: true },
-    { key: 'phone', label: 'Telefono', default: false },
-    { key: 'workflow', label: 'Workflow', default: true },
-    { key: 'status', label: 'Stato', default: true },
-    { key: 'completed_at', label: 'Completato', default: true },
+    { key: 'first_name', label: T.name, default: true },
+    { key: 'last_name', label: T.last_name, default: true },
+    { key: 'email', label: T.email, default: true },
+    { key: 'phone', label: T.phone, default: false },
+    { key: 'workflow', label: T.workflow, default: true },
+    { key: 'status', label: T.status, default: true },
+    { key: 'completed_at', label: T.completed, default: true },
 ];
 
 // Aggiungi colonne dai collected_data (attive di default)
@@ -419,7 +420,7 @@ function renderTable(rows) {
         var sorted = sortCol === c.key;
         var icon = sorted ? (sortDir === 'asc' ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-down';
         return '<th class="' + (sorted ? 'sorted' : '') + '" onclick="sortBy(\'' + c.key + '\')">' + c.label + ' <i class="bi ' + icon + ' sort-icon"></i></th>';
-    }).join('') + '<th>Azioni</th>';
+    }).join('') + '<th>' + T.actions + '</th>';
 
     tbody.innerHTML = rows.map(function(p) {
         var cells = cols.map(function(c) {
@@ -431,9 +432,9 @@ function renderTable(rows) {
         }).join('');
 
         var actions = '<td><div class="btn-group btn-group-sm">' +
-            '<button class="btn btn-outline-info" onclick="viewData(' + p.id + ')" title="Dati"><i class="bi bi-file-text"></i></button>' +
-            '<button class="btn btn-outline-primary" onclick="editParticipant(' + p.id + ')" title="Modifica"><i class="bi bi-pencil"></i></button>' +
-            '<button class="btn btn-outline-danger" onclick="deleteParticipant(' + p.id + ')" title="Elimina"><i class="bi bi-trash"></i></button>' +
+            '<button class="btn btn-outline-info" onclick="viewData(' + p.id + ')" title="' + T.data + '"><i class="bi bi-file-text"></i></button>' +
+            '<button class="btn btn-outline-primary" onclick="editParticipant(' + p.id + ')" title="' + T.edit + '"><i class="bi bi-pencil"></i></button>' +
+            '<button class="btn btn-outline-danger" onclick="deleteParticipant(' + p.id + ')" title="' + T.delete + '"><i class="bi bi-trash"></i></button>' +
             '</div></td>';
         return '<tr>' + cells + actions + '</tr>';
     }).join('');
@@ -479,21 +480,20 @@ function viewData(id) {
     var p = ALL_DATA.find(function(x) { return x.id === id; });
     if (!p) return;
     var body = document.getElementById('dataModalBody');
-    document.getElementById('dataModalTitle').textContent = 'Dati — ' + (((p.first_name || '') + ' ' + (p.last_name || '')).trim() || p.email || '#' + p.id);
+    document.getElementById('dataModalTitle').textContent = T.data + ' — ' + (((p.first_name || '') + ' ' + (p.last_name || '')).trim() || p.email || '#' + p.id);
 
     var html = '';
 
-    // Dati originali del partecipante
-    html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-person"></i> Dati Partecipante</h6>';
+    html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-person"></i> ' + T.participant_data + '</h6>';
     html += '<dl class="row" style="font-size:14px">';
     var origFields = [
-        { key: 'first_name', label: 'Nome' },
-        { key: 'last_name', label: 'Cognome' },
-        { key: 'email', label: 'Email' },
-        { key: 'phone', label: 'Telefono' },
-        { key: 'workflow', label: 'Workflow' },
-        { key: 'status', label: 'Stato' },
-        { key: 'completed_at', label: 'Completato' }
+        { key: 'first_name', label: T.name },
+        { key: 'last_name', label: T.last_name },
+        { key: 'email', label: T.email },
+        { key: 'phone', label: T.phone },
+        { key: 'workflow', label: T.workflow },
+        { key: 'status', label: T.status },
+        { key: 'completed_at', label: T.completed }
     ];
     origFields.forEach(function(f) {
         var val = p[f.key];
@@ -507,18 +507,18 @@ function viewData(id) {
     // Dati importati da Saba Form
     if (p.sabaform_data && Object.keys(p.sabaform_data).length > 0) {
         var sfLabels = {
-            'id': 'ID Saba Form', 'first_name': 'Nome', 'last_name': 'Cognome',
-            'email': 'Email', 'phone': 'Telefono', 'company': 'Azienda',
-            'birth_date': 'Data di nascita', 'gender': 'Sesso',
-            'nucleo': 'Nucleo Familiare',
-            'doc_type': 'Tipo Documento', 'doc_number': 'Numero Documento',
-            'doc_expiry': 'Scadenza Documento',
-            'volo_arrivo': 'Volo Arrivo', 'volo_partenza': 'Volo Partenza',
-            'notes': 'Note',
-            'confirmed': 'Confermato', 'status': 'Stato'
+            'id': 'ID Saba Form', 'first_name': T.name, 'last_name': T.last_name,
+            'email': T.email, 'phone': T.phone, 'company': T.company,
+            'birth_date': T.birth_date, 'gender': T.gender,
+            'nucleo': T.family_unit,
+            'doc_type': T.doc_type, 'doc_number': T.doc_number,
+            'doc_expiry': T.doc_expiry,
+            'volo_arrivo': T.arrival_flight, 'volo_partenza': T.departure_flight,
+            'notes': T.notes,
+            'confirmed': T.confirmed, 'status': T.status
         };
         html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-cloud-download"></i> Dati Saba Form (originali)</h6>';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-cloud-download"></i> ' + T.sabaform_data + '</h6>';
         html += '<dl class="row" style="font-size:14px">';
         for (var k in p.sabaform_data) {
             var val = p.sabaform_data[k];
@@ -533,7 +533,7 @@ function viewData(id) {
     // Dati raccolti dal workflow
     if (p.collected_data && Object.keys(p.collected_data).length > 0) {
         html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-collection"></i> Dati Raccolti</h6>';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-collection"></i> ' + T.collected_data_section + '</h6>';
         html += '<dl class="row" style="font-size:14px">';
         for (var k in p.collected_data) {
             var cdVal = p.collected_data[k];
@@ -543,7 +543,7 @@ function viewData(id) {
         html += '</dl>';
     } else {
         html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<p style="color:var(--md-on-surface-variant);font-size:14px"><i class="bi bi-info-circle"></i> Nessun dato raccolto</p>';
+        html += '<p style="color:var(--md-on-surface-variant);font-size:14px"><i class="bi bi-info-circle"></i> ' + T.no_data_collected + '</p>';
     }
 
     body.innerHTML = html;
@@ -573,25 +573,25 @@ function exportCSV() {
 // EDIT / DELETE
 // =============================================
 var _editSfLabels = {
-    'id': 'ID Saba Form', 'first_name': 'Nome (SF)', 'last_name': 'Cognome (SF)',
-    'email': 'Email (SF)', 'phone': 'Telefono (SF)', 'company': 'Azienda',
-    'birth_date': 'Data di nascita', 'gender': 'Sesso',
-    'nucleo': 'Nucleo Familiare',
-    'doc_type': 'Tipo Documento', 'doc_number': 'N. Documento',
-    'doc_expiry': 'Scadenza Documento',
-    'volo_arrivo': 'Volo Arrivo', 'volo_partenza': 'Volo Partenza',
-    'notes': 'Note', 'confirmed': 'Confermato'
+    'id': 'ID Saba Form', 'first_name': T.name + ' (SF)', 'last_name': T.last_name + ' (SF)',
+    'email': T.email + ' (SF)', 'phone': T.phone + ' (SF)', 'company': T.company,
+    'birth_date': T.birth_date, 'gender': T.gender,
+    'nucleo': T.family_unit,
+    'doc_type': T.doc_type, 'doc_number': T.doc_number,
+    'doc_expiry': T.doc_expiry,
+    'volo_arrivo': T.arrival_flight, 'volo_partenza': T.departure_flight,
+    'notes': T.notes, 'confirmed': T.confirmed
 };
 
 function buildEditForm(p) {
     var html = '<input type="hidden" id="editId" value="' + p.id + '">';
-    html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-person"></i> Dati Partecipante</h6>';
+    html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-person"></i> ' + T.participant_data + '</h6>';
     html += '<div class="row">';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Nome</label><input type="text" class="form-control" id="editFirstName" value="' + esc(p.first_name || '') + '"></div>';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Cognome</label><input type="text" class="form-control" id="editLastName" value="' + esc(p.last_name || '') + '"></div>';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Email</label><input type="email" class="form-control" id="editEmail" value="' + esc(p.email || '') + '"></div>';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Telefono</label><input type="text" class="form-control" id="editPhone" value="' + esc(p.phone || '') + '"></div>';
-    html += '<div class="col-md-6 mb-3"><label class="form-label">Stato</label><select class="form-select" id="editStatus">';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.name + '</label><input type="text" class="form-control" id="editFirstName" value="' + esc(p.first_name || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.last_name + '</label><input type="text" class="form-control" id="editLastName" value="' + esc(p.last_name || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.email + '</label><input type="email" class="form-control" id="editEmail" value="' + esc(p.email || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.phone + '</label><input type="text" class="form-control" id="editPhone" value="' + esc(p.phone || '') + '"></div>';
+    html += '<div class="col-md-6 mb-3"><label class="form-label">' + T.status + '</label><select class="form-select" id="editStatus">';
     ['pending','in_progress','completed','bounced','unsubscribed'].forEach(function(s) {
         html += '<option value="'+s+'"'+(p.status===s?' selected':'')+'>'+s+'</option>';
     });
@@ -599,7 +599,7 @@ function buildEditForm(p) {
     var sf = p.sabaform_data;
     if (sf && Object.keys(sf).length > 0) {
         html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-cloud-download"></i> Dati Saba Form</h6>';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-cloud-download"></i> ' + T.sabaform_data + '</h6>';
         html += '<div class="row">';
         for (var k in sf) {
             var label = _editSfLabels[k] || k;
