@@ -51,6 +51,39 @@ def dashboard():
             ActivityLog.created_at.desc()
         ).limit(10).all()
 
+        # Engagement per workflow attivi
+        active_workflows = db.query(Workflow).filter_by(status=WorkflowStatus.ACTIVE).all()
+        engagement_data = []
+        for wf in active_workflows:
+            total_p = len(wf.participants)
+            if total_p == 0:
+                continue
+            completed = sum(1 for p in wf.participants if p.status == ParticipantStatus.COMPLETED)
+            in_progress = sum(1 for p in wf.participants if p.status == ParticipantStatus.IN_PROGRESS)
+            pending = sum(1 for p in wf.participants if p.status == ParticipantStatus.PENDING)
+            bounced = sum(1 for p in wf.participants if p.status == ParticipantStatus.BOUNCED)
+            unsubscribed = sum(1 for p in wf.participants if p.status == ParticipantStatus.UNSUBSCRIBED)
+            emails_sent = db.query(Execution).join(Participant).filter(
+                Participant.workflow_id == wf.id,
+                Execution.status == ExecutionStatus.SENT
+            ).count()
+            emails_failed = db.query(Execution).join(Participant).filter(
+                Participant.workflow_id == wf.id,
+                Execution.status == ExecutionStatus.FAILED
+            ).count()
+            engagement_data.append({
+                'workflow': wf,
+                'total': total_p,
+                'completed': completed,
+                'in_progress': in_progress,
+                'pending': pending,
+                'bounced': bounced,
+                'unsubscribed': unsubscribed,
+                'emails_sent': emails_sent,
+                'emails_failed': emails_failed,
+                'completion_rate': round(completed / total_p * 100) if total_p else 0,
+            })
+
         return render_template('admin/dashboard.html',
                              stats=stats,
                              workflow_status_labels=workflow_status_labels,
@@ -58,7 +91,8 @@ def dashboard():
                              participant_status_labels=participant_status_labels,
                              participant_status_data=participant_status_data,
                              recent_workflows=recent_workflows,
-                             recent_activities=recent_activities)
+                             recent_activities=recent_activities,
+                             engagement_data=engagement_data)
 
     except Exception as e:
         logger.error(f"Errore dashboard: {str(e)}")
@@ -71,7 +105,8 @@ def dashboard():
                              participant_status_labels=[],
                              participant_status_data=[],
                              recent_workflows=[],
-                             recent_activities=[])
+                             recent_activities=[],
+                             engagement_data=[])
 
 
 @admin_bp.route('/workflows')

@@ -161,6 +161,77 @@
         </div>
     </div>
 </div>
+<!-- Engagement Tracker -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Engagement Tracker</h5>
+            </div>
+            <div class="card-body">
+                {% if engagement_data %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Workflow</th>
+                                <th class="text-center">Partecipanti</th>
+                                <th class="text-center">Email Inviate</th>
+                                <th class="text-center">Completati</th>
+                                <th class="text-center">In Corso</th>
+                                <th class="text-center">In Attesa</th>
+                                <th class="text-center">Bounced</th>
+                                <th class="text-center">Disiscritti</th>
+                                <th class="text-center">Fallite</th>
+                                <th>Completamento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for e in engagement_data %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('admin.workflow_detail', workflow_id=e.workflow.id) }}" style="text-decoration:none">
+                                        <strong>{{ e.workflow.name }}</strong>
+                                    </a>
+                                </td>
+                                <td class="text-center">{{ e.total }}</td>
+                                <td class="text-center">{{ e.emails_sent }}</td>
+                                <td class="text-center"><span class="badge bg-success">{{ e.completed }}</span></td>
+                                <td class="text-center"><span class="badge bg-primary">{{ e.in_progress }}</span></td>
+                                <td class="text-center"><span class="badge bg-secondary">{{ e.pending }}</span></td>
+                                <td class="text-center">
+                                    {% if e.bounced > 0 %}<span class="badge bg-warning text-dark">{{ e.bounced }}</span>{% else %}—{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if e.unsubscribed > 0 %}<span class="badge bg-danger">{{ e.unsubscribed }}</span>{% else %}—{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if e.emails_failed > 0 %}<span class="badge bg-danger">{{ e.emails_failed }}</span>{% else %}—{% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="progress flex-grow-1" style="height:8px; min-width:80px">
+                                            <div class="progress-bar bg-success" style="width:{{ e.completion_rate }}%"></div>
+                                        </div>
+                                        <small class="fw-bold" style="min-width:35px">{{ e.completion_rate }}%</small>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-graph-up"></i>
+                    <p>Nessun workflow attivo con partecipanti</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Attività Recenti -->
 <div class="row mt-4">
     <div class="col-12">
