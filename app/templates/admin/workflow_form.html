@@ -555,7 +555,12 @@ try {
             status_value: _skipCond.status_value || 'completed',
             format: _skipCond.format || 'csv',
             send_to: _skipCond.send_to || '',
-            save_local: _skipCond.save_local || false
+            save_local: _skipCond.save_local || false,
+            question: _skipCond.question || '',
+            response_type: _skipCond.response_type || 'choices',
+            choices: _skipCond.choices || ['Ottimo', 'Buono', 'Sufficiente', 'Scarso'],
+            scale_max: _skipCond.scale_max || 5,
+            allow_comment: _skipCond.allow_comment !== undefined ? _skipCond.allow_comment : true
         }
     });
     {% endfor %}
@@ -593,6 +598,11 @@ try {
     {% endif %}
 
     console.log('Loaded ' + existingSteps.length + ' steps from DB');
+
+    // In edit mode, vai direttamente a Build Steps (step 2)
+    {% if mode == 'edit' %}
+    nextStep();
+    {% endif %}
 } catch(e) {
     console.error('Error loading steps:', e);
 }
