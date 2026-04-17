@@ -392,7 +392,10 @@ function applyFilters() {
 }
 
 function getFieldValue(p, key) {
-    if (key.startsWith('cd_')) return p.collected_data ? (p.collected_data[key.substring(3)] || '') : '';
+    if (key.startsWith('cd_')) {
+        var val = p.collected_data ? (p.collected_data[key.substring(3)] || '') : '';
+        return val;
+    }
     return p[key];
 }
 
@@ -423,6 +426,7 @@ function renderTable(rows) {
             var val = getFieldValue(p, c.key);
             if (c.key === 'status') return '<td><span class="status-badge status-' + val + '">' + val + '</span></td>';
             if (c.key === 'workflow') return '<td><small>' + esc(val) + '</small></td>';
+            if (isFileObj(val)) return '<td>' + renderFileValue(val, 'cell') + '</td>';
             return '<td>' + esc(val || '—') + '</td>';
         }).join('');
 
@@ -442,6 +446,19 @@ function sortBy(key) {
 }
 
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function isFileObj(val) { return val && typeof val === 'object' && val.filename && val.data; }
+
+function renderFileValue(val, mode) {
+    if (!isFileObj(val)) return esc(val);
+    var mime = val.mime || '';
+    if (mode === 'cell') return '<i class="bi bi-paperclip"></i> ' + esc(val.filename);
+    // modal mode — show preview for images, download link for others
+    if (mime.startsWith('image/')) {
+        return '<div><img src="' + val.data + '" style="max-width:100%;max-height:200px;border-radius:8px;margin-bottom:4px" alt="' + esc(val.filename) + '"><br><small>' + esc(val.filename) + '</small></div>';
+    }
+    return '<a href="' + val.data + '" download="' + esc(val.filename) + '" class="btn btn-sm btn-outline-primary"><i class="bi bi-download"></i> ' + esc(val.filename) + '</a>';
+}
 
 // =============================================
 // ACTIONS
@@ -507,8 +524,9 @@ function viewData(id) {
         html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-collection"></i> Dati Raccolti</h6>';
         html += '<dl class="row" style="font-size:14px">';
         for (var k in p.collected_data) {
+            var cdVal = p.collected_data[k];
             html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(k) + '</dt>';
-            html += '<dd class="col-sm-8">' + esc(p.collected_data[k]) + '</dd>';
+            html += '<dd class="col-sm-8">' + renderFileValue(cdVal, 'modal') + '</dd>';
         }
         html += '</dl>';
     } else {
