@@ -58,5 +58,8 @@ logs/
 .coverage
 htmlcov/
 
+# Uploads (stored in DB or external storage in production)
+app/static/uploads/
+
 # Alembic
 # NON ignorare migrations/versions/ - va in Git!
