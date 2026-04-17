@@ -1,7 +1,7 @@
 {% extends "admin/base.html" %}
 
-{% block title %}Dashboard - Saba Workflow Admin{% endblock %}
-{% block page_title %}Dashboard{% endblock %}
+{% block title %}{{ t.dashboard }} - Saba Workflow Admin{% endblock %}
+{% block page_title %}{{ t.dashboard }}{% endblock %}
 
 {% block content %}
 <!-- Stats Cards -->
@@ -11,7 +11,7 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <p class="stat-label">Workflows Totali</p>
+                        <p class="stat-label">{{ t.total_workflows }}</p>
                         <h2 class="stat-value">{{ stats.total_workflows }}</h2>
                     </div>
                     <i class="bi bi-diagram-3 text-primary" style="font-size: 3rem; opacity: 0.3;"></i>
@@ -19,13 +19,13 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-3">
         <div class="card stat-card success">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <p class="stat-label">Workflows Attivi</p>
+                        <p class="stat-label">{{ t.active_workflows }}</p>
                         <h2 class="stat-value">{{ stats.active_workflows }}</h2>
                     </div>
                     <i class="bi bi-play-circle text-success" style="font-size: 3rem; opacity: 0.3;"></i>
@@ -33,13 +33,13 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-3">
         <div class="card stat-card warning">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <p class="stat-label">Partecipanti</p>
+                        <p class="stat-label">{{ t.total_participants }}</p>
                         <h2 class="stat-value">{{ stats.total_participants }}</h2>
                     </div>
                     <i class="bi bi-people text-warning" style="font-size: 3rem; opacity: 0.3;"></i>
@@ -47,13 +47,13 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-3">
         <div class="card stat-card danger">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <p class="stat-label">Email Inviate</p>
+                        <p class="stat-label">{{ t.emails_sent }}</p>
                         <h2 class="stat-value">{{ stats.emails_sent }}</h2>
                     </div>
                     <i class="bi bi-envelope-check text-danger" style="font-size: 3rem; opacity: 0.3;"></i>
@@ -68,7 +68,7 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Workflows per Stato</h5>
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> {{ t.workflows_by_status }}</h5>
             </div>
             <div class="card-body">
                 <div class="chart-container">
@@ -77,11 +77,11 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Partecipanti per Stato</h5>
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> {{ t.participants_by_status }}</h5>
             </div>
             <div class="card-body">
                 <div class="chart-container">
@@ -97,9 +97,9 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Workflows Recenti</h5>
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> {{ t.recent_workflows }}</h5>
                 <a href="{{ url_for('admin.workflows_list') }}" class="btn btn-sm btn-outline-primary">
-                    Vedi tutti <i class="bi bi-arrow-right"></i>
+                    {{ t.see_all }} <i class="bi bi-arrow-right"></i>
                 </a>
             </div>
             <div class="card-body">
@@ -108,12 +108,12 @@
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>Nome</th>
-                                <th>Stato</th>
-                                <th>Steps</th>
-                                <th>Partecipanti</th>
-                                <th>Creato</th>
-                                <th>Azioni</th>
+                                <th>{{ t.name }}</th>
+                                <th>{{ t.status }}</th>
+                                <th>{{ t.steps }}</th>
+                                <th>{{ t.participants }}</th>
+                                <th>{{ t.created }}</th>
+                                <th>{{ t.actions }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -135,22 +135,22 @@
                                 <td>{{ workflow.created_at|localtime }}</td>
                                 <td class="table-actions">
                                     {% if workflow.status.value == 'active' %}
-                                    <button class="btn btn-sm btn-outline-danger" title="Pause"
+                                    <button class="btn btn-sm btn-outline-danger" title="{{ t.paused }}"
                                             onclick="toggleWorkflow({{ workflow.id }}, 'paused')">
                                         <i class="bi bi-pause-circle"></i>
                                     </button>
                                     {% elif workflow.status.value in ['draft', 'paused'] %}
-                                    <button class="btn btn-sm btn-outline-success" title="Activate"
+                                    <button class="btn btn-sm btn-outline-success" title="{{ t.active }}"
                                             onclick="toggleWorkflow({{ workflow.id }}, 'active')">
                                         <i class="bi bi-play-circle"></i>
                                     </button>
                                     {% endif %}
                                     <a href="{{ url_for('admin.workflow_detail', workflow_id=workflow.id) }}"
-                                       class="btn btn-sm btn-outline-primary" title="Dettagli">
+                                       class="btn btn-sm btn-outline-primary" title="{{ t.details }}">
                                         <i class="bi bi-eye"></i>
                                     </a>
                                     <a href="{{ url_for('admin.workflow_edit', workflow_id=workflow.id) }}"
-                                       class="btn btn-sm btn-outline-warning" title="Modifica">
+                                       class="btn btn-sm btn-outline-warning" title="{{ t.edit }}">
                                         <i class="bi bi-pencil"></i>
                                     </a>
                                 </td>
@@ -162,9 +162,9 @@
                 {% else %}
                 <div class="empty-state">
                     <i class="bi bi-inbox"></i>
-                    <p>Nessun workflow presente</p>
+                    <p>{{ t.no_workflows_present }}</p>
                     <a href="{{ url_for('admin.workflow_create') }}" class="btn btn-primary">
-                        <i class="bi bi-plus-circle"></i> Crea il primo workflow
+                        <i class="bi bi-plus-circle"></i> {{ t.create_first_workflow }}
                     </a>
                 </div>
                 {% endif %}
@@ -177,9 +177,9 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Engagement Tracker</h5>
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> {{ t.engagement_tracker }}</h5>
                 <select class="form-select form-select-sm" style="width:auto" id="engagementFilter" onchange="filterEngagement()">
-                    <option value="">All Workflows</option>
+                    <option value="">{{ t.all_workflows }}</option>
                     {% for wf in engagement_workflows %}
                     <option value="{{ wf.id }}">{{ wf.name }}</option>
                     {% endfor %}
@@ -191,11 +191,11 @@
                     <table class="table table-hover table-sm mb-0" id="engagementTable">
                         <thead style="position:sticky;top:0;background:var(--md-surface-container, #f5f5f5);z-index:1">
                             <tr>
-                                <th>Participant</th>
-                                <th>Workflow</th>
-                                <th>Status</th>
-                                <th>Last Event</th>
-                                <th>When</th>
+                                <th>{{ t.participant }}</th>
+                                <th>{{ t.workflow }}</th>
+                                <th>{{ t.status }}</th>
+                                <th>{{ t.last_event }}</th>
+                                <th>{{ t.when }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -227,7 +227,7 @@
                 {% else %}
                 <div class="empty-state p-4">
                     <i class="bi bi-graph-up"></i>
-                    <p>No participants yet</p>
+                    <p>{{ t.no_participants_yet }}</p>
                 </div>
                 {% endif %}
             </div>
@@ -240,24 +240,24 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="timelineModalTitle">Participant Timeline</h5>
+                <h5 class="modal-title" id="timelineModalTitle">{{ t.participant_timeline }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="timelineModalBody" style="max-height:70vh;overflow-y:auto">
-                <p class="text-muted text-center">Loading...</p>
+                <p class="text-muted text-center">{{ t.loading }}</p>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Attività Recenti -->
+<!-- Recent Activities -->
 <div class="row mt-4">
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-activity"></i> Attività Recenti</h5>
+                <h5 class="mb-0"><i class="bi bi-activity"></i> {{ t.recent_activities }}</h5>
                 <a href="{{ url_for('admin.executions_monitor') }}" class="btn btn-sm btn-outline-primary">
-                    Vedi tutte <i class="bi bi-arrow-right"></i>
+                    {{ t.see_all }} <i class="bi bi-arrow-right"></i>
                 </a>
             </div>
             <div class="card-body">
@@ -266,10 +266,10 @@
                     <table class="table table-hover table-sm">
                         <thead>
                             <tr>
-                                <th>Quando</th>
-                                <th>Evento</th>
-                                <th>Descrizione</th>
-                                <th>Partecipante</th>
+                                <th>{{ t.when }}</th>
+                                <th>{{ t.get('event', 'Event') }}</th>
+                                <th>{{ t.description }}</th>
+                                <th>{{ t.participant }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -278,19 +278,19 @@
                                 <td class="text-nowrap"><small>{{ a.created_at|localtime }}</small></td>
                                 <td>
                                     {% if a.event_type == 'form_submitted' %}
-                                        <span class="badge bg-success"><i class="bi bi-check2-square"></i> Form</span>
+                                        <span class="badge bg-success"><i class="bi bi-check2-square"></i> {{ t.form_submitted }}</span>
                                     {% elif a.event_type == 'status_changed' %}
-                                        <span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> Stato</span>
+                                        <span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> {{ t.status_changed }}</span>
                                     {% elif a.event_type == 'workflow_started' %}
-                                        <span class="badge bg-primary"><i class="bi bi-play-circle"></i> Avviato</span>
+                                        <span class="badge bg-primary"><i class="bi bi-play-circle"></i> {{ t.workflow_started }}</span>
                                     {% elif a.event_type == 'simulation' %}
-                                        <span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> Simulazione</span>
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> {{ t.simulation }}</span>
                                     {% elif a.event_type == 'survey_submitted' %}
-                                        <span class="badge bg-info"><i class="bi bi-ui-checks"></i> Survey</span>
+                                        <span class="badge bg-info"><i class="bi bi-ui-checks"></i> {{ t.survey_submitted }}</span>
                                     {% elif a.event_type == 'landing_opened' %}
-                                        <span class="badge" style="background:#ff9800;color:#fff"><i class="bi bi-box-arrow-up-right"></i> Landing Opened</span>
+                                        <span class="badge" style="background:#ff9800;color:#fff"><i class="bi bi-box-arrow-up-right"></i> {{ t.landing_opened }}</span>
                                     {% elif a.event_type == 'unsubscribed' %}
-                                        <span class="badge bg-danger"><i class="bi bi-person-x"></i> Disiscritto</span>
+                                        <span class="badge bg-danger"><i class="bi bi-person-x"></i> {{ t.unsubscribed }}</span>
                                     {% else %}
                                         <span class="badge bg-secondary">{{ a.event_type }}</span>
                                     {% endif %}
@@ -307,7 +307,7 @@
                 {% else %}
                 <div class="empty-state">
                     <i class="bi bi-activity"></i>
-                    <p>Nessuna attività ancora</p>
+                    <p>{{ t.no_activity_yet }}</p>
                 </div>
                 {% endif %}
             </div>
@@ -318,6 +318,8 @@
 
 {% block extra_js %}
 <script>
+var T = {{ t|tojson }};
+
 // Workflow Status Chart
 const workflowStatusCtx = document.getElementById('workflowStatusChart').getContext('2d');
 new Chart(workflowStatusCtx, {
@@ -353,7 +355,7 @@ new Chart(participantStatusCtx, {
     data: {
         labels: {{ participant_status_labels|tojson }},
         datasets: [{
-            label: 'Partecipanti',
+            label: T.participants,
             data: {{ participant_status_data|tojson }},
             backgroundColor: '#0d6efd'
         }]
@@ -388,8 +390,8 @@ function filterEngagement() {
 // Timeline modal
 function showTimeline(participantId, name) {
     var modal = new bootstrap.Modal(document.getElementById('timelineModal'));
-    document.getElementById('timelineModalTitle').textContent = 'Timeline — ' + name;
-    document.getElementById('timelineModalBody').innerHTML = '<p class="text-muted text-center"><i class="bi bi-hourglass-split"></i> Loading...</p>';
+    document.getElementById('timelineModalTitle').textContent = T.participant_timeline + ' — ' + name;
+    document.getElementById('timelineModalBody').innerHTML = '<p class="text-muted text-center"><i class="bi bi-hourglass-split"></i> ' + T.loading + '</p>';
     modal.show();
 
     fetch('/admin/api/participant/' + participantId + '/timeline')
@@ -402,7 +404,7 @@ function showTimeline(participantId, name) {
             renderTimeline(data);
         })
         .catch(function() {
-            document.getElementById('timelineModalBody').innerHTML = '<p class="text-danger">Connection error</p>';
+            document.getElementById('timelineModalBody').innerHTML = '<p class="text-danger">' + T.connection_error + '</p>';
         });
 }
 
@@ -417,7 +419,7 @@ function renderTimeline(data) {
     html += '</div>';
 
     if (events.length === 0) {
-        html += '<p class="text-muted text-center">No events recorded</p>';
+        html += '<p class="text-muted text-center">' + T.no_events_recorded + '</p>';
         body.innerHTML = html;
         return;
     }
@@ -453,8 +455,8 @@ function renderTimeline(data) {
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function toggleWorkflow(id, newStatus) {
-    var action = newStatus === 'ACTIVE' ? 'activate' : 'pause';
-    if (!confirm('Are you sure you want to ' + action + ' this workflow?')) return;
+    var msg = newStatus === 'active' ? T.confirm_activate : T.confirm_pause;
+    if (!confirm(msg)) return;
 
     fetch('/api/workflows/' + id, {
         method: 'PUT',
@@ -465,7 +467,7 @@ function toggleWorkflow(id, newStatus) {
         if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Error'); });
         location.reload();
     })
-    .catch(function(e) { alert('Error: ' + e.message); });
+    .catch(function(e) { alert(T.error + ': ' + e.message); });
 }
 </script>
 {% endblock %}
