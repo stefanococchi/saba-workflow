@@ -263,6 +263,8 @@ class SchedulerService:
                         execution.error_message = "Condition evaluation failed"
                     _db().commit()
                     return  # Don't use default next-step logic
+                elif step.type.value == 'human_approval':
+                    success = SchedulerService._execute_human_approval_step(participant, step, execution)
                 elif step.type.value == 'survey':
                     success = SchedulerService._execute_survey_step(participant, step, execution)
                 elif step.type.value == 'export_data':
@@ -315,6 +317,113 @@ class SchedulerService:
             logger.error(f"✗ Email error: {str(e)}")
             return False
     
+    @staticmethod
+    def _execute_human_approval_step(participant, step, execution):
+        """Execute human approval step — sends email to approver with approve/reject buttons"""
+        try:
+            from flask import current_app
+            from urllib.parse import quote
+            config = step.skip_conditions or {}
+            approver_email = config.get('approver_email', '')
+            approval_message = config.get('approval_message', '')
+
+            if not approver_email:
+                logger.error("✗ Human approval step missing approver_email")
+                return False
+
+            # Generate approval URL using participant token
+            base_url = current_app.config.get('LANDING_BASE_URL', 'http://localhost:5001/landing')
+            approval_base = base_url.rsplit('/landing', 1)[0] + '/approval'
+            token = TokenService.generate_landing_url(participant)
+            token_value = token.rsplit('/', 1)[-1]
+            approve_url = f"{approval_base}/{token_value}?action=approve"
+            reject_url = f"{approval_base}/{token_value}?action=reject"
+
+            # Render approval message with context
+            context = {
+                'participant': {
+                    'name': participant.full_name,
+                    'first_name': participant.first_name,
+                    'last_name': participant.last_name,
+                    'email': participant.email,
+                },
+                'workflow_name': participant.workflow.name,
+                'step_name': step.name,
+            }
+            if participant.workflow.config:
+                context.update(participant.workflow.config)
+
+            rendered_message = EmailService.render_template(approval_message, context) if approval_message else ''
+
+            # Build participant data summary
+            data_rows = ''
+            # Base info
+            base_fields = [
+                ('Name', participant.full_name),
+                ('Email', participant.email),
+                ('Phone', participant.phone),
+            ]
+            for label, val in base_fields:
+                if val:
+                    data_rows += f'<tr><td style="padding:6px 12px;color:#888;font-size:13px;white-space:nowrap">{label}</td><td style="padding:6px 12px;font-size:13px">{val}</td></tr>'
+
+            # Saba Form data
+            sf = participant.sabaform_data
+            if sf and isinstance(sf, dict):
+                sf_labels = {'company': 'Company', 'birth_date': 'Birth Date', 'gender': 'Gender',
+                             'nucleo': 'Family Unit', 'doc_type': 'Doc Type', 'doc_number': 'Doc Number',
+                             'doc_expiry': 'Doc Expiry', 'volo_arrivo': 'Arrival Flight',
+                             'volo_partenza': 'Departure Flight', 'notes': 'Notes'}
+                for k, v in sf.items():
+                    if v and k not in ('id', 'first_name', 'last_name', 'email', 'phone', 'confirmed', 'status'):
+                        label = sf_labels.get(k, k)
+                        data_rows += f'<tr><td style="padding:6px 12px;color:#888;font-size:13px;white-space:nowrap">{label}</td><td style="padding:6px 12px;font-size:13px">{v}</td></tr>'
+
+            # Collected data (from landing page)
+            cd = participant.collected_data
+            if cd and isinstance(cd, dict):
+                for k, v in cd.items():
+                    if v and not isinstance(v, dict):
+                        data_rows += f'<tr><td style="padding:6px 12px;color:#888;font-size:13px;white-space:nowrap">{k}</td><td style="padding:6px 12px;font-size:13px">{v}</td></tr>'
+
+            data_table = ''
+            if data_rows:
+                data_table = f'<table style="width:100%;border-collapse:collapse;background:#fafafa;border-radius:8px;margin:16px 0">{data_rows}</table>'
+
+            # Build email body
+            body_html = f'''
+            <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #333;">Approval Required</h2>
+                <p style="color: #666; font-size: 15px;">
+                    Workflow: <strong>{participant.workflow.name}</strong>
+                </p>
+                {f'<div style="background: #fff3cd; padding: 16px; border-radius: 8px; margin: 16px 0; color: #333; border-left: 4px solid #ffc107;">{rendered_message}</div>' if rendered_message else ''}
+                <h3 style="color:#555; font-size:16px; margin-top:24px;">Participant Data</h3>
+                {data_table}
+                <div style="text-align: center; margin-top: 30px; padding: 20px; background: #f5f5f5; border-radius: 12px;">
+                    <a href="{approve_url}" style="display: inline-block; margin: 8px; padding: 14px 40px; background-color: #198754; color: #fff; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600;">Approve</a>
+                    <a href="{reject_url}" style="display: inline-block; margin: 8px; padding: 14px 40px; background-color: #dc3545; color: #fff; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600;">Reject</a>
+                </div>
+                <p style="color: #999; font-size: 12px; margin-top: 20px; text-align: center;">
+                    Timeout: {config.get('timeout_hours', 48)} hours
+                </p>
+            </div>
+            '''
+
+            subject = f"Approval Required: {participant.full_name or participant.email} — {participant.workflow.name}"
+
+            success = EmailService.send_email(
+                to_email=approver_email,
+                subject=subject,
+                body_html=body_html
+            )
+
+            return success
+
+        except Exception as e:
+            logger.error(f"✗ Human approval error: {str(e)}")
+            return False
+
     @staticmethod
     def _execute_survey_step(participant, step, execution):
         """Execute survey step — sends email with survey buttons"""

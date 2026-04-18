@@ -122,7 +122,9 @@ function getDefaultConfig(type) {
         },
         human_approval: {
             approver_email: '',
-            timeout_hours: 48
+            approval_message: '',
+            timeout_hours: 48,
+            on_timeout: 'reject'
         },
         export_data: {
             format: 'csv',
@@ -294,6 +296,14 @@ function renderStepSummary(step) {
                 <p class="mb-1"><strong>Subject:</strong> ${step.config.subject || '<em class="text-muted">Not set</em>'}</p>
                 <p class="mb-1"><strong>Domanda:</strong> ${surveyQ}</p>
                 <p class="mb-0"><strong>Risposte:</strong> ${surveyType}</p>
+            `;
+        case 'human_approval':
+            var approvedAction = step.config.if_approved === 'jump' ? 'Jump to step ' + (step.config.if_approved_step || '?') : (step.config.if_approved === 'complete' ? 'Complete workflow' : 'Continue');
+            var rejectedAction = step.config.if_rejected === 'jump' ? 'Jump to step ' + (step.config.if_rejected_step || '?') : (step.config.if_rejected === 'continue' ? 'Continue' : 'Stop workflow');
+            return `
+                <p class="mb-1"><strong>Approver:</strong> ${step.config.approver_email || '<em class="text-muted">Not set</em>'}</p>
+                <p class="mb-1"><small class="text-success">&#10003; Approved → ${approvedAction}</small> · <small class="text-danger">&#10007; Rejected → ${rejectedAction}</small></p>
+                <p class="mb-0"><strong>Timeout:</strong> ${step.config.timeout_hours}h → ${step.config.on_timeout === 'approve' ? 'Auto-approve' : step.config.on_timeout === 'remind' ? 'Remind' : 'Reject'}</p>
             `;
         case 'export_data':
             const exportTo = step.config.send_to || 'No email configured';
@@ -690,6 +700,70 @@ function renderStepEditForm(step, index) {
                            value="${step.config.delay_hours || 0}" min="0">
                 </div>
             `;
+        case 'human_approval':
+            return common + `
+                <div class="mb-3">
+                    <label class="form-label">Approver Email *</label>
+                    <input type="email" class="form-control" id="editApproverEmail"
+                           value="${step.config.approver_email || ''}"
+                           placeholder="manager@example.com">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Message to Approver</label>
+                    <textarea class="form-control" id="editApprovalMessage" rows="3"
+                              placeholder="Please review and approve this participant...">${step.config.approval_message || ''}</textarea>
+                    <div class="form-text">This message will be shown in the approval email. You can use {{ participant.full_name }}, {{ workflow_name }}.</div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-success"><i class="bi bi-check-circle"></i> If Approved</label>
+                        <select class="form-select" id="editIfApproved" onchange="toggleApprovalJump('Approved')">
+                            <option value="continue" ${(step.config.if_approved || 'continue') === 'continue' ? 'selected' : ''}>Continue to next step</option>
+                            <option value="jump" ${step.config.if_approved === 'jump' ? 'selected' : ''}>Jump to step...</option>
+                            <option value="complete" ${step.config.if_approved === 'complete' ? 'selected' : ''}>Complete workflow</option>
+                        </select>
+                        <div id="jumpApprovedRow" class="mt-2" ${step.config.if_approved === 'jump' ? '' : 'style="display:none"'}>
+                            <select class="form-select form-select-sm" id="editIfApprovedStep">
+                                ${buildStepOptions(step.config.if_approved_step, index)}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-danger"><i class="bi bi-x-circle"></i> If Rejected</label>
+                        <select class="form-select" id="editIfRejected" onchange="toggleApprovalJump('Rejected')">
+                            <option value="stop" ${(step.config.if_rejected || 'stop') === 'stop' ? 'selected' : ''}>Stop workflow</option>
+                            <option value="continue" ${step.config.if_rejected === 'continue' ? 'selected' : ''}>Continue to next step</option>
+                            <option value="jump" ${step.config.if_rejected === 'jump' ? 'selected' : ''}>Jump to step...</option>
+                        </select>
+                        <div id="jumpRejectedRow" class="mt-2" ${step.config.if_rejected === 'jump' ? '' : 'style="display:none"'}>
+                            <select class="form-select form-select-sm" id="editIfRejectedStep">
+                                ${buildStepOptions(step.config.if_rejected_step, index)}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <div class="mb-3">
+                    <label class="form-label">Timeout (hours)</label>
+                    <input type="number" class="form-control" id="editApprovalTimeout"
+                           value="${step.config.timeout_hours || 48}" min="1">
+                    <div class="form-text">How long to wait for approval before taking the timeout action.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">On Timeout</label>
+                    <select class="form-select" id="editOnTimeout">
+                        <option value="reject" ${(step.config.on_timeout || 'reject') === 'reject' ? 'selected' : ''}>Treat as Rejected</option>
+                        <option value="approve" ${step.config.on_timeout === 'approve' ? 'selected' : ''}>Treat as Approved</option>
+                        <option value="remind" ${step.config.on_timeout === 'remind' ? 'selected' : ''}>Send reminder email</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Delay (hours after previous step)</label>
+                    <input type="number" class="form-control" id="editApprovalDelay"
+                           value="${step.config.delay_hours || 0}" min="0">
+                </div>
+            `;
         case 'export_data':
             return common + `
                 <div class="mb-3">
@@ -828,6 +902,13 @@ function populatFieldsFromPrecedingLanding(selectId, currentValue, loadingId, cu
         loading.innerHTML = '<i class="bi bi-info-circle"></i> Save the workflow and configure a landing page before this step.';
         loading.style.display = '';
     }
+}
+
+// Approval helpers
+function toggleApprovalJump(which) {
+    var action = document.getElementById('editIf' + which).value;
+    var row = document.getElementById('jump' + which + 'Row');
+    if (row) row.style.display = action === 'jump' ? 'block' : 'none';
 }
 
 // Survey helpers
@@ -1032,6 +1113,17 @@ function saveStepEdit() {
                 if (v) step.config.choices.push(v);
             });
             destroyEmailEditor();
+            break;
+        case 'human_approval':
+            step.config.approver_email = document.getElementById('editApproverEmail').value;
+            step.config.approval_message = document.getElementById('editApprovalMessage').value;
+            step.config.timeout_hours = parseInt(document.getElementById('editApprovalTimeout').value) || 48;
+            step.config.on_timeout = document.getElementById('editOnTimeout').value;
+            step.config.delay_hours = parseInt(document.getElementById('editApprovalDelay').value) || 0;
+            step.config.if_approved = document.getElementById('editIfApproved').value;
+            step.config.if_approved_step = parseInt(document.getElementById('editIfApprovedStep')?.value) || 0;
+            step.config.if_rejected = document.getElementById('editIfRejected').value;
+            step.config.if_rejected_step = parseInt(document.getElementById('editIfRejectedStep')?.value) || 0;
             break;
         case 'export_data':
             step.config.format = document.getElementById('editExportFormat').value;
@@ -1297,6 +1389,20 @@ function saveWorkflow() {
                     choices: step.config.choices,
                     scale_max: step.config.scale_max,
                     allow_comment: step.config.allow_comment
+                };
+            }
+
+            // For human_approval steps, store config in skip_conditions
+            if (step.type === 'human_approval') {
+                stepData.skip_conditions = {
+                    approver_email: step.config.approver_email,
+                    approval_message: step.config.approval_message,
+                    timeout_hours: step.config.timeout_hours,
+                    on_timeout: step.config.on_timeout,
+                    if_approved: step.config.if_approved,
+                    if_approved_step: step.config.if_approved_step,
+                    if_rejected: step.config.if_rejected,
+                    if_rejected_step: step.config.if_rejected_step
                 };
             }
 

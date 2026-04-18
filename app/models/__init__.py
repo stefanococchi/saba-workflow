@@ -25,6 +25,7 @@ class StepType(str, Enum):
     EXPORT_DATA = 'export_data'
     CONDITION = 'condition'
     SURVEY = 'survey'
+    HUMAN_APPROVAL = 'human_approval'
 
 
 class ParticipantStatus(str, Enum):

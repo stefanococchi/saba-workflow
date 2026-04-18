@@ -216,6 +216,90 @@ def unsubscribe_from_landing(token):
         return jsonify({'error': str(e)}), 500
 
 
+@landing_bp.route('/approval/<token>', methods=['GET'])
+def handle_approval(token):
+    """Handle approve/reject click from approver email"""
+    try:
+        payload = TokenService.verify_token(token)
+        if not payload:
+            return render_template('landing/error.html', error='Link expired or invalid'), 400
+
+        participant = db.get(Participant, payload['participant_id'])
+        if not participant:
+            return render_template('landing/error.html', error='Participant not found'), 404
+
+        action = request.args.get('action', '')
+        if action not in ('approve', 'reject'):
+            return render_template('landing/error.html', error='Invalid action'), 400
+
+        # Find the human_approval step to read config
+        approval_step = None
+        for s in sorted(participant.workflow.steps, key=lambda x: x.order):
+            if s.type == StepType.HUMAN_APPROVAL:
+                approval_step = s
+                break
+        if not approval_step and payload.get('step_id'):
+            approval_step = db.get(WorkflowStep, payload['step_id'])
+
+        config = approval_step.skip_conditions or {} if approval_step else {}
+
+        if action == 'approve':
+            log_activity(
+                workflow_id=participant.workflow_id,
+                event_type='approval_granted',
+                description=f'{participant.full_name or participant.email} approved',
+                participant_id=participant.id,
+            )
+            # Execute configured action
+            if_approved = config.get('if_approved', 'continue')
+            if if_approved == 'complete':
+                participant.status = ParticipantStatus.COMPLETED
+                participant.completed_at = datetime.utcnow()
+                SchedulerService.cancel_scheduled_executions(participant.id)
+            elif if_approved == 'jump' and config.get('if_approved_step'):
+                target_order = config['if_approved_step']
+                target_step = next((s for s in participant.workflow.steps if s.order == target_order), None)
+                if target_step:
+                    SchedulerService.schedule_step(participant, target_step, delay_hours=0)
+            else:
+                # continue
+                if approval_step:
+                    SchedulerService._schedule_next_step(participant, approval_step)
+        else:
+            log_activity(
+                workflow_id=participant.workflow_id,
+                event_type='approval_rejected',
+                description=f'{participant.full_name or participant.email} rejected',
+                participant_id=participant.id,
+            )
+            if_rejected = config.get('if_rejected', 'stop')
+            if if_rejected == 'continue':
+                if approval_step:
+                    SchedulerService._schedule_next_step(participant, approval_step)
+            elif if_rejected == 'jump' and config.get('if_rejected_step'):
+                target_order = config['if_rejected_step']
+                target_step = next((s for s in participant.workflow.steps if s.order == target_order), None)
+                if target_step:
+                    SchedulerService.schedule_step(participant, target_step, delay_hours=0)
+            else:
+                # stop
+                participant.status = ParticipantStatus.COMPLETED
+                participant.completed_at = datetime.utcnow()
+                SchedulerService.cancel_scheduled_executions(participant.id)
+
+        db.commit()
+
+        return render_template('landing/approval_result.html',
+                             action=action,
+                             participant=participant,
+                             workflow=participant.workflow)
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore approval: {str(e)}")
+        return render_template('landing/error.html', error='Error processing approval'), 500
+
+
 @landing_bp.route('/survey/<token>', methods=['GET'])
 def show_survey(token):
     """Click dall'email — salva la risposta immediatamente e mostra Grazie"""

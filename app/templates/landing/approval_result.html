@@ -1,0 +1,24 @@
+{% extends "landing/base.html" %}
+
+{% block title %}{{ 'Approved' if action == 'approve' else 'Rejected' }} - {{ workflow.name }}{% endblock %}
+
+{% block content %}
+<div style="text-align:center; padding: 20px 0;">
+    {% if action == 'approve' %}
+    <div style="font-size:48px; color:#198754; margin-bottom:16px;">&#10003;</div>
+    <h1 style="font-size:24px; color:#198754; margin-bottom:12px;">Approved</h1>
+    <p style="font-size:16px; color:#666;">
+        <strong>{{ participant.full_name or participant.email }}</strong> has been approved.<br>
+        The workflow will continue to the next step.
+    </p>
+    {% else %}
+    <div style="font-size:48px; color:#dc3545; margin-bottom:16px;">&#10007;</div>
+    <h1 style="font-size:24px; color:#dc3545; margin-bottom:12px;">Rejected</h1>
+    <p style="font-size:16px; color:#666;">
+        <strong>{{ participant.full_name or participant.email }}</strong> has been rejected.<br>
+        The workflow has been stopped.
+    </p>
+    {% endif %}
+    <p style="font-size:14px; color:#999; margin-top:20px;">{{ workflow.name }}</p>
+</div>
+{% endblock %}
