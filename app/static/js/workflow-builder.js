@@ -3,8 +3,21 @@ let workflowSteps = [];
 let currentStep = 1;
 let editingStepIndex = null;
 
+// Canvas theme
+var _canvasTheme = localStorage.getItem('wf_canvas_theme') || 'dark';
+
+function setCanvasTheme(theme, btn) {
+    _canvasTheme = theme;
+    localStorage.setItem('wf_canvas_theme', theme);
+    document.body.className = document.body.className.replace(/canvas-\S+/g, '').trim();
+    document.body.classList.add('canvas-' + theme);
+    document.querySelectorAll('.wf-theme-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
+    document.body.classList.add('canvas-' + _canvasTheme);
     initDragAndDrop();
 });
 
@@ -158,26 +171,54 @@ function getDefaultConfig(type) {
 function renderCanvas() {
     const canvas = document.getElementById('workflowCanvas');
     const emptyState = document.getElementById('emptyState');
-    
+
     if (workflowSteps.length === 0) {
         emptyState.style.display = 'block';
+        canvas.querySelector('.wf-nodes')?.remove();
+        canvas.querySelector('.wf-theme-switcher')?.remove();
         return;
     }
-    
+
     emptyState.style.display = 'none';
-    
-    let html = '<div id="stepsSortContainer">';
+
+    let html = '<div class="wf-nodes" id="stepsSortContainer">';
+    // Start pill
+    html += '<div style="text-align:center"><span class="wf-pill start"><i class="bi bi-play-fill"></i> Start</span></div>';
+
     workflowSteps.forEach((step, index) => {
+        // Connector before node
+        html += renderConnector(index);
+
+        // Node
         html += '<div class="step-sort-item" data-sort-index="' + index + '">';
         html += renderStep(step, index);
-        if (index < workflowSteps.length - 1) {
-            html += '<div class="step-connector"></div>';
-        }
         html += '</div>';
+
+        // Branch visualization for condition/approval
+        if (step.type === 'condition') {
+            html += renderConditionBranch(step);
+        } else if (step.type === 'human_approval') {
+            html += renderApprovalBranch(step);
+        }
     });
+
+    // Final connector + End pill
+    html += '<div class="wf-connector"><div class="wf-connector-line"></div><div class="wf-connector-arrow">&#9660;</div></div>';
+    html += '<div style="text-align:center"><span class="wf-pill end"><i class="bi bi-stop-fill"></i> End</span></div>';
+    html += '<div style="height:20px"></div>';
     html += '</div>';
 
-    canvas.innerHTML = html + emptyState.outerHTML;
+    // Theme switcher
+    html += `<div class="wf-theme-switcher">
+        <div class="wf-theme-btn${_canvasTheme==='dark'?' active':''}" style="background:#1a1a1a" onclick="setCanvasTheme('dark',this)" title="Dark"></div>
+        <div class="wf-theme-btn${_canvasTheme==='white'?' active':''}" style="background:#fff;border-color:#ddd" onclick="setCanvasTheme('white',this)" title="White"></div>
+        <div class="wf-theme-btn${_canvasTheme==='cream'?' active':''}" style="background:#f5f0e8;border-color:#d5cfc3" onclick="setCanvasTheme('cream',this)" title="Cream"></div>
+        <div class="wf-theme-btn${_canvasTheme==='warm-dark'?' active':''}" style="background:#2d2a25" onclick="setCanvasTheme('warm-dark',this)" title="Warm Dark"></div>
+    </div>`;
+
+    // Preserve emptyState element
+    var emptyHtml = emptyState.outerHTML;
+    canvas.innerHTML = html + emptyHtml;
 
     // Allow palette drops on the sort container too
     var sortContainer = document.getElementById('stepsSortContainer');
@@ -191,7 +232,86 @@ function renderCanvas() {
     initStepSortable();
 }
 
-// Render single step
+// Connector with optional add-between button
+function renderConnector(index) {
+    return `
+        <div class="wf-connector">
+            <div class="wf-connector-line"></div>
+            <div class="wf-add-between" title="Inserisci step" onclick="addStepAt(${index})">+</div>
+            <div class="wf-connector-line"></div>
+            <div class="wf-connector-arrow">&#9660;</div>
+        </div>`;
+}
+
+// Condition branch visualization
+function renderConditionBranch(step) {
+    var ifTrue = step.config.if_true || 'continue';
+    var ifFalse = step.config.if_false || 'continue';
+    var trueLabel = ifTrue === 'jump' ? 'Jump to #' + (step.config.if_true_step || '?') : ifTrue === 'stop' ? 'Stop' : 'Continue';
+    var falseLabel = ifFalse === 'jump' ? 'Jump to #' + (step.config.if_false_step || '?') : ifFalse === 'stop' ? 'Stop' : 'Continue';
+
+    return `
+        <div class="wf-branch">
+            <svg width="320" height="35" viewBox="0 0 320 35" style="display:block;margin:0 auto">
+                <line x1="160" y1="0" x2="160" y2="8" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                <path d="M160,8 Q160,22 80,22 L80,35" fill="none" stroke="#4ade80" stroke-width="2"/>
+                <path d="M160,8 Q160,22 240,22 L240,35" fill="none" stroke="#f87171" stroke-width="2"/>
+            </svg>
+            <div class="wf-branch-row">
+                <div class="wf-branch-arm">
+                    <div class="wf-branch-label yes">True</div>
+                    <div class="wf-branch-action"><i class="bi bi-arrow-return-right"></i> ${trueLabel}</div>
+                </div>
+                <div class="wf-branch-arm">
+                    <div class="wf-branch-label no">False</div>
+                    <div class="wf-branch-action"><i class="bi bi-arrow-return-right"></i> ${falseLabel}</div>
+                </div>
+            </div>
+            <svg width="320" height="25" viewBox="0 0 320 25" style="display:block;margin:0 auto">
+                <path d="M80,0 L80,8 Q80,18 160,18 L160,25" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                <path d="M240,0 L240,8 Q240,18 160,18 L160,25" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
+            </svg>
+        </div>`;
+}
+
+// Approval branch visualization
+function renderApprovalBranch(step) {
+    var ifApproved = step.config.if_approved || 'continue';
+    var ifRejected = step.config.if_rejected || 'stop';
+    var approvedLabel = ifApproved === 'jump' ? 'Jump to #' + (step.config.if_approved_step || '?') : ifApproved === 'complete' ? 'Complete' : 'Continue';
+    var rejectedLabel = ifRejected === 'jump' ? 'Jump to #' + (step.config.if_rejected_step || '?') : ifRejected === 'continue' ? 'Continue' : 'Stop';
+
+    return `
+        <div class="wf-branch">
+            <svg width="320" height="35" viewBox="0 0 320 35" style="display:block;margin:0 auto">
+                <line x1="160" y1="0" x2="160" y2="8" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                <path d="M160,8 Q160,22 80,22 L80,35" fill="none" stroke="#4ade80" stroke-width="2"/>
+                <path d="M160,8 Q160,22 240,22 L240,35" fill="none" stroke="#f87171" stroke-width="2"/>
+            </svg>
+            <div class="wf-branch-row">
+                <div class="wf-branch-arm">
+                    <div class="wf-branch-label yes"><i class="bi bi-check-lg"></i> Approved</div>
+                    <div class="wf-branch-action"><i class="bi bi-arrow-return-right"></i> ${approvedLabel}</div>
+                </div>
+                <div class="wf-branch-arm">
+                    <div class="wf-branch-label no"><i class="bi bi-x-lg"></i> Rejected</div>
+                    <div class="wf-branch-action"><i class="bi bi-stop-circle"></i> ${rejectedLabel}</div>
+                </div>
+            </div>
+            <svg width="320" height="25" viewBox="0 0 320 25" style="display:block;margin:0 auto">
+                <path d="M80,0 L80,8 Q80,18 160,18 L160,25" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                <path d="M240,0 L240,8 Q240,18 160,18 L160,25" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
+            </svg>
+        </div>`;
+}
+
+// Add step at specific position (from "+" button)
+function addStepAt(index) {
+    // Show a quick picker or just insert default email
+    addStep('email', index);
+}
+
+// Render single step as compact node
 function renderStep(step, index) {
     const icons = {
         email: 'envelope',
@@ -204,78 +324,59 @@ function renderStep(step, index) {
         human_approval: 'person-check',
         export_data: 'download'
     };
-    
-    const colors = {
-        email: '#bbb',
-        wait_until: '#999',
-        condition: '#777',
-        goal_check: '#888',
-        engagement_tracker: '#aaa',
-        survey: '#9a9a9a',
-        file_upload: '#b0b0b0',
-        human_approval: '#808080',
-        export_data: '#a3a3a3'
-    };
 
-    const bgColors = {
-        email: '#f7f7f7',
-        wait_until: '#efefef',
-        condition: '#e5e5e5',
-        goal_check: '#eaeaea',
-        engagement_tracker: '#f2f2f2',
-        survey: '#ededed',
-        file_upload: '#f4f4f4',
-        human_approval: '#e8e8e8',
-        export_data: '#f0f0f0'
-    };
-    
-    const isPlaceholder = false; // Legacy, kept for template compatibility
-    const placeholderBadge = isPlaceholder ? ' <span class="badge bg-warning">Placeholder</span>' : '';
-    
+    var subtitle = renderNodeSubtitle(step);
+    var landingBtn = step.type === 'email' ? `<div class="wf-node-action" onclick="event.stopPropagation();openLandingBuilder(${index})" title="Landing Builder"><i class="bi bi-palette"></i></div>` : '';
+
     return `
-        <div class="workflow-step${isPlaceholder ? ' step-placeholder-canvas' : ''}" 
-             data-step-id="${step.id}" 
-             data-step-index="${index}"
-             style="border-color: ${colors[step.type]}; background: ${bgColors[step.type]}">
-            <div class="step-header">
-                <div class="d-flex align-items-center">
-                    <div class="step-drag-handle" title="Trascina per riordinare" style="cursor:grab;padding:8px 6px;margin-right:4px;color:#aaa;font-size:18px"><i class="bi bi-grip-vertical"></i></div>
-                    <div class="step-number">${index + 1}</div>
-                    <div class="ms-3">
-                        <h6 class="mb-0">
-                            <i class="bi bi-${icons[step.type]}"></i> ${step.name}${placeholderBadge}
-                        </h6>
-                        <small class="text-muted">${capitalize(step.type)}</small>
-                    </div>
-                </div>
-                <div class="step-actions">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" 
-                            onclick="moveStepUp(${index})" title="Move Up" ${index === 0 ? 'disabled' : ''}>
-                        <i class="bi bi-arrow-up"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" 
-                            onclick="moveStepDown(${index})" title="Move Down" ${index === workflowSteps.length - 1 ? 'disabled' : ''}>
-                        <i class="bi bi-arrow-down"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary"
-                            onclick="editStep(${index})" title="Edit">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    ${step.type === 'email' ? `<button type="button" class="btn btn-sm btn-outline-info"
-                            onclick="openLandingBuilder(${index})" title="Landing Builder">
-                        <i class="bi bi-palette"></i>
-                    </button>` : ''}
-                    <button type="button" class="btn btn-sm btn-outline-danger"
-                            onclick="deleteStep(${index})" title="Delete">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
+        <div class="wf-node" data-step-id="${step.id}" data-step-index="${index}" onclick="editStep(${index})">
+            <div class="wf-node-badge">${index + 1}</div>
+            <div class="wf-node-icon ${step.type}"><i class="bi bi-${icons[step.type] || 'gear'}"></i></div>
+            <div class="wf-node-body">
+                <div class="wf-node-title">${step.name}</div>
+                <div class="wf-node-subtitle">${subtitle}</div>
             </div>
-            <div class="step-content">
-                ${renderStepSummary(step)}
+            <div class="wf-node-drag" onclick="event.stopPropagation()"><i class="bi bi-grip-vertical"></i></div>
+            <div class="wf-node-actions">
+                <div class="wf-node-action" onclick="event.stopPropagation();editStep(${index})" title="Edit"><i class="bi bi-pencil"></i></div>
+                ${landingBtn}
+                <div class="wf-node-action delete" onclick="event.stopPropagation();deleteStep(${index})" title="Delete"><i class="bi bi-trash"></i></div>
             </div>
         </div>
     `;
+}
+
+// Generate subtitle for node
+function renderNodeSubtitle(step) {
+    switch(step.type) {
+        case 'email':
+            var parts = [];
+            if (step.config.subject) parts.push(step.config.subject.substring(0, 30) + (step.config.subject.length > 30 ? '...' : ''));
+            if (step.config.delay_hours) parts.push(step.config.delay_hours + 'h delay');
+            var attCount = (step.config.attachments || []).length;
+            if (attCount) parts.push(attCount + ' allegat' + (attCount === 1 ? 'o' : 'i'));
+            return parts.join(' · ') || 'Not configured';
+        case 'wait_until':
+            var wt = step.config.wait_type;
+            if (wt === 'delay_hours') return (step.config.delay_hours || 0) + 'h delay';
+            if (wt === 'date') return step.config.target_date || 'Date not set';
+            if (wt === 'time') return 'Daily at ' + (step.config.target_time || '09:00');
+            if (wt === 'day_of_week') return (step.config.target_day || 'Monday') + ' ' + (step.config.target_time || '09:00');
+            return wt || 'Not configured';
+        case 'condition':
+            return (step.config.field || '?') + ' ' + (step.config.operator || '=') + ' ' + (step.config.value || '?');
+        case 'human_approval':
+            var emails = (step.config.approver_email || '').split(',').filter(function(e){return e.trim();});
+            return emails.length + ' approver' + (emails.length !== 1 ? 's' : '') + ' · ' + (step.config.timeout_hours || 48) + 'h timeout';
+        case 'survey':
+            return step.config.question ? step.config.question.substring(0, 35) + (step.config.question.length > 35 ? '...' : '') : 'No question';
+        case 'goal_check':
+            return (step.config.goal || 'form_submitted').replace(/_/g, ' ');
+        case 'export_data':
+            return (step.config.format || 'CSV').toUpperCase() + (step.config.send_to ? ' → ' + step.config.send_to : '');
+        default:
+            return capitalize(step.type);
+    }
 }
 
 // Render step summary
@@ -1337,7 +1438,7 @@ function initStepSortable() {
 
     sortableInstance = Sortable.create(container, {
         animation: 200,
-        handle: '.step-drag-handle',
+        handle: '.wf-node-drag',
         draggable: '.step-sort-item',
         ghostClass: 'step-sortable-ghost',
         chosenClass: 'step-sortable-chosen',

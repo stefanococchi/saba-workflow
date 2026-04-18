@@ -14,34 +14,65 @@
 
 {% block extra_css %}
 <style>
+/* === Canvas Theme Variables (scoped to .workflow-canvas) === */
+body.canvas-dark .workflow-canvas, body.canvas-dark .step-palette {
+    --canvas-bg: #1a1a1a; --canvas-text: #e0e0e0; --canvas-text-muted: #888;
+    --palette-bg: #222; --palette-border: #333; --palette-item-hover: #333;
+    --node-bg: #2a2a2a; --node-border: #444; --node-hover-border: #8B6914;
+    --connector-color: #555; --badge-border: #1a1a1a;
+    --node-action-bg: #333; --node-action-border: #555;
+    --add-btn-bg: #333; --add-btn-border: #555;
+    --empty-color: #666;
+}
+body.canvas-white .workflow-canvas, body.canvas-white .step-palette {
+    --canvas-bg: #ffffff; --canvas-text: #333; --canvas-text-muted: #999;
+    --palette-bg: #f8f8f8; --palette-border: #e0e0e0; --palette-item-hover: #eee;
+    --node-bg: #ffffff; --node-border: #ddd; --node-hover-border: #8B6914;
+    --connector-color: #ccc; --badge-border: #ffffff;
+    --node-action-bg: #f0f0f0; --node-action-border: #ddd;
+    --add-btn-bg: #f0f0f0; --add-btn-border: #ccc;
+    --empty-color: #aaa;
+}
+body.canvas-cream .workflow-canvas, body.canvas-cream .step-palette {
+    --canvas-bg: #f5f0e8; --canvas-text: #3d3628; --canvas-text-muted: #8a7e6e;
+    --palette-bg: #ebe5d9; --palette-border: #d5cfc3; --palette-item-hover: #dfd8cb;
+    --node-bg: #fffdf8; --node-border: #d5cfc3; --node-hover-border: #8B6914;
+    --connector-color: #bfb8aa; --badge-border: #f5f0e8;
+    --node-action-bg: #ebe5d9; --node-action-border: #d5cfc3;
+    --add-btn-bg: #ebe5d9; --add-btn-border: #bfb8aa;
+    --empty-color: #a09580;
+}
+body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
+    --canvas-bg: #2d2a25; --canvas-text: #ddd5c8; --canvas-text-muted: #8a8078;
+    --palette-bg: #352f28; --palette-border: #4a4238; --palette-item-hover: #4a4238;
+    --node-bg: #3a342c; --node-border: #5a5245; --node-hover-border: #8B6914;
+    --connector-color: #6a6155; --badge-border: #2d2a25;
+    --node-action-bg: #4a4238; --node-action-border: #5a5245;
+    --add-btn-bg: #4a4238; --add-btn-border: #5a5245;
+    --empty-color: #6a6155;
+}
+
+/* === Workflow Builder Layout === */
 .workflow-builder {
     min-height: 600px;
-    background: #f8f9fa;
     border-radius: 8px;
-    padding: 20px;
+    padding: 0;
 }
 
 .step-palette {
-    background: white;
-    border-radius: 8px;
+    background: var(--palette-bg, #222);
+    border: 1px solid var(--palette-border, #333);
+    border-radius: 12px;
     padding: 15px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s;
 }
 
 /* SortableJS drag styles */
-.step-sortable-ghost {
-    opacity: 0.3;
-}
-.step-sortable-chosen {
-    box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important;
-}
-.step-sortable-drag {
-    box-shadow: 0 12px 35px rgba(0,0,0,0.2) !important;
-}
-.step-drag-handle:hover {
-    color: #8B6914 !important;
-}
+.step-sortable-ghost { opacity: 0.3; }
+.step-sortable-chosen { box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important; }
+.step-sortable-drag { box-shadow: 0 12px 35px rgba(0,0,0,0.2) !important; }
 
+/* Attachment drop zone (in modal) */
 .attachment-drop-zone {
     border: 2px dashed var(--md-sys-color-outline-variant, #c4bfb6);
     border-radius: 12px;
@@ -59,138 +90,214 @@
 
 /* Landing page template cards */
 .lp-tpl-card {
-    width: 90px;
-    cursor: pointer;
-    text-align: center;
-    padding: 6px;
-    border: 2px solid transparent;
-    border-radius: 8px;
-    transition: all 0.15s;
+    width: 90px; cursor: pointer; text-align: center;
+    padding: 6px; border: 2px solid transparent;
+    border-radius: 8px; transition: all 0.15s;
 }
 .lp-tpl-card:hover { border-color: #8B6914; }
 .lp-tpl-card.selected { border-color: #8B6914; background: #f0f0ff; }
 .lp-tpl-card small { font-size: 11px; font-weight: 600; color: #555; }
 
+/* === Palette Step Templates === */
 .step-template {
-    background: #fff;
-    color: #333;
-    border: 1.5px solid #d0d0d0;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 10px;
+    background: var(--node-bg, #2a2a2a);
+    color: var(--canvas-text, #e0e0e0);
+    border: 1.5px solid var(--node-border, #444);
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-bottom: 6px;
     cursor: grab;
     transition: all 0.2s;
     display: flex;
     align-items: center;
+    font-size: 13px;
 }
-
 .step-template:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-    border-color: #999;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    border-color: var(--node-hover-border, #8B6914);
 }
-
-.step-template:active {
-    cursor: grabbing;
-}
-
+.step-template:active { cursor: grabbing; }
 .step-template i {
-    font-size: 1.5rem;
-    margin-right: 10px;
-    color: #555;
+    font-size: 1.1rem;
+    margin-right: 8px;
+    color: var(--canvas-text-muted, #888);
 }
 
-
+/* === Canvas === */
 .workflow-canvas {
-    background: white;
-    border: 2px dashed #dee2e6;
-    border-radius: 8px;
+    background: var(--canvas-bg, #1a1a1a);
+    border: 2px solid var(--palette-border, #333);
+    border-radius: 12px;
     min-height: 500px;
     padding: 20px;
     position: relative;
+    transition: all 0.3s;
 }
-
 .workflow-canvas.drag-over {
-    background: #f0f0f0;
-    border-color: #999;
+    border-color: #8B6914;
+    box-shadow: inset 0 0 30px rgba(139,105,20,0.1);
 }
 
-.workflow-step {
-    background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
-    border: 1.5px solid #d0d0d0;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
+/* === Node Design === */
+.wf-node {
     position: relative;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    cursor: move;
-    transition: all 0.2s ease;
-}
-
-.workflow-step:hover {
-    box-shadow: 0 3px 12px rgba(0,0,0,0.1);
-    border-color: #999;
-}
-
-.workflow-step.dragging {
-    opacity: 0.4;
-}
-
-.workflow-step .step-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #dee2e6;
-}
-
-.workflow-step .step-number {
-    background: #333;
-    color: white;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+    background: var(--node-bg, #2a2a2a);
+    border: 1.5px solid var(--node-border, #444);
+    border-radius: 12px;
+    padding: 12px 20px;
+    min-width: 220px;
+    max-width: 320px;
+    cursor: pointer;
+    transition: all 0.2s;
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    font-size: 14px;
+    gap: 12px;
+    margin: 0 auto;
+}
+.wf-node:hover {
+    border-color: var(--node-hover-border, #8B6914);
+    box-shadow: 0 0 0 3px rgba(139,105,20,0.15);
 }
 
-.workflow-step .step-actions {
-    display: flex;
-    gap: 5px;
+.wf-node-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+}
+.wf-node-icon.email { background: #2d4a3e; color: #4ade80; }
+.wf-node-icon.wait_until { background: #3d3a2a; color: #fbbf24; }
+.wf-node-icon.condition { background: #2a2d4a; color: #818cf8; }
+.wf-node-icon.human_approval { background: #4a2a3e; color: #f472b6; }
+.wf-node-icon.survey { background: #2a4a4a; color: #22d3ee; }
+.wf-node-icon.goal_check { background: #4a3a2a; color: #fb923c; }
+.wf-node-icon.export_data { background: #3a2a4a; color: #a78bfa; }
+
+.wf-node-body { flex: 1; min-width: 0; }
+.wf-node-title {
+    font-size: 13px; font-weight: 600;
+    color: var(--canvas-text, #e8e8e8);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wf-node-subtitle {
+    font-size: 11px; color: var(--canvas-text-muted, #888); margin-top: 2px;
 }
 
-.workflow-step .step-content {
-    padding: 10px;
+.wf-node-badge {
+    position: absolute; top: -8px; left: -8px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #8B6914; color: #fff;
+    font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--badge-border, #1a1a1a);
 }
 
-.step-connector {
-    width: 2px;
-    height: 30px;
-    background: linear-gradient(to bottom, #bbb, transparent);
-    margin: -10px auto 10px;
-    position: relative;
+.wf-node-drag {
+    color: var(--canvas-text-muted, #555);
+    cursor: grab; font-size: 14px; margin-right: -4px;
+}
+.wf-node-drag:hover { color: var(--canvas-text, #888); }
+
+/* Node actions on hover */
+.wf-node-actions {
+    position: absolute; right: -8px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 4px;
+    opacity: 0; transition: opacity 0.15s;
+}
+.wf-node:hover .wf-node-actions { opacity: 1; }
+.wf-node-action {
+    width: 26px; height: 26px; border-radius: 7px;
+    border: 1px solid var(--node-action-border, #555);
+    background: var(--node-action-bg, #333);
+    color: var(--canvas-text-muted, #aaa);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; cursor: pointer; transition: all 0.1s;
+}
+.wf-node-action:hover { color: var(--canvas-text, #fff); border-color: var(--canvas-text-muted, #888); }
+.wf-node-action.delete:hover { background: #4a2a2a; color: #f87171; border-color: #f87171; }
+
+/* === Connectors === */
+.wf-connector {
+    display: flex; flex-direction: column; align-items: center; height: 40px;
+}
+.wf-connector-line {
+    width: 2px; flex: 1; background: var(--connector-color, #555);
+}
+.wf-connector-arrow {
+    color: var(--connector-color, #555); font-size: 10px; line-height: 1; margin-top: -2px;
 }
 
-.step-connector::after {
-    content: '▼';
-    position: absolute;
-    bottom: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: #999;
-    font-size: 12px;
+/* Add-between button */
+.wf-add-between {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--add-btn-bg, #333);
+    border: 1.5px dashed var(--add-btn-border, #555);
+    color: var(--canvas-text-muted, #666);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; cursor: pointer; transition: all 0.15s;
+    margin: -4px 0; z-index: 2; position: relative;
+}
+.wf-add-between:hover {
+    background: #8B6914; border-color: #8B6914; color: #fff;
+    border-style: solid; transform: scale(1.2);
 }
 
+/* === Branch (condition/approval) === */
+.wf-branch { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.wf-branch-row {
+    display: flex; justify-content: center; gap: 60px; width: 100%;
+}
+.wf-branch-arm { display: flex; flex-direction: column; align-items: center; }
+.wf-branch-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1px; padding: 2px 10px; border-radius: 10px; margin-bottom: 6px;
+}
+.wf-branch-label.yes { color: #4ade80; background: rgba(74,222,128,0.1); }
+.wf-branch-label.no { color: #f87171; background: rgba(248,113,113,0.1); }
+.wf-branch-action {
+    color: var(--canvas-text-muted, #888); font-size: 11px; text-align: center; padding: 6px 0;
+}
+
+/* Start/End pills */
+.wf-pill {
+    padding: 6px 20px; border-radius: 20px; font-size: 11px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+    margin: 0 auto; display: inline-block;
+}
+.wf-pill.start {
+    background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.3);
+}
+.wf-pill.end {
+    background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.3);
+}
+
+/* Nodes container */
+.wf-nodes {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 0; padding: 20px 0;
+}
+
+/* === Theme Switcher === */
+.wf-theme-switcher {
+    position: absolute; top: 10px; right: 10px; z-index: 10;
+    display: flex; gap: 6px;
+    background: rgba(0,0,0,0.2); backdrop-filter: blur(8px);
+    padding: 6px 8px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+.wf-theme-btn {
+    width: 22px; height: 22px; border-radius: 6px;
+    border: 2px solid transparent; cursor: pointer; transition: all 0.15s;
+}
+.wf-theme-btn:hover { transform: scale(1.15); }
+.wf-theme-btn.active { border-color: #8B6914; box-shadow: 0 0 0 2px rgba(139,105,20,0.4); }
+
+/* === Empty State === */
 .empty-canvas {
     text-align: center;
     padding: 100px 20px;
-    color: #6c757d;
+    color: var(--empty-color, #666);
 }
-
 .empty-canvas i {
     font-size: 4rem;
     opacity: 0.3;
@@ -537,7 +644,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=1.0.106"></script>
+<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=2.0.0"></script>
 {% if mode == 'edit' and workflow and workflow.steps %}
 <script>
 window._currentWorkflowId = {{ workflow.id }};
