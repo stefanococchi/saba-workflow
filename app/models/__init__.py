@@ -257,6 +257,21 @@ class UploadedImage(Base):
         return f'<UploadedImage {self.id}: {self.filename}>'
 
 
+class Attachment(Base):
+    """File allegato per step email"""
+    __tablename__ = 'attachments'
+
+    id = Column(Integer, primary_key=True)
+    filename = Column(String(255), nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    size = Column(Integer, nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<Attachment {self.id}: {self.filename}>'
+
+
 # Association table for User <-> Workflow
 user_workflows = Table(
     'user_workflows',

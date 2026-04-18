@@ -308,11 +308,19 @@ class SchedulerService:
             if has_landing:
                 landing_url = TokenService.generate_landing_url(participant)
             
+            # Load attachments if configured
+            attachments = []
+            attachment_ids = skip_cond.get('attachment_ids', [])
+            if attachment_ids:
+                from app.models import Attachment
+                attachments = _db().query(Attachment).filter(Attachment.id.in_(attachment_ids)).all()
+                logger.info(f"Loaded {len(attachments)} attachments for email step")
+
             # Send email
-            success = EmailService.send_workflow_email(participant, step, landing_url)
-            
+            success = EmailService.send_workflow_email(participant, step, landing_url, attachments=attachments)
+
             return success
-            
+
         except Exception as e:
             logger.error(f"✗ Email error: {str(e)}")
             return False

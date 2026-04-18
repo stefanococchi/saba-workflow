@@ -76,7 +76,8 @@ function getDefaultConfig(type) {
         email: {
             subject: '',
             body_template: '',
-            delay_hours: 0
+            delay_hours: 0,
+            attachments: []
         },
         wait_until: {
             wait_type: 'date',
@@ -255,9 +256,12 @@ function renderStep(step, index) {
 function renderStepSummary(step) {
     switch(step.type) {
         case 'email':
+            var attCount = (step.config.attachments || []).length;
+            var attInfo = attCount > 0 ? `<p class="mb-0"><i class="bi bi-paperclip"></i> ${attCount} allegat${attCount === 1 ? 'o' : 'i'}</p>` : '';
             return `
                 <p class="mb-1"><strong>Subject:</strong> ${step.config.subject || '<em class="text-muted">Not set</em>'}</p>
                 <p class="mb-0"><strong>Delay:</strong> ${step.config.delay_hours} hours after previous step</p>
+                ${attInfo}
             `;
         case 'wait_until':
             const waitDesc = {
@@ -324,6 +328,9 @@ function editStep(index) {
     // Init Summernote for email/survey body
     if (step.type === 'email' || step.type === 'survey') {
         initEmailEditor();
+    }
+    if (step.type === 'email') {
+        initAttachmentDropZone();
     }
     // Populate landing field dropdowns for goal_check — from preceding landing steps
     if (step.type === 'goal_check') {
@@ -402,6 +409,18 @@ function renderStepEditForm(step, index) {
                     <label class="form-label">Ritardo (ore dopo lo step precedente)</label>
                     <input type="number" class="form-control" id="editEmailDelay"
                            value="${step.config.delay_hours || 0}" min="0">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label"><i class="bi bi-paperclip"></i> Allegati</label>
+                    <div id="attachmentList">${renderAttachmentList(step.config.attachments || [])}</div>
+                    <div id="attachmentDropZone" class="attachment-drop-zone" onclick="document.getElementById('attachmentFileInput').click()">
+                        <i class="bi bi-cloud-arrow-up" style="font-size:24px;color:#8B6914"></i>
+                        <div style="margin-top:4px">Trascina file qui o <strong>clicca per caricare</strong></div>
+                        <small class="text-muted">PDF, DOC, XLS, immagini, ZIP — max 3.9 MB per file</small>
+                    </div>
+                    <input type="file" id="attachmentFileInput" style="display:none" multiple
+                           accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.gif,.zip"
+                           onchange="handleAttachmentUpload(this.files)">
                 </div>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="editHasLanding"
@@ -861,6 +880,95 @@ function insertVariable(variable) {
             $editor.summernote('editor.insertText', tag);
         }
     }
+}
+
+// --- Attachment helpers ---
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function renderAttachmentList(attachments) {
+    if (!attachments || attachments.length === 0) return '';
+    return attachments.map(a => `
+        <div class="attachment-item d-flex align-items-center gap-2 mb-1 p-2 rounded" style="background:var(--md-sys-color-surface-variant, #f0ebe3)">
+            <i class="bi bi-file-earmark"></i>
+            <span class="flex-grow-1 text-truncate" style="font-size:13px">${a.filename}</span>
+            <small class="text-muted">${formatFileSize(a.size)}</small>
+            <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeAttachment(${a.id})" title="Rimuovi">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function handleAttachmentUpload(files) {
+    if (!files || files.length === 0) return;
+    var step = workflowSteps[editingStepIndex];
+    if (!step.config.attachments) step.config.attachments = [];
+
+    Array.from(files).forEach(function(file) {
+        var formData = new FormData();
+        formData.append('file', file);
+
+        // Show uploading state
+        var list = document.getElementById('attachmentList');
+        var tempId = 'uploading_' + Date.now();
+        list.insertAdjacentHTML('beforeend', `
+            <div id="${tempId}" class="attachment-item d-flex align-items-center gap-2 mb-1 p-2 rounded" style="background:#fff3cd">
+                <span class="spinner-border spinner-border-sm"></span>
+                <span class="flex-grow-1" style="font-size:13px">${file.name}</span>
+            </div>
+        `);
+
+        fetch('/admin/api/attachments', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+        .then(function(res) {
+            var el = document.getElementById(tempId);
+            if (!res.ok) {
+                if (el) el.innerHTML = `<i class="bi bi-exclamation-triangle text-danger"></i> <span style="font-size:13px">${file.name}: ${res.data.error}</span>`;
+                setTimeout(function() { if (el) el.remove(); }, 3000);
+                return;
+            }
+            step.config.attachments.push(res.data);
+            if (el) el.remove();
+            document.getElementById('attachmentList').innerHTML = renderAttachmentList(step.config.attachments);
+        })
+        .catch(function(err) {
+            var el = document.getElementById(tempId);
+            if (el) el.innerHTML = `<i class="bi bi-exclamation-triangle text-danger"></i> <span style="font-size:13px">Errore upload</span>`;
+        });
+    });
+
+    // Reset input
+    document.getElementById('attachmentFileInput').value = '';
+}
+
+function removeAttachment(attachmentId) {
+    var step = workflowSteps[editingStepIndex];
+    if (!step || !step.config.attachments) return;
+
+    fetch('/admin/api/attachments/' + attachmentId, { method: 'DELETE' });
+    step.config.attachments = step.config.attachments.filter(function(a) { return a.id !== attachmentId; });
+    document.getElementById('attachmentList').innerHTML = renderAttachmentList(step.config.attachments);
+}
+
+// Init drag-drop for attachment zone
+function initAttachmentDropZone() {
+    var zone = document.getElementById('attachmentDropZone');
+    if (!zone) return;
+    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.style.borderColor = '#8B6914'; zone.style.background = '#fdf6e3'; });
+    zone.addEventListener('dragleave', function(e) { zone.style.borderColor = ''; zone.style.background = ''; });
+    zone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        zone.style.borderColor = '';
+        zone.style.background = '';
+        handleAttachmentUpload(e.dataTransfer.files);
+    });
 }
 
 // Populate fields from preceding landing page steps in the canvas
@@ -1374,10 +1482,11 @@ function saveWorkflow() {
                 };
             }
 
-            // For email steps, store has_landing in skip_conditions
+            // For email steps, store has_landing and attachment IDs in skip_conditions
             if (step.type === 'email') {
                 stepData.skip_conditions = {
-                    has_landing: !!step.config.has_landing
+                    has_landing: !!step.config.has_landing,
+                    attachment_ids: (step.config.attachments || []).map(a => a.id)
                 };
             }
 

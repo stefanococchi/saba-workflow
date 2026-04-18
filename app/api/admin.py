@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage, User, user_workflows
+from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage, Attachment, User, user_workflows
 from app.api.auth import superuser_required
 from sqlalchemy import func
 from datetime import datetime
@@ -430,6 +430,74 @@ def serve_image(image_id):
         mimetype=image.mime_type,
         headers={'Cache-Control': 'public, max-age=31536000'}
     )
+
+
+ALLOWED_ATTACHMENT_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'png', 'jpg', 'jpeg', 'gif', 'zip'}
+MAX_ATTACHMENT_SIZE = int(3.9 * 1024 * 1024)  # 3.9 MB (Graph API limit)
+
+
+@admin_bp.route('/api/attachments', methods=['POST'])
+def upload_attachment():
+    """Upload allegato per step email"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'Nessun file selezionato'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Nessun file selezionato'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_ATTACHMENT_EXTENSIONS:
+        return jsonify({'error': f'Formato non consentito. Usa: {", ".join(sorted(ALLOWED_ATTACHMENT_EXTENSIONS))}'}), 400
+
+    data = file.read()
+    if len(data) > MAX_ATTACHMENT_SIZE:
+        return jsonify({'error': 'File troppo grande (max 10 MB)'}), 400
+
+    attachment = Attachment(
+        filename=file.filename,
+        mime_type=file.content_type or 'application/octet-stream',
+        size=len(data),
+        data=data
+    )
+    db.add(attachment)
+    db.commit()
+
+    return jsonify({
+        'id': attachment.id,
+        'filename': attachment.filename,
+        'size': attachment.size,
+        'mime_type': attachment.mime_type
+    }), 201
+
+
+@admin_bp.route('/api/attachments/<int:attachment_id>', methods=['DELETE'])
+def delete_attachment(attachment_id):
+    """Elimina allegato"""
+    attachment = db.get(Attachment, attachment_id)
+    if not attachment:
+        return jsonify({'error': 'Not found'}), 404
+
+    db.delete(attachment)
+    db.commit()
+    return jsonify({'success': True}), 200
+
+
+@admin_bp.route('/api/attachments/info', methods=['POST'])
+def get_attachments_info():
+    """Restituisce metadati degli allegati dato un array di IDs"""
+    data = request.get_json()
+    ids = data.get('ids', [])
+    if not ids:
+        return jsonify([]), 200
+
+    attachments = db.query(Attachment).filter(Attachment.id.in_(ids)).all()
+    return jsonify([{
+        'id': a.id,
+        'filename': a.filename,
+        'size': a.size,
+        'mime_type': a.mime_type
+    } for a in attachments]), 200
 
 
 @admin_bp.route('/api/participant/<int:participant_id>/timeline')

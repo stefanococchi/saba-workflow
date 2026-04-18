@@ -42,6 +42,21 @@
     color: #8B6914 !important;
 }
 
+.attachment-drop-zone {
+    border: 2px dashed var(--md-sys-color-outline-variant, #c4bfb6);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #666;
+    font-size: 13px;
+}
+.attachment-drop-zone:hover {
+    border-color: #8B6914;
+    background: #fdf6e3;
+}
+
 /* Landing page template cards */
 .lp-tpl-card {
     width: 90px;
@@ -522,7 +537,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=1.0.105"></script>
+<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=1.0.106"></script>
 {% if mode == 'edit' and workflow and workflow.steps %}
 <script>
 window._currentWorkflowId = {{ workflow.id }};
@@ -575,7 +590,9 @@ try {
             response_type: _skipCond.response_type || 'choices',
             choices: _skipCond.choices || ['Ottimo', 'Buono', 'Sufficiente', 'Scarso'],
             scale_max: _skipCond.scale_max || 5,
-            allow_comment: _skipCond.allow_comment !== undefined ? _skipCond.allow_comment : true
+            allow_comment: _skipCond.allow_comment !== undefined ? _skipCond.allow_comment : true,
+            attachment_ids: _skipCond.attachment_ids || [],
+            attachments: []
         }
     });
     {% endfor %}
@@ -583,6 +600,34 @@ try {
     if (existingSteps.length > 0) {
         workflowSteps = existingSteps;
         renderCanvas();
+
+        // Load attachment metadata for email steps
+        var allAttIds = [];
+        existingSteps.forEach(function(s) {
+            if (s.config.attachment_ids && s.config.attachment_ids.length > 0) {
+                allAttIds = allAttIds.concat(s.config.attachment_ids);
+            }
+        });
+        if (allAttIds.length > 0) {
+            fetch('/admin/api/attachments/info', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ids: allAttIds})
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(attachments) {
+                var byId = {};
+                attachments.forEach(function(a) { byId[a.id] = a; });
+                workflowSteps.forEach(function(s) {
+                    if (s.config.attachment_ids) {
+                        s.config.attachments = s.config.attachment_ids
+                            .map(function(id) { return byId[id]; })
+                            .filter(Boolean);
+                    }
+                });
+                renderCanvas();
+            });
+        }
     }
 
     // Pre-fill basic info

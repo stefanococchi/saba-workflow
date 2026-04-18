@@ -93,7 +93,7 @@ class EmailService:
         return modified_html, attachments
 
     @staticmethod
-    def send_email(to_email, subject, body_html, body_text=None, from_email=None, from_name=None):
+    def send_email(to_email, subject, body_html, body_text=None, from_email=None, from_name=None, file_attachments=None):
         """
         Invia email tramite Microsoft Graph API.
         Le immagini base64 nel body vengono convertite automaticamente
@@ -142,9 +142,20 @@ class EmailService:
                 "saveToSentItems": "true"
             }
 
-            # Aggiungi allegati inline se presenti
-            if inline_attachments:
-                message["message"]["attachments"] = inline_attachments
+            # Aggiungi allegati file se presenti
+            all_attachments = list(inline_attachments)
+            if file_attachments:
+                for att in file_attachments:
+                    all_attachments.append({
+                        "@odata.type": "#microsoft.graph.fileAttachment",
+                        "name": att.filename,
+                        "contentType": att.mime_type,
+                        "contentBytes": base64.b64encode(att.data).decode('utf-8'),
+                        "isInline": False
+                    })
+
+            if all_attachments:
+                message["message"]["attachments"] = all_attachments
 
             # Invio tramite Graph API
             response = requests.post(
@@ -190,7 +201,7 @@ class EmailService:
             raise
 
     @staticmethod
-    def send_workflow_email(participant, step, landing_url=None):
+    def send_workflow_email(participant, step, landing_url=None, attachments=None):
         """
         Invia email per uno step del workflow
 
@@ -198,6 +209,7 @@ class EmailService:
             participant: istanza Participant
             step: istanza WorkflowStep
             landing_url: URL landing page (se presente)
+            attachments: lista di Attachment model instances (opzionale)
 
         Returns:
             bool: successo invio
@@ -241,7 +253,8 @@ class EmailService:
             return EmailService.send_email(
                 to_email=participant.email,
                 subject=subject,
-                body_html=body_html
+                body_html=body_html,
+                file_attachments=attachments
             )
 
         except Exception as e:
