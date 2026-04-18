@@ -43,30 +43,48 @@ function handleDragLeave(e) {
 
 function handleDrop(e) {
     e.preventDefault();
+    e.stopPropagation();
     const canvas = document.getElementById('workflowCanvas');
     canvas.classList.remove('drag-over');
 
     const stepType = e.dataTransfer.getData('stepType');
-    if (stepType) {
-        addStep(stepType);
+    if (!stepType) return;
+
+    // Find insert position based on drop Y relative to existing step cards
+    var insertIndex = workflowSteps.length;
+    var container = document.getElementById('stepsSortContainer');
+    if (container) {
+        var items = container.querySelectorAll('.step-sort-item');
+        for (var i = 0; i < items.length; i++) {
+            var rect = items[i].getBoundingClientRect();
+            if (e.clientY < rect.top + rect.height / 2) {
+                insertIndex = i;
+                break;
+            }
+        }
     }
+    addStep(stepType, insertIndex);
 }
 
 // Add new step to workflow
-function addStep(type) {
+function addStep(type, insertAt) {
+    if (insertAt === undefined) insertAt = workflowSteps.length;
+
     const step = {
         id: Date.now(),
         type: type,
-        order: workflowSteps.length + 1,
+        order: insertAt + 1,
         name: `${capitalize(type)} Step ${workflowSteps.length + 1}`,
         config: getDefaultConfig(type)
     };
-    
-    workflowSteps.push(step);
+
+    workflowSteps.splice(insertAt, 0, step);
+    // Recalculate order for all steps
+    workflowSteps.forEach(function(s, i) { s.order = i + 1; });
     renderCanvas();
-    
-    // Auto-open edit modal for new step
-    editStep(workflowSteps.length - 1);
+
+    // Auto-open edit modal for new step (delay to let DOM settle)
+    setTimeout(function() { editStep(insertAt); }, 100);
 }
 
 // Get default configuration for step type
@@ -160,6 +178,14 @@ function renderCanvas() {
     html += '</div>';
 
     canvas.innerHTML = html + emptyState.outerHTML;
+
+    // Allow palette drops on the sort container too
+    var sortContainer = document.getElementById('stepsSortContainer');
+    if (sortContainer) {
+        sortContainer.addEventListener('dragover', handleDragOver);
+        sortContainer.addEventListener('drop', handleDrop);
+        sortContainer.addEventListener('dragleave', handleDragLeave);
+    }
 
     // Init SortableJS for step reordering
     initStepSortable();
