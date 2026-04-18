@@ -130,10 +130,15 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
     border: 2px solid var(--palette-border, #333);
     border-radius: 12px;
     min-height: 500px;
+    max-height: 75vh;
     padding: 20px;
     position: relative;
     transition: all 0.3s;
+    overflow: auto;
 }
+.workflow-canvas::-webkit-scrollbar { width: 6px; }
+.workflow-canvas::-webkit-scrollbar-track { background: transparent; }
+.workflow-canvas::-webkit-scrollbar-thumb { background: var(--node-border, #444); border-radius: 3px; }
 .workflow-canvas.drag-over {
     border-color: #8B6914;
     box-shadow: inset 0 0 30px rgba(139,105,20,0.1);
@@ -192,11 +197,7 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
     border: 2px solid var(--badge-border, #1a1a1a);
 }
 
-.wf-node-drag {
-    color: var(--canvas-text-muted, #555);
-    cursor: grab; font-size: 14px; margin-right: -4px;
-}
-.wf-node-drag:hover { color: var(--canvas-text, #888); }
+/* wf-node-drag removed — replaced by up/down buttons */
 
 /* Node actions on hover */
 .wf-node-actions {
@@ -242,21 +243,170 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
     border-style: solid; transform: scale(1.2);
 }
 
-/* === Branch (condition/approval) === */
-.wf-branch { display: flex; flex-direction: column; align-items: center; width: 100%; }
-.wf-branch-row {
-    display: flex; justify-content: center; gap: 60px; width: 100%;
+/* === Branch Container v2.5 === */
+.wf-branch-container {
+    display: flex; flex-direction: column; align-items: center;
+    width: 100%; max-width: 750px; margin: 0 auto;
 }
-.wf-branch-arm { display: flex; flex-direction: column; align-items: center; }
+.wf-branch-split, .wf-branch-merge {
+    position: relative; width: 100%; height: 40px;
+}
+.wf-branch-split svg, .wf-branch-merge svg {
+    width: 100%; height: 100%;
+}
+.wf-branch-arms {
+    display: flex; gap: 20px; width: 100%; justify-content: center;
+}
+.wf-branch-arm {
+    display: flex; flex-direction: column; align-items: center;
+    flex: 1; max-width: 340px; min-width: 220px; gap: 0;
+}
 .wf-branch-label {
-    font-size: 10px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 1px; padding: 2px 10px; border-radius: 10px; margin-bottom: 6px;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 14px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase;
 }
-.wf-branch-label.yes { color: #4ade80; background: rgba(74,222,128,0.1); }
-.wf-branch-label.no { color: #f87171; background: rgba(248,113,113,0.1); }
-.wf-branch-action {
-    color: var(--canvas-text-muted, #888); font-size: 11px; text-align: center; padding: 6px 0;
+.wf-branch-label.yes { color: #4ade80; background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); }
+.wf-branch-label.no { color: #f87171; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); }
+
+.wf-branch-track {
+    width: 100%; border: 1.5px dashed transparent; border-radius: 14px;
+    padding: 12px 10px; display: flex; flex-direction: column; align-items: center;
+    gap: 0; min-height: 70px; transition: all 0.2s; position: relative;
 }
+.wf-branch-track.yes-track { border-color: rgba(74,222,128,0.15); background: rgba(74,222,128,0.04); }
+.wf-branch-track.no-track { border-color: rgba(248,113,113,0.15); background: rgba(248,113,113,0.04); }
+.wf-branch-track.branch-drag-over {
+    border-color: #8B6914 !important; border-style: solid !important;
+    background: rgba(139,105,20,0.1) !important;
+    box-shadow: inset 0 0 20px rgba(139,105,20,0.15);
+}
+.wf-branch-track .wf-node { width: 100%; max-width: 100%; margin: 0; }
+.wf-branch-track .wf-node-badge-branch {
+    position: absolute; top: -8px; left: -8px;
+    width: 26px; height: 18px; border-radius: 9px;
+    font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--canvas-bg, #1a1a1a);
+}
+.wf-branch-track .wf-node-badge-branch.yes-badge { background: #4ade80; color: #1a1a1a; }
+.wf-branch-track .wf-node-badge-branch.no-badge { background: #f87171; color: #1a1a1a; }
+
+.wf-branch-empty {
+    padding: 16px; text-align: center; color: var(--canvas-text-muted, #888);
+    font-size: 12px; border: 1.5px dashed var(--node-border, #444); border-radius: 10px;
+    width: 100%; cursor: pointer; transition: all 0.15s; opacity: 0.6;
+}
+.wf-branch-empty:hover {
+    opacity: 1; border-color: #8B6914; color: #8B6914;
+}
+.wf-branch-connector {
+    display: flex; flex-direction: column; align-items: center;
+}
+.wf-branch-connector-line {
+    width: 2px; height: 12px; background: var(--connector-color, #555);
+}
+.wf-branch-add-btn {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--node-bg, #2a2a2a); border: 1.5px solid var(--connector-color, #555);
+    color: var(--canvas-text-muted, #666); display: flex; align-items: center; justify-content: center;
+    font-size: 11px; cursor: pointer; transition: all 0.15s; opacity: 0;
+}
+.wf-branch-track:hover .wf-branch-add-btn { opacity: 1; }
+.wf-branch-add-btn:hover {
+    background: #8B6914; border-color: #8B6914; color: #fff; transform: scale(1.2);
+}
+
+/* Collapse/expand */
+.wf-branch-collapse {
+    position: absolute; top: 4px; right: 6px;
+    width: 20px; height: 20px; border-radius: 6px;
+    background: transparent; border: 1px solid var(--node-border, #444);
+    color: var(--canvas-text-muted, #888); font-size: 10px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; opacity: 0;
+}
+.wf-branch-track:hover .wf-branch-collapse { opacity: 1; }
+.wf-branch-collapse:hover { background: var(--node-border, #444); }
+.wf-branch-track.collapsed { min-height: 36px; padding: 8px 12px; }
+.wf-branch-track.collapsed > *:not(.wf-branch-collapse):not(.wf-branch-collapsed-info) { display: none; }
+.wf-branch-collapsed-info { font-size: 11px; color: var(--canvas-text-muted, #888); display: none; }
+.wf-branch-track.collapsed .wf-branch-collapsed-info { display: block; }
+.wf-branch-track.collapsed .wf-branch-collapse { opacity: 1; }
+
+/* === Zoom Controls === */
+.wf-zoom-controls {
+    position: absolute; bottom: 12px; right: 12px;
+    display: flex; flex-direction: column; gap: 2px; z-index: 20;
+    background: var(--node-bg, #2a2a2a); border: 1px solid var(--node-border, #444);
+    border-radius: 10px; padding: 4px;
+}
+.wf-zoom-btn {
+    width: 32px; height: 32px; border: none; background: transparent;
+    color: var(--canvas-text, #e0e0e0); font-size: 14px; cursor: pointer;
+    border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.12s;
+}
+.wf-zoom-btn:hover { background: var(--node-border, #444); }
+.wf-zoom-divider { height: 1px; background: var(--node-border, #444); margin: 2px 4px; }
+.wf-zoom-label {
+    font-size: 9px; text-align: center; color: var(--canvas-text-muted, #888);
+    padding: 2px 0; font-weight: 600; user-select: none;
+}
+
+/* === Minimap === */
+.wf-minimap {
+    position: absolute; bottom: 12px; right: 60px;
+    width: 120px; height: 160px; z-index: 20;
+    background: var(--node-bg, #2a2a2a); border: 1px solid var(--node-border, #444);
+    border-radius: 10px; padding: 8px; overflow: hidden;
+}
+.wf-minimap-title {
+    font-size: 8px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--canvas-text-muted, #888); margin-bottom: 6px; font-weight: 600;
+}
+.wf-minimap-canvas { width: 100%; height: calc(100% - 14px); position: relative; }
+.wf-minimap-node {
+    position: absolute; background: rgba(139,105,20,0.5); border-radius: 2px; height: 5px;
+}
+.wf-minimap-branch {
+    position: absolute; border: 1px solid rgba(139,105,20,0.25); border-radius: 3px;
+}
+.wf-minimap-viewport {
+    position: absolute; border: 1.5px solid #8B6914;
+    background: rgba(139,105,20,0.15); border-radius: 2px;
+}
+
+/* === Canvas Viewport (zoom support) === */
+.wf-canvas-scroller {
+    transition: transform 0.1s ease-out; transform-origin: top center;
+}
+
+/* Step type picker popover */
+.wf-step-picker {
+    position: fixed; z-index: 1000;
+    background: var(--node-bg, #2a2a2a); border: 1px solid var(--node-border, #444);
+    border-radius: 12px; padding: 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    display: flex; flex-wrap: wrap; gap: 4px; max-width: 280px;
+}
+.wf-step-picker-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 8px; cursor: pointer;
+    transition: all 0.12s; font-size: 12px; font-weight: 500;
+    color: var(--canvas-text, #e0e0e0); width: calc(50% - 2px);
+    border: 1px solid transparent;
+}
+.wf-step-picker-item:hover {
+    background: var(--node-border, #444); border-color: var(--node-border, #555);
+}
+.wf-step-picker-item .wf-node-icon { width: 28px; height: 28px; border-radius: 7px; font-size: 13px; }
+
+/* Node animation */
+@keyframes wfNodeAppear {
+    from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.wf-node { animation: wfNodeAppear 0.2s ease-out; }
 
 /* Start/End pills */
 .wf-pill {
@@ -644,7 +794,7 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=2.0.0"></script>
+<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=2.5.0"></script>
 {% if mode == 'edit' and workflow and workflow.steps %}
 <script>
 window._currentWorkflowId = {{ workflow.id }};
@@ -699,7 +849,19 @@ try {
             scale_max: _skipCond.scale_max || 5,
             allow_comment: _skipCond.allow_comment !== undefined ? _skipCond.allow_comment : true,
             attachment_ids: _skipCond.attachment_ids || [],
-            attachments: []
+            attachments: [],
+            true_steps: (_skipCond.true_steps || []).map(function(bs) {
+                return { id: Date.now() + Math.random(), type: bs.type, order: 0, name: bs.name, config: bs.config || {} };
+            }),
+            false_steps: (_skipCond.false_steps || []).map(function(bs) {
+                return { id: Date.now() + Math.random(), type: bs.type, order: 0, name: bs.name, config: bs.config || {} };
+            }),
+            approved_steps: (_skipCond.approved_steps || []).map(function(bs) {
+                return { id: Date.now() + Math.random(), type: bs.type, order: 0, name: bs.name, config: bs.config || {} };
+            }),
+            rejected_steps: (_skipCond.rejected_steps || []).map(function(bs) {
+                return { id: Date.now() + Math.random(), type: bs.type, order: 0, name: bs.name, config: bs.config || {} };
+            })
         }
     });
     {% endfor %}

@@ -29,6 +29,7 @@ function initDragAndDrop() {
     // Make templates draggable
     templates.forEach(template => {
         template.addEventListener('dragstart', handleDragStart);
+        template.addEventListener('dragend', function() { _isDraggingFromPalette = false; });
     });
     
     // Canvas drop zone
@@ -37,7 +38,10 @@ function initDragAndDrop() {
     canvas.addEventListener('dragleave', handleDragLeave);
 }
 
+var _isDraggingFromPalette = false;
+
 function handleDragStart(e) {
+    _isDraggingFromPalette = true;
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData('stepType', e.currentTarget.dataset.type);
 }
@@ -59,6 +63,9 @@ function handleDrop(e) {
     e.stopPropagation();
     const canvas = document.getElementById('workflowCanvas');
     canvas.classList.remove('drag-over');
+
+    // Ignore drops that landed inside a branch track (handled by branch drop)
+    if (e.target.closest && e.target.closest('.wf-branch-dropzone')) return;
 
     const stepType = e.dataTransfer.getData('stepType');
     if (!stepType) return;
@@ -97,7 +104,9 @@ function addStep(type, insertAt) {
     renderCanvas();
 
     // Auto-open edit modal for new step (delay to let DOM settle)
-    setTimeout(function() { editStep(insertAt); }, 100);
+    setTimeout(function() {
+        if (workflowSteps[insertAt]) editStep(insertAt);
+    }, 150);
 }
 
 // Get default configuration for step type
@@ -136,6 +145,8 @@ function getDefaultConfig(type) {
             if_true_step: 0,
             if_false: 'continue',
             if_false_step: 0,
+            true_steps: [],
+            false_steps: [],
         },
         survey: {
             subject: '',
@@ -156,7 +167,9 @@ function getDefaultConfig(type) {
             approver_email: '',
             approval_message: '',
             timeout_hours: 48,
-            on_timeout: 'reject'
+            on_timeout: 'reject',
+            approved_steps: [],
+            rejected_steps: [],
         },
         export_data: {
             format: 'csv',
@@ -167,21 +180,90 @@ function getDefaultConfig(type) {
     return configs[type] || {};
 }
 
-// Render workflow canvas
+// Zoom state
+var _canvasZoom = 1;
+
+function wfZoomIn() {
+    _canvasZoom = Math.min(_canvasZoom + 0.1, 2);
+    applyCanvasZoom();
+}
+function wfZoomOut() {
+    _canvasZoom = Math.max(_canvasZoom - 0.1, 0.4);
+    applyCanvasZoom();
+}
+function wfZoomReset() {
+    _canvasZoom = 1;
+    applyCanvasZoom();
+}
+function wfZoomFit() {
+    var canvas = document.getElementById('workflowCanvas');
+    var scroller = document.getElementById('wfCanvasScroller');
+    if (!canvas || !scroller) return;
+    _canvasZoom = Math.min(canvas.clientHeight / scroller.scrollHeight, 1);
+    _canvasZoom = Math.max(_canvasZoom, 0.3);
+    applyCanvasZoom();
+}
+function applyCanvasZoom() {
+    var scroller = document.getElementById('wfCanvasScroller');
+    var label = document.getElementById('wfZoomLabel');
+    if (scroller) scroller.style.transform = 'scale(' + _canvasZoom + ')';
+    if (label) label.textContent = Math.round(_canvasZoom * 100) + '%';
+    updateMinimap();
+}
+
+// Minimap
+function updateMinimap() {
+    var vp = document.getElementById('wfMinimapViewport');
+    var canvas = document.getElementById('workflowCanvas');
+    if (!vp || !canvas) return;
+    var scrollH = canvas.scrollHeight;
+    var viewH = canvas.clientHeight;
+    var scrollTop = canvas.scrollTop;
+    var mcH = 130; // minimap canvas height
+    var top = (scrollTop / scrollH) * mcH;
+    var height = (viewH / scrollH) * mcH;
+    vp.style.top = Math.max(0, top) + 'px';
+    vp.style.height = Math.min(mcH, Math.max(15, height)) + 'px';
+}
+
+// Branch collapse/expand
+function toggleBranch(btn) {
+    var track = btn.closest('.wf-branch-track');
+    if (!track) return;
+    track.classList.toggle('collapsed');
+    var icon = btn.querySelector('i');
+    if (track.classList.contains('collapsed')) {
+        icon.className = 'bi bi-chevron-down';
+    } else {
+        icon.className = 'bi bi-chevron-up';
+    }
+}
+
+// Render guard — prevents overlapping renders
+var _renderPending = null;
+
 function renderCanvas() {
+    // Cancel any pending deferred render (from SortableJS onEnd)
+    if (_renderPending) { clearTimeout(_renderPending); _renderPending = null; }
+    // Close any open step picker popup
+    closeStepPicker();
+
     const canvas = document.getElementById('workflowCanvas');
     const emptyState = document.getElementById('emptyState');
 
     if (workflowSteps.length === 0) {
         emptyState.style.display = 'block';
-        canvas.querySelector('.wf-nodes')?.remove();
+        canvas.querySelector('.wf-canvas-scroller')?.remove();
         canvas.querySelector('.wf-theme-switcher')?.remove();
+        canvas.querySelector('.wf-zoom-controls')?.remove();
+        canvas.querySelector('.wf-minimap')?.remove();
         return;
     }
 
     emptyState.style.display = 'none';
 
-    let html = '<div class="wf-nodes" id="stepsSortContainer">';
+    let html = '<div class="wf-canvas-scroller" id="wfCanvasScroller">';
+    html += '<div class="wf-nodes" id="stepsSortContainer">';
     // Start pill
     html += '<div style="text-align:center"><span class="wf-pill start"><i class="bi bi-play-fill"></i> Start</span></div>';
 
@@ -196,9 +278,9 @@ function renderCanvas() {
 
         // Branch visualization for condition/approval
         if (step.type === 'condition') {
-            html += renderConditionBranch(step);
+            html += renderConditionBranch(step, index);
         } else if (step.type === 'human_approval') {
-            html += renderApprovalBranch(step);
+            html += renderApprovalBranch(step, index);
         }
     });
 
@@ -206,7 +288,8 @@ function renderCanvas() {
     html += '<div class="wf-connector"><div class="wf-connector-line"></div><div class="wf-connector-arrow">&#9660;</div></div>';
     html += '<div style="text-align:center"><span class="wf-pill end"><i class="bi bi-stop-fill"></i> End</span></div>';
     html += '<div style="height:20px"></div>';
-    html += '</div>';
+    html += '</div>'; // .wf-nodes
+    html += '</div>'; // .wf-canvas-scroller
 
     // Theme switcher
     html += `<div class="wf-theme-switcher">
@@ -216,9 +299,38 @@ function renderCanvas() {
         <div class="wf-theme-btn${_canvasTheme==='warm-dark'?' active':''}" style="background:#2d2a25" onclick="setCanvasTheme('warm-dark',this)" title="Warm Dark"></div>
     </div>`;
 
+    // Zoom controls
+    html += `<div class="wf-zoom-controls">
+        <button type="button" class="wf-zoom-btn" onclick="wfZoomIn()" title="Zoom In"><i class="bi bi-plus-lg"></i></button>
+        <div class="wf-zoom-label" id="wfZoomLabel">${Math.round(_canvasZoom * 100)}%</div>
+        <div class="wf-zoom-divider"></div>
+        <button type="button" class="wf-zoom-btn" onclick="wfZoomOut()" title="Zoom Out"><i class="bi bi-dash-lg"></i></button>
+        <div class="wf-zoom-divider"></div>
+        <button type="button" class="wf-zoom-btn" onclick="wfZoomReset()" title="Reset"><i class="bi bi-arrows-angle-contract"></i></button>
+        <div class="wf-zoom-divider"></div>
+        <button type="button" class="wf-zoom-btn" onclick="wfZoomFit()" title="Fit"><i class="bi bi-fullscreen"></i></button>
+    </div>`;
+
+    // Minimap
+    html += buildMinimapHtml();
+
     // Preserve emptyState element
     var emptyHtml = emptyState.outerHTML;
     canvas.innerHTML = html + emptyHtml;
+
+    // Apply current zoom
+    applyCanvasZoom();
+
+    // Ctrl+scroll zoom on canvas
+    canvas.onwheel = function(e) {
+        if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            if (e.deltaY < 0) wfZoomIn(); else wfZoomOut();
+        } else {
+            setTimeout(updateMinimap, 10);
+        }
+    };
+    canvas.onscroll = function() { updateMinimap(); };
 
     // Allow palette drops on the sort container too
     var sortContainer = document.getElementById('stepsSortContainer');
@@ -230,85 +342,391 @@ function renderCanvas() {
 
     // Init SortableJS for step reordering
     initStepSortable();
+
+    // Init drag & drop on branch tracks
+    initBranchDropZones();
 }
 
-// Connector with optional add-between button
+// Attach drag & drop listeners to branch tracks
+function initBranchDropZones() {
+    var zones = document.querySelectorAll('.wf-branch-dropzone');
+    zones.forEach(function(zone) {
+        zone.addEventListener('dragover', function(e) {
+            // Only accept drags from the palette, ignore SortableJS drags
+            if (!_isDraggingFromPalette) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'copy';
+            zone.classList.add('branch-drag-over');
+        });
+        zone.addEventListener('dragleave', function(e) {
+            if (!zone.contains(e.relatedTarget)) {
+                zone.classList.remove('branch-drag-over');
+            }
+        });
+        zone.addEventListener('drop', function(e) {
+            // Only accept drags from the palette
+            if (!_isDraggingFromPalette) return;
+            e.preventDefault();
+            e.stopPropagation();
+            zone.classList.remove('branch-drag-over');
+
+            var stepType = e.dataTransfer.getData('stepType');
+            if (!stepType) return;
+
+            var parentIndex = parseInt(zone.dataset.parentIndex);
+            var branchKey = zone.dataset.branchKey;
+
+            // Find insert position based on drop Y relative to existing nodes inside the track
+            var nodes = zone.querySelectorAll('.wf-node');
+            var insertAt = nodes.length;
+            for (var i = 0; i < nodes.length; i++) {
+                var rect = nodes[i].getBoundingClientRect();
+                if (e.clientY < rect.top + rect.height / 2) {
+                    insertAt = i;
+                    break;
+                }
+            }
+
+            addStepToBranch(parentIndex, branchKey, stepType, insertAt);
+        });
+    });
+}
+
+// Build minimap HTML based on current steps
+function buildMinimapHtml() {
+    var h = '<div class="wf-minimap"><div class="wf-minimap-title">Minimap</div><div class="wf-minimap-canvas">';
+    var totalItems = 0;
+    workflowSteps.forEach(function(step) {
+        totalItems++;
+        if (step.type === 'condition') totalItems += 2;
+        else if (step.type === 'human_approval') totalItems += 2;
+    });
+    var y = 5;
+    var step_h = Math.max(4, Math.min(8, 120 / (totalItems || 1)));
+    var gap = step_h + 3;
+    workflowSteps.forEach(function(step) {
+        h += '<div class="wf-minimap-node" style="top:' + y + 'px;left:20%;width:60%"></div>';
+        y += gap;
+        if (step.type === 'condition' || step.type === 'human_approval') {
+            var branchKey1 = step.type === 'condition' ? 'true_steps' : 'approved_steps';
+            var branchKey2 = step.type === 'condition' ? 'false_steps' : 'rejected_steps';
+            var n1 = (step.config[branchKey1] || []).length;
+            var n2 = (step.config[branchKey2] || []).length;
+            var branchH = Math.max(n1, n2, 1) * gap + 6;
+            h += '<div class="wf-minimap-branch" style="top:' + y + 'px;left:5%;width:42%;height:' + branchH + 'px"></div>';
+            h += '<div class="wf-minimap-branch" style="top:' + y + 'px;left:53%;width:42%;height:' + branchH + 'px"></div>';
+            // Nested nodes
+            for (var i = 0; i < n1; i++) {
+                h += '<div class="wf-minimap-node" style="top:' + (y + 4 + i * gap) + 'px;left:8%;width:36%"></div>';
+            }
+            for (var j = 0; j < n2; j++) {
+                h += '<div class="wf-minimap-node" style="top:' + (y + 4 + j * gap) + 'px;left:56%;width:36%"></div>';
+            }
+            y += branchH + 4;
+        }
+    });
+    h += '<div class="wf-minimap-viewport" id="wfMinimapViewport" style="top:0;left:0;width:100%;height:40%"></div>';
+    h += '</div></div>';
+    return h;
+}
+
+// Connector with optional add-between button (now with step picker)
 function renderConnector(index) {
     return `
         <div class="wf-connector">
             <div class="wf-connector-line"></div>
-            <div class="wf-add-between" title="Inserisci step" onclick="addStepAt(${index})">+</div>
+            <div class="wf-add-between" title="Inserisci step" onclick="showStepPicker(${index},event)">+</div>
             <div class="wf-connector-line"></div>
             <div class="wf-connector-arrow">&#9660;</div>
         </div>`;
 }
 
-// Condition branch visualization
-function renderConditionBranch(step) {
-    var ifTrue = step.config.if_true || 'continue';
-    var ifFalse = step.config.if_false || 'continue';
-    var trueLabel = ifTrue === 'jump' ? 'Jump to #' + (step.config.if_true_step || '?') : ifTrue === 'stop' ? 'Stop' : 'Continue';
-    var falseLabel = ifFalse === 'jump' ? 'Jump to #' + (step.config.if_false_step || '?') : ifFalse === 'stop' ? 'Stop' : 'Continue';
+// Render branch steps inside a track
+function renderBranchSteps(steps, parentIndex, branchKey, badgeClass) {
+    if (!steps || steps.length === 0) {
+        return '<div class="wf-branch-empty" onclick="showBranchStepPicker(' + parentIndex + ',\'' + branchKey + '\',0,event)"><i class="bi bi-plus-lg"></i> Aggiungi step</div>';
+    }
+    var html = '';
+    steps.forEach(function(bStep, bi) {
+        if (bi > 0) {
+            // Connector between branch steps
+            html += '<div class="wf-branch-connector">';
+            html += '<div class="wf-branch-connector-line"></div>';
+            html += '<div class="wf-branch-add-btn" onclick="event.stopPropagation();showBranchStepPicker(' + parentIndex + ',\'' + branchKey + '\',' + bi + ',event)">+</div>';
+            html += '<div class="wf-branch-connector-line"></div>';
+            html += '</div>';
+        }
+        var icons = {email:'envelope',wait_until:'calendar-check',condition:'shuffle',goal_check:'trophy',human_approval:'person-check',survey:'ui-checks',export_data:'download',file_upload:'file-earmark-arrow-up',engagement_tracker:'graph-up'};
+        var subtitle = renderNodeSubtitle(bStep);
+        var badgeLetter = branchKey === 'true_steps' || branchKey === 'approved_steps' ? 'a' : 'c';
+        var badgeLabel = (parentIndex + 1) + String.fromCharCode(97 + bi); // 3a, 3b, etc. or 3c, 3d
+        if (branchKey === 'false_steps' || branchKey === 'rejected_steps') {
+            badgeLabel = (parentIndex + 1) + String.fromCharCode(97 + (steps.length > 0 ? steps.length : 0) + bi);
+        }
+        html += '<div class="wf-node" onclick="editBranchStep(' + parentIndex + ',\'' + branchKey + '\',' + bi + ')" style="margin-top:' + (bi === 0 ? '8' : '0') + 'px">';
+        html += '<div class="wf-node-badge-branch ' + badgeClass + '">' + badgeLabel + '</div>';
+        html += '<div class="wf-node-icon ' + bStep.type + '"><i class="bi bi-' + (icons[bStep.type] || 'gear') + '"></i></div>';
+        html += '<div class="wf-node-body"><div class="wf-node-title">' + bStep.name + '</div><div class="wf-node-subtitle">' + subtitle + '</div></div>';
+        html += '<div class="wf-node-actions">';
+        html += '<div class="wf-node-action" onclick="event.stopPropagation();editBranchStep(' + parentIndex + ',\'' + branchKey + '\',' + bi + ')" title="Edit"><i class="bi bi-pencil"></i></div>';
+        html += '<div class="wf-node-action delete" onclick="event.stopPropagation();deleteBranchStep(' + parentIndex + ',\'' + branchKey + '\',' + bi + ')" title="Delete"><i class="bi bi-trash"></i></div>';
+        html += '</div></div>';
+    });
+    // Add button at end
+    html += '<div class="wf-branch-connector">';
+    html += '<div class="wf-branch-connector-line"></div>';
+    html += '<div class="wf-branch-add-btn" onclick="event.stopPropagation();showBranchStepPicker(' + parentIndex + ',\'' + branchKey + '\',' + steps.length + ',event)">+</div>';
+    html += '</div>';
+    return html;
+}
+
+// Condition branch visualization with nested steps
+function renderConditionBranch(step, parentIndex) {
+    var trueSteps = step.config.true_steps || [];
+    var falseSteps = step.config.false_steps || [];
+    var trueCount = trueSteps.length;
+    var falseCount = falseSteps.length;
 
     return `
-        <div class="wf-branch">
-            <svg width="320" height="35" viewBox="0 0 320 35" style="display:block;margin:0 auto">
-                <line x1="160" y1="0" x2="160" y2="8" stroke="var(--connector-color,#555)" stroke-width="2"/>
-                <path d="M160,8 Q160,22 80,22 L80,35" fill="none" stroke="#4ade80" stroke-width="2"/>
-                <path d="M160,8 Q160,22 240,22 L240,35" fill="none" stroke="#f87171" stroke-width="2"/>
-            </svg>
-            <div class="wf-branch-row">
+        <div class="wf-branch-container">
+            <div class="wf-branch-split">
+                <svg viewBox="0 0 750 40" preserveAspectRatio="xMidYMin meet">
+                    <line x1="375" y1="0" x2="375" y2="10" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                    <path d="M375,10 Q375,25 190,25 L190,40" fill="none" stroke="#4ade80" stroke-width="2"/>
+                    <path d="M375,10 Q375,25 560,25 L560,40" fill="none" stroke="#f87171" stroke-width="2"/>
+                </svg>
+            </div>
+            <div class="wf-branch-arms">
                 <div class="wf-branch-arm">
-                    <div class="wf-branch-label yes">True</div>
-                    <div class="wf-branch-action"><i class="bi bi-arrow-return-right"></i> ${trueLabel}</div>
+                    <span class="wf-branch-label yes"><i class="bi bi-check-lg"></i> True</span>
+                    <div class="wf-branch-track yes-track wf-branch-dropzone" data-parent-index="${parentIndex}" data-branch-key="true_steps">
+                        <div class="wf-branch-collapse" onclick="event.stopPropagation();toggleBranch(this)" title="Collapse"><i class="bi bi-chevron-up"></i></div>
+                        <span class="wf-branch-collapsed-info">${trueCount} step</span>
+                        ${renderBranchSteps(trueSteps, parentIndex, 'true_steps', 'yes-badge')}
+                    </div>
                 </div>
                 <div class="wf-branch-arm">
-                    <div class="wf-branch-label no">False</div>
-                    <div class="wf-branch-action"><i class="bi bi-arrow-return-right"></i> ${falseLabel}</div>
+                    <span class="wf-branch-label no"><i class="bi bi-x-lg"></i> False</span>
+                    <div class="wf-branch-track no-track wf-branch-dropzone" data-parent-index="${parentIndex}" data-branch-key="false_steps">
+                        <div class="wf-branch-collapse" onclick="event.stopPropagation();toggleBranch(this)" title="Collapse"><i class="bi bi-chevron-up"></i></div>
+                        <span class="wf-branch-collapsed-info">${falseCount} step</span>
+                        ${renderBranchSteps(falseSteps, parentIndex, 'false_steps', 'no-badge')}
+                    </div>
                 </div>
             </div>
-            <svg width="320" height="25" viewBox="0 0 320 25" style="display:block;margin:0 auto">
-                <path d="M80,0 L80,8 Q80,18 160,18 L160,25" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
-                <path d="M240,0 L240,8 Q240,18 160,18 L160,25" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
-            </svg>
+            <div class="wf-branch-merge">
+                <svg viewBox="0 0 750 40" preserveAspectRatio="xMidYMax meet">
+                    <path d="M190,0 L190,15 Q190,30 375,30 L375,40" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                    <path d="M560,0 L560,15 Q560,30 375,30 L375,40" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                </svg>
+            </div>
         </div>`;
 }
 
-// Approval branch visualization
-function renderApprovalBranch(step) {
-    var ifApproved = step.config.if_approved || 'continue';
-    var ifRejected = step.config.if_rejected || 'stop';
-    var approvedLabel = ifApproved === 'jump' ? 'Jump to #' + (step.config.if_approved_step || '?') : ifApproved === 'complete' ? 'Complete' : 'Continue';
-    var rejectedLabel = ifRejected === 'jump' ? 'Jump to #' + (step.config.if_rejected_step || '?') : ifRejected === 'continue' ? 'Continue' : 'Stop';
+// Approval branch visualization with nested steps
+function renderApprovalBranch(step, parentIndex) {
+    var approvedSteps = step.config.approved_steps || [];
+    var rejectedSteps = step.config.rejected_steps || [];
+    var approvedCount = approvedSteps.length;
+    var rejectedCount = rejectedSteps.length;
 
     return `
-        <div class="wf-branch">
-            <svg width="320" height="35" viewBox="0 0 320 35" style="display:block;margin:0 auto">
-                <line x1="160" y1="0" x2="160" y2="8" stroke="var(--connector-color,#555)" stroke-width="2"/>
-                <path d="M160,8 Q160,22 80,22 L80,35" fill="none" stroke="#4ade80" stroke-width="2"/>
-                <path d="M160,8 Q160,22 240,22 L240,35" fill="none" stroke="#f87171" stroke-width="2"/>
-            </svg>
-            <div class="wf-branch-row">
+        <div class="wf-branch-container">
+            <div class="wf-branch-split">
+                <svg viewBox="0 0 750 40" preserveAspectRatio="xMidYMin meet">
+                    <line x1="375" y1="0" x2="375" y2="10" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                    <path d="M375,10 Q375,25 190,25 L190,40" fill="none" stroke="#4ade80" stroke-width="2"/>
+                    <path d="M375,10 Q375,25 560,25 L560,40" fill="none" stroke="#f87171" stroke-width="2"/>
+                </svg>
+            </div>
+            <div class="wf-branch-arms">
                 <div class="wf-branch-arm">
-                    <div class="wf-branch-label yes"><i class="bi bi-check-lg"></i> Approved</div>
-                    <div class="wf-branch-action"><i class="bi bi-arrow-return-right"></i> ${approvedLabel}</div>
+                    <span class="wf-branch-label yes"><i class="bi bi-check-lg"></i> Approved</span>
+                    <div class="wf-branch-track yes-track wf-branch-dropzone" data-parent-index="${parentIndex}" data-branch-key="approved_steps">
+                        <div class="wf-branch-collapse" onclick="event.stopPropagation();toggleBranch(this)" title="Collapse"><i class="bi bi-chevron-up"></i></div>
+                        <span class="wf-branch-collapsed-info">${approvedCount} step</span>
+                        ${renderBranchSteps(approvedSteps, parentIndex, 'approved_steps', 'yes-badge')}
+                    </div>
                 </div>
                 <div class="wf-branch-arm">
-                    <div class="wf-branch-label no"><i class="bi bi-x-lg"></i> Rejected</div>
-                    <div class="wf-branch-action"><i class="bi bi-stop-circle"></i> ${rejectedLabel}</div>
+                    <span class="wf-branch-label no"><i class="bi bi-x-lg"></i> Rejected</span>
+                    <div class="wf-branch-track no-track wf-branch-dropzone" data-parent-index="${parentIndex}" data-branch-key="rejected_steps">
+                        <div class="wf-branch-collapse" onclick="event.stopPropagation();toggleBranch(this)" title="Collapse"><i class="bi bi-chevron-up"></i></div>
+                        <span class="wf-branch-collapsed-info">${rejectedCount} step</span>
+                        ${renderBranchSteps(rejectedSteps, parentIndex, 'rejected_steps', 'no-badge')}
+                    </div>
                 </div>
             </div>
-            <svg width="320" height="25" viewBox="0 0 320 25" style="display:block;margin:0 auto">
-                <path d="M80,0 L80,8 Q80,18 160,18 L160,25" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
-                <path d="M240,0 L240,8 Q240,18 160,18 L160,25" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
-            </svg>
+            <div class="wf-branch-merge">
+                <svg viewBox="0 0 750 40" preserveAspectRatio="xMidYMax meet">
+                    <path d="M190,0 L190,15 Q190,30 375,30 L375,40" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                    <path d="M560,0 L560,15 Q560,30 375,30 L375,40" fill="none" stroke="var(--connector-color,#555)" stroke-width="2"/>
+                </svg>
+            </div>
         </div>`;
 }
 
-// Add step at specific position (from "+" button)
+// Step type picker — built as inline overlay, not a body-appended popup
+var _stepPickerCloseHandler = null;
+
+function _buildPickerItems(types, onSelect) {
+    var picker = document.createElement('div');
+    picker.className = 'wf-step-picker';
+    picker.id = 'wfStepPicker';
+    types.forEach(function(t) {
+        var item = document.createElement('div');
+        item.className = 'wf-step-picker-item';
+        item.innerHTML = '<div class="wf-node-icon ' + t.cls + '"><i class="bi bi-' + t.icon + '"></i></div> ' + t.label;
+        item.onmousedown = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+        item.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeStepPicker();
+            onSelect(t.type);
+        };
+        picker.appendChild(item);
+    });
+    return picker;
+}
+
+function _showPickerAtElement(el, picker) {
+    closeStepPicker();
+    var rect = el.getBoundingClientRect();
+    picker.style.left = Math.max(10, rect.left + rect.width / 2 - 140) + 'px';
+    picker.style.top = (rect.bottom + 6) + 'px';
+    document.body.appendChild(picker);
+
+    // Close on click outside — use mousedown to fire before any other handler
+    _stepPickerCloseHandler = function(e) {
+        if (picker.contains(e.target)) return;
+        closeStepPicker();
+    };
+    // Delay attaching so the current click doesn't immediately close it
+    setTimeout(function() {
+        document.addEventListener('mousedown', _stepPickerCloseHandler);
+    }, 50);
+}
+
+function showStepPicker(insertIndex, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var btn = event.currentTarget || event.target;
+
+    var types = [
+        { type: 'email', icon: 'envelope', label: 'Email', cls: 'email' },
+        { type: 'wait_until', icon: 'calendar-check', label: 'Wait Until', cls: 'wait_until' },
+        { type: 'goal_check', icon: 'trophy', label: 'Goal Check', cls: 'goal_check' },
+        { type: 'condition', icon: 'shuffle', label: 'Condition', cls: 'condition' },
+        { type: 'human_approval', icon: 'person-check', label: 'Approval', cls: 'human_approval' },
+        { type: 'survey', icon: 'ui-checks', label: 'Survey', cls: 'survey' },
+        { type: 'export_data', icon: 'download', label: 'Export', cls: 'export_data' },
+    ];
+
+    var picker = _buildPickerItems(types, function(stepType) {
+        addStep(stepType, insertIndex);
+    });
+    _showPickerAtElement(btn, picker);
+}
+
+function showBranchStepPicker(parentIndex, branchKey, insertAt, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var btn = event.currentTarget || event.target;
+
+    var types = [
+        { type: 'email', icon: 'envelope', label: 'Email', cls: 'email' },
+        { type: 'wait_until', icon: 'calendar-check', label: 'Wait Until', cls: 'wait_until' },
+        { type: 'goal_check', icon: 'trophy', label: 'Goal Check', cls: 'goal_check' },
+        { type: 'survey', icon: 'ui-checks', label: 'Survey', cls: 'survey' },
+        { type: 'export_data', icon: 'download', label: 'Export', cls: 'export_data' },
+    ];
+
+    var picker = _buildPickerItems(types, function(stepType) {
+        addStepToBranch(parentIndex, branchKey, stepType, insertAt);
+    });
+    _showPickerAtElement(btn, picker);
+}
+
+function closeStepPicker() {
+    if (_stepPickerCloseHandler) {
+        document.removeEventListener('mousedown', _stepPickerCloseHandler);
+        _stepPickerCloseHandler = null;
+    }
+    var existing = document.getElementById('wfStepPicker');
+    if (existing) existing.remove();
+}
+
+// Add step at specific position (from "+" button between nodes)
 function addStepAt(index) {
-    // Show a quick picker or just insert default email
+    // For the connector "+" buttons, we still do a quick add (email default)
+    // But the step picker is used from the branch empty slots
     addStep('email', index);
+}
+
+// === Branch step management ===
+var editingBranchContext = null; // { parentIndex, branchKey, childIndex }
+
+function addStepToBranch(parentIndex, branchKey, type, insertAt) {
+    var parent = workflowSteps[parentIndex];
+    if (!parent || !parent.config[branchKey]) parent.config[branchKey] = [];
+    var steps = parent.config[branchKey];
+
+    var newStep = {
+        id: Date.now(),
+        type: type,
+        order: insertAt + 1,
+        name: capitalize(type) + ' Step',
+        config: getDefaultConfig(type)
+    };
+
+    steps.splice(insertAt, 0, newStep);
+    renderCanvas();
+
+    // Auto-open edit
+    setTimeout(function() {
+        var p = workflowSteps[parentIndex];
+        if (p && p.config[branchKey] && p.config[branchKey][insertAt]) {
+            editBranchStep(parentIndex, branchKey, insertAt);
+        }
+    }, 150);
+}
+
+function editBranchStep(parentIndex, branchKey, childIndex) {
+    var parent = workflowSteps[parentIndex];
+    if (!parent) return;
+    var steps = parent.config[branchKey] || [];
+    var step = steps[childIndex];
+    if (!step) return;
+
+    editingBranchContext = { parentIndex: parentIndex, branchKey: branchKey, childIndex: childIndex };
+    editingStepIndex = parentIndex; // fallback
+
+    var modal = new bootstrap.Modal(document.getElementById('stepEditModal'));
+    var content = document.getElementById('stepEditContent');
+    content.innerHTML = renderStepEditForm(step, childIndex);
+
+    if (step.type === 'email' || step.type === 'survey') initEmailEditor();
+    if (step.type === 'email') initAttachmentDropZone();
+
+    document.getElementById('stepEditModal').addEventListener('hidden.bs.modal', function() {
+        destroyEmailEditor();
+        editingBranchContext = null;
+    }, { once: true });
+
+    modal.show();
+}
+
+function deleteBranchStep(parentIndex, branchKey, childIndex) {
+    if (!confirm('Eliminare questo step?')) return;
+    var parent = workflowSteps[parentIndex];
+    if (!parent) return;
+    var steps = parent.config[branchKey] || [];
+    steps.splice(childIndex, 1);
+    renderCanvas();
 }
 
 // Render single step as compact node
@@ -327,6 +745,8 @@ function renderStep(step, index) {
 
     var subtitle = renderNodeSubtitle(step);
     var landingBtn = step.type === 'email' ? `<div class="wf-node-action" onclick="event.stopPropagation();openLandingBuilder(${index})" title="Landing Builder"><i class="bi bi-palette"></i></div>` : '';
+    var upBtn = index > 0 ? `<div class="wf-node-action" onclick="event.stopPropagation();moveStepUp(${index})" title="Sposta su"><i class="bi bi-chevron-up"></i></div>` : '';
+    var downBtn = index < workflowSteps.length - 1 ? `<div class="wf-node-action" onclick="event.stopPropagation();moveStepDown(${index})" title="Sposta giù"><i class="bi bi-chevron-down"></i></div>` : '';
 
     return `
         <div class="wf-node" data-step-id="${step.id}" data-step-index="${index}" onclick="editStep(${index})">
@@ -336,8 +756,9 @@ function renderStep(step, index) {
                 <div class="wf-node-title">${step.name}</div>
                 <div class="wf-node-subtitle">${subtitle}</div>
             </div>
-            <div class="wf-node-drag" onclick="event.stopPropagation()"><i class="bi bi-grip-vertical"></i></div>
             <div class="wf-node-actions">
+                ${upBtn}
+                ${downBtn}
                 <div class="wf-node-action" onclick="event.stopPropagation();editStep(${index})" title="Edit"><i class="bi bi-pencil"></i></div>
                 ${landingBtn}
                 <div class="wf-node-action delete" onclick="event.stopPropagation();deleteStep(${index})" title="Delete"><i class="bi bi-trash"></i></div>
@@ -446,9 +867,16 @@ function renderStepSummary(step) {
 
 // Edit step
 function editStep(index) {
+    editingBranchContext = null; // Reset branch context for top-level edits
     editingStepIndex = index;
     const step = workflowSteps[index];
-    const modal = new bootstrap.Modal(document.getElementById('stepEditModal'));
+    if (!step) return; // Guard: step may no longer exist after re-render
+
+    // Don't open if modal is already transitioning
+    var modalEl = document.getElementById('stepEditModal');
+    if (modalEl.classList.contains('show') || modalEl.classList.contains('showing')) return;
+
+    const modal = new bootstrap.Modal(modalEl);
     const content = document.getElementById('stepEditContent');
     
     content.innerHTML = renderStepEditForm(step, index);
@@ -1289,7 +1717,14 @@ function populateLandingFieldSelect(selectId, currentValue, loadingId) {
 
 // Save step edit
 function saveStepEdit() {
-    const step = workflowSteps[editingStepIndex];
+    var step;
+    if (editingBranchContext) {
+        var parent = workflowSteps[editingBranchContext.parentIndex];
+        var branchSteps = parent.config[editingBranchContext.branchKey] || [];
+        step = branchSteps[editingBranchContext.childIndex];
+    } else {
+        step = workflowSteps[editingStepIndex];
+    }
     
     step.name = document.getElementById('editStepName').value;
     
@@ -1423,40 +1858,11 @@ function moveStepDown(index) {
     console.log('Moved step down', workflowSteps.map(s => s.order));
 }
 
-// SortableJS-based reordering
-let sortableInstance = null;
-
+// SortableJS no longer used for step reordering (replaced by up/down buttons).
+// The complex DOM structure (branch containers, connectors, SVGs between step-sort-items)
+// causes SortableJS to miscalculate drop positions. Up/down buttons are more reliable.
 function initStepSortable() {
-    const container = document.getElementById('stepsSortContainer');
-    if (!container || typeof Sortable === 'undefined') return;
-
-    // Destroy previous instance
-    if (sortableInstance) {
-        sortableInstance.destroy();
-        sortableInstance = null;
-    }
-
-    sortableInstance = Sortable.create(container, {
-        animation: 200,
-        handle: '.wf-node-drag',
-        draggable: '.step-sort-item',
-        ghostClass: 'step-sortable-ghost',
-        chosenClass: 'step-sortable-chosen',
-        dragClass: 'step-sortable-drag',
-        onEnd: function(evt) {
-            if (evt.oldIndex === evt.newIndex) return;
-
-            // Reorder based on new DOM order
-            var item = workflowSteps.splice(evt.oldIndex, 1)[0];
-            workflowSteps.splice(evt.newIndex, 0, item);
-
-            workflowSteps.forEach(function(step, i) {
-                step.order = i + 1;
-            });
-
-            renderCanvas();
-        }
-    });
+    // No-op — kept for compatibility
 }
 
 // Wizard navigation
@@ -1605,7 +2011,13 @@ function saveWorkflow() {
                     if_true: step.config.if_true,
                     if_true_step: step.config.if_true_step,
                     if_false: step.config.if_false,
-                    if_false_step: step.config.if_false_step
+                    if_false_step: step.config.if_false_step,
+                    true_steps: (step.config.true_steps || []).map(function(bs) {
+                        return { type: bs.type, name: bs.name, config: bs.config };
+                    }),
+                    false_steps: (step.config.false_steps || []).map(function(bs) {
+                        return { type: bs.type, name: bs.name, config: bs.config };
+                    })
                 };
             }
 
@@ -1638,7 +2050,13 @@ function saveWorkflow() {
                     if_approved: step.config.if_approved,
                     if_approved_step: step.config.if_approved_step,
                     if_rejected: step.config.if_rejected,
-                    if_rejected_step: step.config.if_rejected_step
+                    if_rejected_step: step.config.if_rejected_step,
+                    approved_steps: (step.config.approved_steps || []).map(function(bs) {
+                        return { type: bs.type, name: bs.name, config: bs.config };
+                    }),
+                    rejected_steps: (step.config.rejected_steps || []).map(function(bs) {
+                        return { type: bs.type, name: bs.name, config: bs.config };
+                    })
                 };
             }
 

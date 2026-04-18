@@ -1,0 +1,1014 @@
+bello, <!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workflow Canvas v2.5 - Mockup</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ── Theme Variables ── */
+:root {
+    --canvas-bg: #1e1b18;
+    --canvas-text: #e8e0d4;
+    --canvas-muted: #8a8078;
+    --node-bg: #2d2a25;
+    --node-border: #4a4238;
+    --node-hover: #5a5245;
+    --node-shadow: rgba(0,0,0,0.4);
+    --connector: #5a5245;
+    --connector-glow: rgba(139,105,20,0.3);
+    --accent: #c49a2a;
+    --accent-dim: rgba(196,154,42,0.15);
+    --branch-yes: #4ade80;
+    --branch-no: #f87171;
+    --branch-yes-bg: rgba(74,222,128,0.08);
+    --branch-no-bg: rgba(248,113,113,0.08);
+    --pill-start-bg: #2a4a2a;
+    --pill-start-text: #4ade80;
+    --pill-end-bg: #4a2a2a;
+    --pill-end-text: #f87171;
+    --minimap-bg: rgba(30,27,24,0.92);
+    --minimap-border: #4a4238;
+    --minimap-node: rgba(196,154,42,0.6);
+    --minimap-viewport: rgba(196,154,42,0.25);
+    --zoom-bg: rgba(45,42,37,0.95);
+    --zoom-border: #4a4238;
+    --palette-bg: #252220;
+    --palette-border: #3a3530;
+    --palette-hover: #3a3530;
+    --badge-bg: var(--accent);
+    --badge-text: #1e1b18;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: var(--canvas-bg);
+    color: var(--canvas-text);
+    min-height: 100vh;
+    display: flex;
+    overflow: hidden;
+}
+
+/* ── Palette (left sidebar) ── */
+.palette {
+    width: 220px;
+    min-width: 220px;
+    background: var(--palette-bg);
+    border-right: 1px solid var(--palette-border);
+    padding: 20px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    z-index: 10;
+}
+.palette h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--canvas-muted);
+    margin-bottom: 8px;
+    padding: 0 4px;
+}
+.palette-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: grab;
+    transition: all 0.15s;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--canvas-text);
+    border: 1px solid transparent;
+}
+.palette-item:hover {
+    background: var(--palette-hover);
+    border-color: var(--node-border);
+}
+.palette-item .pi-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+.palette-item .pi-icon.email { background: #3b82f620; color: #60a5fa; }
+.palette-item .pi-icon.wait { background: #a855f720; color: #c084fc; }
+.palette-item .pi-icon.condition { background: #f59e0b20; color: #fbbf24; }
+.palette-item .pi-icon.goal { background: #10b98120; color: #34d399; }
+.palette-item .pi-icon.approval { background: #ec489920; color: #f472b6; }
+.palette-item .pi-icon.survey { background: #06b6d420; color: #22d3ee; }
+.palette-item .pi-icon.export { background: #8b5cf620; color: #a78bfa; }
+.palette-divider {
+    height: 1px;
+    background: var(--palette-border);
+    margin: 8px 0;
+}
+
+/* ── Canvas viewport ── */
+.canvas-viewport {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+}
+.canvas-scroller {
+    min-height: 100vh;
+    padding: 50px 0;
+    display: flex;
+    justify-content: center;
+    transition: transform 0.1s ease-out;
+    transform-origin: top center;
+}
+.canvas-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    min-width: 600px;
+    padding: 0 40px;
+}
+
+/* ── Pills ── */
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 20px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.pill.start { background: var(--pill-start-bg); color: var(--pill-start-text); }
+.pill.end { background: var(--pill-end-bg); color: var(--pill-end-text); }
+
+/* ── Connectors ── */
+.connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    position: relative;
+}
+.connector-line {
+    width: 2px;
+    height: 22px;
+    background: var(--connector);
+    position: relative;
+}
+.connector-line::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--connector);
+}
+.connector .add-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--node-bg);
+    border: 1.5px solid var(--connector);
+    color: var(--canvas-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    z-index: 2;
+    opacity: 0;
+}
+.connector:hover .add-btn { opacity: 1; }
+.connector .add-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--badge-text);
+    transform: scale(1.2);
+}
+
+/* ── Nodes ── */
+.node {
+    width: 340px;
+    background: var(--node-bg);
+    border: 1.5px solid var(--node-border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+}
+.node:hover {
+    border-color: var(--accent);
+    box-shadow: 0 4px 20px var(--node-shadow), 0 0 0 1px var(--connector-glow);
+    transform: translateY(-1px);
+}
+.node-badge {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    width: 22px;
+    height: 22px;
+    background: var(--badge-bg);
+    color: var(--badge-text);
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--canvas-bg);
+}
+.node-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    flex-shrink: 0;
+}
+.node-icon.email { background: #3b82f620; color: #60a5fa; }
+.node-icon.wait { background: #a855f720; color: #c084fc; }
+.node-icon.condition { background: #f59e0b20; color: #fbbf24; }
+.node-icon.goal { background: #10b98120; color: #34d399; }
+.node-icon.approval { background: #ec489920; color: #f472b6; }
+.node-icon.survey { background: #06b6d420; color: #22d3ee; }
+.node-icon.export { background: #8b5cf620; color: #a78bfa; }
+.node-body {
+    flex: 1;
+    min-width: 0;
+}
+.node-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.node-subtitle {
+    font-size: 11px;
+    color: var(--canvas-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.node-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.node:hover .node-actions { opacity: 1; }
+.node-action {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid var(--node-border);
+    background: var(--canvas-bg);
+    color: var(--canvas-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.node-action:hover { background: var(--accent); color: var(--badge-text); border-color: var(--accent); }
+.node-action.delete:hover { background: #dc2626; border-color: #dc2626; }
+.node-drag {
+    color: var(--canvas-muted);
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.15s;
+    font-size: 14px;
+    padding: 0 2px;
+}
+.node:hover .node-drag { opacity: 0.5; }
+
+/* ── Branch Container (the big new feature!) ── */
+.branch-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 750px;
+}
+.branch-split {
+    position: relative;
+    width: 100%;
+    height: 40px;
+}
+.branch-split svg {
+    width: 100%;
+    height: 100%;
+}
+.branch-arms {
+    display: flex;
+    gap: 30px;
+    width: 100%;
+    justify-content: center;
+}
+.branch-arm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    max-width: 340px;
+    min-width: 260px;
+    gap: 0;
+}
+.branch-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 14px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    margin-bottom: 0;
+}
+.branch-label.yes { background: var(--branch-yes-bg); color: var(--branch-yes); border: 1px solid rgba(74,222,128,0.2); }
+.branch-label.no { background: var(--branch-no-bg); color: var(--branch-no); border: 1px solid rgba(248,113,113,0.2); }
+
+.branch-track {
+    width: 100%;
+    border: 1.5px dashed transparent;
+    border-radius: 14px;
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    min-height: 80px;
+    transition: all 0.2s;
+    position: relative;
+}
+.branch-track.yes-track { border-color: rgba(74,222,128,0.15); background: var(--branch-yes-bg); }
+.branch-track.no-track { border-color: rgba(248,113,113,0.15); background: var(--branch-no-bg); }
+
+.branch-track .node {
+    width: 100%;
+}
+.branch-track .empty-branch {
+    padding: 20px;
+    text-align: center;
+    color: var(--canvas-muted);
+    font-size: 12px;
+    opacity: 0.6;
+    border: 1.5px dashed var(--node-border);
+    border-radius: 10px;
+    width: 100%;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.branch-track .empty-branch:hover {
+    opacity: 1;
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.branch-merge {
+    position: relative;
+    width: 100%;
+    height: 40px;
+}
+.branch-merge svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* ── Zoom Controls ── */
+.zoom-controls {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--zoom-bg);
+    border: 1px solid var(--zoom-border);
+    border-radius: 12px;
+    padding: 4px;
+    z-index: 50;
+    backdrop-filter: blur(10px);
+}
+.zoom-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    color: var(--canvas-text);
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.12s;
+}
+.zoom-btn:hover { background: var(--node-border); }
+.zoom-divider {
+    height: 1px;
+    background: var(--zoom-border);
+    margin: 2px 4px;
+}
+.zoom-label {
+    font-size: 10px;
+    text-align: center;
+    color: var(--canvas-muted);
+    padding: 2px 0;
+    font-weight: 600;
+    user-select: none;
+}
+
+/* ── Minimap ── */
+.minimap {
+    position: fixed;
+    bottom: 24px;
+    right: 80px;
+    width: 150px;
+    height: 200px;
+    background: var(--minimap-bg);
+    border: 1px solid var(--minimap-border);
+    border-radius: 12px;
+    padding: 10px;
+    z-index: 50;
+    backdrop-filter: blur(10px);
+    overflow: hidden;
+}
+.minimap-title {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--canvas-muted);
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+.minimap-canvas {
+    width: 100%;
+    height: calc(100% - 18px);
+    position: relative;
+}
+.minimap-node {
+    position: absolute;
+    background: var(--minimap-node);
+    border-radius: 3px;
+    height: 6px;
+}
+.minimap-branch {
+    position: absolute;
+    border: 1px solid rgba(196,154,42,0.3);
+    border-radius: 4px;
+}
+.minimap-line {
+    position: absolute;
+    width: 1px;
+    background: rgba(196,154,42,0.3);
+    left: 50%;
+}
+.minimap-viewport {
+    position: absolute;
+    border: 1.5px solid var(--accent);
+    background: var(--minimap-viewport);
+    border-radius: 3px;
+    cursor: move;
+}
+
+/* ── Theme Switcher ── */
+.theme-switcher {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    display: flex;
+    gap: 6px;
+    background: var(--zoom-bg);
+    backdrop-filter: blur(10px);
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--zoom-border);
+}
+.theme-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.theme-btn:hover { transform: scale(1.15); }
+.theme-btn.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(196,154,42,0.3); }
+
+/* ── Collapse toggle ── */
+.branch-collapse {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid var(--node-border);
+    color: var(--canvas-muted);
+    font-size: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    opacity: 0;
+}
+.branch-track:hover .branch-collapse { opacity: 1; }
+.branch-collapse:hover { background: var(--node-border); }
+
+.branch-track.collapsed {
+    min-height: 36px;
+    padding: 8px 12px;
+}
+.branch-track.collapsed > *:not(.branch-collapse):not(.branch-collapsed-label) { display: none; }
+.branch-collapsed-label {
+    font-size: 11px;
+    color: var(--canvas-muted);
+    display: none;
+}
+.branch-track.collapsed .branch-collapsed-label { display: block; }
+.branch-track.collapsed .branch-collapse { opacity: 1; }
+
+/* ── Animations ── */
+@keyframes nodeAppear {
+    from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.node, .branch-container { animation: nodeAppear 0.25s ease-out; }
+
+/* ── Scrollbar ── */
+.canvas-viewport::-webkit-scrollbar { width: 6px; }
+.canvas-viewport::-webkit-scrollbar-track { background: transparent; }
+.canvas-viewport::-webkit-scrollbar-thumb { background: var(--node-border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Palette -->
+<div class="palette">
+    <h3>Steps</h3>
+    <div class="palette-item" draggable="true">
+        <div class="pi-icon email"><i class="bi bi-envelope-fill"></i></div>
+        Email
+    </div>
+    <div class="palette-item" draggable="true">
+        <div class="pi-icon wait"><i class="bi bi-clock-fill"></i></div>
+        Wait Until
+    </div>
+    <div class="palette-item" draggable="true">
+        <div class="pi-icon condition"><i class="bi bi-shuffle"></i></div>
+        Condition
+    </div>
+    <div class="palette-item" draggable="true">
+        <div class="pi-icon goal"><i class="bi bi-trophy-fill"></i></div>
+        Goal Check
+    </div>
+    <div class="palette-item" draggable="true">
+        <div class="pi-icon approval"><i class="bi bi-person-check-fill"></i></div>
+        Human Approval
+    </div>
+    <div class="palette-divider"></div>
+    <h3>Actions</h3>
+    <div class="palette-item" draggable="true">
+        <div class="pi-icon survey"><i class="bi bi-ui-checks"></i></div>
+        Survey
+    </div>
+    <div class="palette-item" draggable="true">
+        <div class="pi-icon export"><i class="bi bi-download"></i></div>
+        Export Data
+    </div>
+</div>
+
+<!-- Canvas -->
+<div class="canvas-viewport" id="viewport">
+    <div class="canvas-scroller" id="scroller">
+        <div class="canvas-content">
+
+            <!-- Start -->
+            <span class="pill start"><i class="bi bi-play-fill"></i> Start</span>
+
+            <!-- Connector -->
+            <div class="connector">
+                <div class="connector-line"></div>
+                <div class="add-btn">+</div>
+                <div class="connector-line"></div>
+            </div>
+
+            <!-- Node 1: Email -->
+            <div class="node">
+                <div class="node-badge">1</div>
+                <div class="node-icon email"><i class="bi bi-envelope-fill"></i></div>
+                <div class="node-body">
+                    <div class="node-title">Email di Benvenuto</div>
+                    <div class="node-subtitle">Benvenuto al corso {{event_name}}</div>
+                </div>
+                <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+                <div class="node-actions">
+                    <div class="node-action"><i class="bi bi-pencil"></i></div>
+                    <div class="node-action"><i class="bi bi-palette"></i></div>
+                    <div class="node-action delete"><i class="bi bi-trash"></i></div>
+                </div>
+            </div>
+
+            <!-- Connector -->
+            <div class="connector">
+                <div class="connector-line"></div>
+                <div class="add-btn">+</div>
+                <div class="connector-line"></div>
+            </div>
+
+            <!-- Node 2: Wait -->
+            <div class="node">
+                <div class="node-badge">2</div>
+                <div class="node-icon wait"><i class="bi bi-clock-fill"></i></div>
+                <div class="node-body">
+                    <div class="node-title">Attendi 3 giorni</div>
+                    <div class="node-subtitle">Delay: 72 ore</div>
+                </div>
+                <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+                <div class="node-actions">
+                    <div class="node-action"><i class="bi bi-pencil"></i></div>
+                    <div class="node-action delete"><i class="bi bi-trash"></i></div>
+                </div>
+            </div>
+
+            <!-- Connector -->
+            <div class="connector">
+                <div class="connector-line"></div>
+                <div class="add-btn">+</div>
+                <div class="connector-line"></div>
+            </div>
+
+            <!-- Node 3: Condition (with NESTED branches!) -->
+            <div class="node">
+                <div class="node-badge">3</div>
+                <div class="node-icon condition"><i class="bi bi-shuffle"></i></div>
+                <div class="node-body">
+                    <div class="node-title">Form compilato?</div>
+                    <div class="node-subtitle">Se form_submitted == true</div>
+                </div>
+                <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+                <div class="node-actions">
+                    <div class="node-action"><i class="bi bi-pencil"></i></div>
+                    <div class="node-action delete"><i class="bi bi-trash"></i></div>
+                </div>
+            </div>
+
+            <!-- BRANCH CONTAINER: the v2.5 upgrade! -->
+            <div class="branch-container">
+                <!-- Split SVG -->
+                <div class="branch-split">
+                    <svg viewBox="0 0 750 40" preserveAspectRatio="xMidYMin meet">
+                        <line x1="375" y1="0" x2="375" y2="10" stroke="var(--connector)" stroke-width="2"/>
+                        <path d="M375,10 Q375,25 190,25 L190,40" fill="none" stroke="var(--branch-yes)" stroke-width="2"/>
+                        <path d="M375,10 Q375,25 560,25 L560,40" fill="none" stroke="var(--branch-no)" stroke-width="2"/>
+                    </svg>
+                </div>
+
+                <!-- Branch arms with REAL STEPS inside -->
+                <div class="branch-arms">
+                    <!-- YES branch -->
+                    <div class="branch-arm">
+                        <span class="branch-label yes"><i class="bi bi-check-lg"></i> True</span>
+                        <div class="branch-track yes-track">
+                            <div class="branch-collapse" onclick="toggleBranch(this)" title="Collapse"><i class="bi bi-chevron-up"></i></div>
+                            <span class="branch-collapsed-label">2 steps nascosti</span>
+                            <!-- Nested step! -->
+                            <div class="node" style="margin-top: 8px;">
+                                <div class="node-badge" style="background: var(--branch-yes);">3a</div>
+                                <div class="node-icon email"><i class="bi bi-envelope-fill"></i></div>
+                                <div class="node-body">
+                                    <div class="node-title">Grazie per il feedback</div>
+                                    <div class="node-subtitle">Invio conferma ricezione</div>
+                                </div>
+                                <div class="node-actions">
+                                    <div class="node-action"><i class="bi bi-pencil"></i></div>
+                                    <div class="node-action delete"><i class="bi bi-trash"></i></div>
+                                </div>
+                            </div>
+
+                            <div class="connector">
+                                <div class="connector-line" style="height:14px"></div>
+                                <div class="add-btn" style="width:18px;height:18px;font-size:11px">+</div>
+                                <div class="connector-line" style="height:14px"></div>
+                            </div>
+
+                            <!-- Another nested step -->
+                            <div class="node">
+                                <div class="node-badge" style="background: var(--branch-yes);">3b</div>
+                                <div class="node-icon export"><i class="bi bi-download"></i></div>
+                                <div class="node-body">
+                                    <div class="node-title">Esporta dati</div>
+                                    <div class="node-subtitle">CSV → admin@example.com</div>
+                                </div>
+                                <div class="node-actions">
+                                    <div class="node-action"><i class="bi bi-pencil"></i></div>
+                                    <div class="node-action delete"><i class="bi bi-trash"></i></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- NO branch -->
+                    <div class="branch-arm">
+                        <span class="branch-label no"><i class="bi bi-x-lg"></i> False</span>
+                        <div class="branch-track no-track">
+                            <div class="branch-collapse" onclick="toggleBranch(this)" title="Collapse"><i class="bi bi-chevron-up"></i></div>
+                            <span class="branch-collapsed-label">1 step nascosto</span>
+                            <!-- Nested step in NO branch -->
+                            <div class="node" style="margin-top: 8px;">
+                                <div class="node-badge" style="background: var(--branch-no);">3c</div>
+                                <div class="node-icon email"><i class="bi bi-envelope-fill"></i></div>
+                                <div class="node-body">
+                                    <div class="node-title">Reminder compilazione</div>
+                                    <div class="node-subtitle">Ricordati di compilare il form!</div>
+                                </div>
+                                <div class="node-actions">
+                                    <div class="node-action"><i class="bi bi-pencil"></i></div>
+                                    <div class="node-action delete"><i class="bi bi-trash"></i></div>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 10px;">
+                                <div class="empty-branch"><i class="bi bi-plus-lg"></i> Aggiungi step</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Merge SVG -->
+                <div class="branch-merge">
+                    <svg viewBox="0 0 750 40" preserveAspectRatio="xMidYMax meet">
+                        <path d="M190,0 L190,15 Q190,30 375,30 L375,40" fill="none" stroke="var(--connector)" stroke-width="2"/>
+                        <path d="M560,0 L560,15 Q560,30 375,30 L375,40" fill="none" stroke="var(--connector)" stroke-width="2"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Connector -->
+            <div class="connector">
+                <div class="connector-line"></div>
+                <div class="add-btn">+</div>
+                <div class="connector-line"></div>
+            </div>
+
+            <!-- Node 4: Approval -->
+            <div class="node">
+                <div class="node-badge">4</div>
+                <div class="node-icon approval"><i class="bi bi-person-check-fill"></i></div>
+                <div class="node-body">
+                    <div class="node-title">Approvazione Manager</div>
+                    <div class="node-subtitle">manager@azienda.it · Timeout 48h</div>
+                </div>
+                <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+                <div class="node-actions">
+                    <div class="node-action"><i class="bi bi-pencil"></i></div>
+                    <div class="node-action delete"><i class="bi bi-trash"></i></div>
+                </div>
+            </div>
+
+            <!-- Approval branch -->
+            <div class="branch-container">
+                <div class="branch-split">
+                    <svg viewBox="0 0 750 40" preserveAspectRatio="xMidYMin meet">
+                        <line x1="375" y1="0" x2="375" y2="10" stroke="var(--connector)" stroke-width="2"/>
+                        <path d="M375,10 Q375,25 190,25 L190,40" fill="none" stroke="var(--branch-yes)" stroke-width="2"/>
+                        <path d="M375,10 Q375,25 560,25 L560,40" fill="none" stroke="var(--branch-no)" stroke-width="2"/>
+                    </svg>
+                </div>
+                <div class="branch-arms">
+                    <div class="branch-arm">
+                        <span class="branch-label yes"><i class="bi bi-check-lg"></i> Approved</span>
+                        <div class="branch-track yes-track">
+                            <div class="branch-collapse" onclick="toggleBranch(this)" title="Collapse"><i class="bi bi-chevron-up"></i></div>
+                            <span class="branch-collapsed-label">1 step nascosto</span>
+                            <div class="node" style="margin-top:8px">
+                                <div class="node-badge" style="background:var(--branch-yes)">4a</div>
+                                <div class="node-icon email"><i class="bi bi-envelope-fill"></i></div>
+                                <div class="node-body">
+                                    <div class="node-title">Certificato approvato</div>
+                                    <div class="node-subtitle">Invio certificato al partecipante</div>
+                                </div>
+                                <div class="node-actions">
+                                    <div class="node-action"><i class="bi bi-pencil"></i></div>
+                                    <div class="node-action delete"><i class="bi bi-trash"></i></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="branch-arm">
+                        <span class="branch-label no"><i class="bi bi-x-lg"></i> Rejected</span>
+                        <div class="branch-track no-track">
+                            <div class="branch-collapse" onclick="toggleBranch(this)" title="Collapse"><i class="bi bi-chevron-up"></i></div>
+                            <span class="branch-collapsed-label">0 steps</span>
+                            <div style="margin-top:8px">
+                                <div class="empty-branch"><i class="bi bi-plus-lg"></i> Aggiungi step</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="branch-merge">
+                    <svg viewBox="0 0 750 40" preserveAspectRatio="xMidYMax meet">
+                        <path d="M190,0 L190,15 Q190,30 375,30 L375,40" fill="none" stroke="var(--connector)" stroke-width="2"/>
+                        <path d="M560,0 L560,15 Q560,30 375,30 L375,40" fill="none" stroke="var(--connector)" stroke-width="2"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Connector -->
+            <div class="connector">
+                <div class="connector-line"></div>
+                <div class="add-btn">+</div>
+                <div class="connector-line"></div>
+            </div>
+
+            <!-- Node 5: Survey -->
+            <div class="node">
+                <div class="node-badge">5</div>
+                <div class="node-icon survey"><i class="bi bi-ui-checks"></i></div>
+                <div class="node-body">
+                    <div class="node-title">Survey di gradimento</div>
+                    <div class="node-subtitle">Scala 1-5 · Come valuti l'evento?</div>
+                </div>
+                <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+                <div class="node-actions">
+                    <div class="node-action"><i class="bi bi-pencil"></i></div>
+                    <div class="node-action delete"><i class="bi bi-trash"></i></div>
+                </div>
+            </div>
+
+            <!-- Connector -->
+            <div class="connector">
+                <div class="connector-line"></div>
+            </div>
+
+            <!-- End -->
+            <span class="pill end"><i class="bi bi-stop-fill"></i> End</span>
+
+            <div style="height: 80px"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Minimap -->
+<div class="minimap">
+    <div class="minimap-title">Minimap</div>
+    <div class="minimap-canvas" id="minimapCanvas">
+        <!-- Nodes -->
+        <div class="minimap-node" style="top:8%;left:30%;width:40%"></div>
+        <div class="minimap-line" style="top:12%;height:4%"></div>
+        <div class="minimap-node" style="top:18%;left:30%;width:40%"></div>
+        <div class="minimap-line" style="top:22%;height:4%"></div>
+        <div class="minimap-node" style="top:28%;left:30%;width:40%"></div>
+        <!-- Branch -->
+        <div class="minimap-branch" style="top:34%;left:10%;width:35%;height:18%"></div>
+        <div class="minimap-branch" style="top:34%;left:55%;width:35%;height:12%"></div>
+        <div class="minimap-node" style="top:37%;left:15%;width:25%"></div>
+        <div class="minimap-node" style="top:44%;left:15%;width:25%"></div>
+        <div class="minimap-node" style="top:37%;left:60%;width:25%"></div>
+        <!-- After merge -->
+        <div class="minimap-node" style="top:56%;left:30%;width:40%"></div>
+        <!-- Approval branch -->
+        <div class="minimap-branch" style="top:62%;left:10%;width:35%;height:12%"></div>
+        <div class="minimap-branch" style="top:62%;left:55%;width:35%;height:8%"></div>
+        <div class="minimap-node" style="top:65%;left:15%;width:25%"></div>
+        <!-- After merge -->
+        <div class="minimap-node" style="top:80%;left:30%;width:40%"></div>
+        <!-- Viewport indicator -->
+        <div class="minimap-viewport" id="minimapViewport" style="top:0;left:0;width:100%;height:45%"></div>
+    </div>
+</div>
+
+<!-- Zoom Controls -->
+<div class="zoom-controls">
+    <button class="zoom-btn" onclick="zoomIn()" title="Zoom In"><i class="bi bi-plus-lg"></i></button>
+    <div class="zoom-label" id="zoomLabel">100%</div>
+    <div class="zoom-divider"></div>
+    <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out"><i class="bi bi-dash-lg"></i></button>
+    <div class="zoom-divider"></div>
+    <button class="zoom-btn" onclick="zoomReset()" title="Reset"><i class="bi bi-arrows-angle-contract"></i></button>
+    <div class="zoom-divider"></div>
+    <button class="zoom-btn" onclick="zoomFit()" title="Fit"><i class="bi bi-fullscreen"></i></button>
+</div>
+
+<!-- Theme Switcher -->
+<div class="theme-switcher">
+    <div class="theme-btn active" style="background:#1e1b18" onclick="setTheme(this,'warm-dark')" title="Warm Dark"></div>
+    <div class="theme-btn" style="background:#1a1a1a" onclick="setTheme(this,'dark')" title="Dark"></div>
+    <div class="theme-btn" style="background:#f5f0e8;border:1px solid #d5cfc3" onclick="setTheme(this,'cream')" title="Cream"></div>
+    <div class="theme-btn" style="background:#ffffff;border:1px solid #ddd" onclick="setTheme(this,'white')" title="White"></div>
+</div>
+
+<script>
+// ── Zoom ──
+let currentZoom = 1;
+const scroller = document.getElementById('scroller');
+
+function zoomIn() {
+    currentZoom = Math.min(currentZoom + 0.1, 2);
+    applyZoom();
+}
+function zoomOut() {
+    currentZoom = Math.max(currentZoom - 0.1, 0.4);
+    applyZoom();
+}
+function zoomReset() {
+    currentZoom = 1;
+    applyZoom();
+}
+function zoomFit() {
+    const viewport = document.getElementById('viewport');
+    const content = scroller.querySelector('.canvas-content');
+    const vH = viewport.clientHeight;
+    const cH = content.scrollHeight;
+    currentZoom = Math.min(vH / cH, 1);
+    currentZoom = Math.max(currentZoom, 0.3);
+    applyZoom();
+}
+function applyZoom() {
+    scroller.style.transform = `scale(${currentZoom})`;
+    document.getElementById('zoomLabel').textContent = Math.round(currentZoom * 100) + '%';
+    updateMinimap();
+}
+
+// ── Minimap viewport tracking ──
+const viewport = document.getElementById('viewport');
+viewport.addEventListener('scroll', updateMinimap);
+window.addEventListener('resize', updateMinimap);
+
+function updateMinimap() {
+    const vp = document.getElementById('minimapViewport');
+    const mc = document.getElementById('minimapCanvas');
+    const el = document.getElementById('viewport');
+
+    const scrollH = el.scrollHeight * currentZoom;
+    const viewH = el.clientHeight;
+    const scrollTop = el.scrollTop;
+
+    const mcH = mc.clientHeight;
+    const top = (scrollTop / scrollH) * mcH;
+    const height = (viewH / scrollH) * mcH;
+
+    vp.style.top = Math.max(0, top) + 'px';
+    vp.style.height = Math.min(mcH, Math.max(20, height)) + 'px';
+}
+
+// ── Branch Collapse/Expand ──
+function toggleBranch(btn) {
+    const track = btn.closest('.branch-track');
+    track.classList.toggle('collapsed');
+    const icon = btn.querySelector('i');
+    if (track.classList.contains('collapsed')) {
+        icon.className = 'bi bi-chevron-down';
+    } else {
+        icon.className = 'bi bi-chevron-up';
+    }
+}
+
+// ── Ctrl+scroll zoom ──
+viewport.addEventListener('wheel', function(e) {
+    if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        if (e.deltaY < 0) zoomIn();
+        else zoomOut();
+    }
+}, { passive: false });
+
+// ── Theme ──
+function setTheme(btn, theme) {
+    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    // In a real implementation this would swap CSS variables
+}
+
+// Init minimap
+setTimeout(updateMinimap, 100);
+</script>
+
+</body>
+</html>
