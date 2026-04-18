@@ -305,7 +305,7 @@ function renderStepSummary(step) {
             var approvedAction = step.config.if_approved === 'jump' ? 'Jump to step ' + (step.config.if_approved_step || '?') : (step.config.if_approved === 'complete' ? 'Complete workflow' : 'Continue');
             var rejectedAction = step.config.if_rejected === 'jump' ? 'Jump to step ' + (step.config.if_rejected_step || '?') : (step.config.if_rejected === 'continue' ? 'Continue' : 'Stop workflow');
             return `
-                <p class="mb-1"><strong>Approver:</strong> ${step.config.approver_email || '<em class="text-muted">Not set</em>'}</p>
+                <p class="mb-1"><strong>Approver:</strong> ${(step.config.approver_email || '').split(',').map(e => e.trim()).filter(Boolean).join(', ') || '<em class="text-muted">Not set</em>'}</p>
                 <p class="mb-1"><small class="text-success">&#10003; Approved → ${approvedAction}</small> · <small class="text-danger">&#10007; Rejected → ${rejectedAction}</small></p>
                 <p class="mb-0"><strong>Timeout:</strong> ${step.config.timeout_hours}h → ${step.config.on_timeout === 'approve' ? 'Auto-approve' : step.config.on_timeout === 'remind' ? 'Remind' : 'Reject'}</p>
             `;
@@ -723,9 +723,9 @@ function renderStepEditForm(step, index) {
             return common + `
                 <div class="mb-3">
                     <label class="form-label">Approver Email *</label>
-                    <input type="email" class="form-control" id="editApproverEmail"
-                           value="${step.config.approver_email || ''}"
-                           placeholder="manager@example.com">
+                    <textarea class="form-control" id="editApproverEmail" rows="2"
+                              placeholder="manager@example.com, director@example.com">${step.config.approver_email || ''}</textarea>
+                    <div class="form-text">Separa più email con virgola. Il primo che risponde decide per tutti.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Message to Approver</label>

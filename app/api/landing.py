@@ -232,6 +232,16 @@ def handle_approval(token):
         if action not in ('approve', 'reject'):
             return render_template('landing/error.html', error='Invalid action'), 400
 
+        # Check if approval was already handled (first-responder logic)
+        existing = dict(participant.collected_data or {})
+        if existing.get('_approval_handled'):
+            previous_action = existing.get('_approval_action', 'unknown')
+            return render_template('landing/approval_result.html',
+                                 action=previous_action,
+                                 already_handled=True,
+                                 participant=participant,
+                                 workflow=participant.workflow)
+
         # Find the human_approval step to read config
         approval_step = None
         for s in sorted(participant.workflow.steps, key=lambda x: x.order):
@@ -242,6 +252,12 @@ def handle_approval(token):
             approval_step = db.get(WorkflowStep, payload['step_id'])
 
         config = approval_step.skip_conditions or {} if approval_step else {}
+
+        # Mark as handled immediately (first-responder wins)
+        existing['_approval_handled'] = True
+        existing['_approval_action'] = action
+        existing['_approval_at'] = datetime.utcnow().isoformat()
+        participant.collected_data = existing
 
         if action == 'approve':
             log_activity(
@@ -291,6 +307,7 @@ def handle_approval(token):
 
         return render_template('landing/approval_result.html',
                              action=action,
+                             already_handled=False,
                              participant=participant,
                              workflow=participant.workflow)
 

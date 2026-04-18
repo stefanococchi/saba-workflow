@@ -332,10 +332,13 @@ class SchedulerService:
             from flask import current_app
             from urllib.parse import quote
             config = step.skip_conditions or {}
-            approver_email = config.get('approver_email', '')
+            approver_email_raw = config.get('approver_email', '')
             approval_message = config.get('approval_message', '')
 
-            if not approver_email:
+            # Parse multiple approver emails (comma or newline separated)
+            approver_emails = [e.strip() for e in approver_email_raw.replace('\n', ',').split(',') if e.strip()]
+
+            if not approver_emails:
                 logger.error("✗ Human approval step missing approver_email")
                 return False
 
@@ -420,13 +423,19 @@ class SchedulerService:
 
             subject = f"Approval Required: {participant.full_name or participant.email} — {participant.workflow.name}"
 
-            success = EmailService.send_email(
-                to_email=approver_email,
-                subject=subject,
-                body_html=body_html
-            )
+            # Send to all approvers
+            sent_count = 0
+            for email in approver_emails:
+                ok = EmailService.send_email(
+                    to_email=email,
+                    subject=subject,
+                    body_html=body_html
+                )
+                if ok:
+                    sent_count += 1
 
-            return success
+            logger.info(f"Approval email sent to {sent_count}/{len(approver_emails)} approvers")
+            return sent_count > 0
 
         except Exception as e:
             logger.error(f"✗ Human approval error: {str(e)}")

@@ -4,7 +4,14 @@
 
 {% block content %}
 <div style="text-align:center; padding: 20px 0;">
-    {% if action == 'approve' %}
+    {% if already_handled %}
+    <div style="font-size:48px; color:#6c757d; margin-bottom:16px;">&#9432;</div>
+    <h1 style="font-size:24px; color:#6c757d; margin-bottom:12px;">Already Handled</h1>
+    <p style="font-size:16px; color:#666;">
+        This approval request for <strong>{{ participant.full_name or participant.email }}</strong>
+        has already been {{ 'approved' if action == 'approve' else 'rejected' }} by another approver.
+    </p>
+    {% elif action == 'approve' %}
     <div style="font-size:48px; color:#198754; margin-bottom:16px;">&#10003;</div>
     <h1 style="font-size:24px; color:#198754; margin-bottom:12px;">Approved</h1>
     <p style="font-size:16px; color:#666;">
