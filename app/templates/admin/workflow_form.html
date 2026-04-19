@@ -731,29 +731,17 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
                             {{ t.next }}: {{ t.review }} <i class="bi bi-arrow-right"></i>
                         </button>
                     </div>
-                    <div class="btn-group btn-group-sm" id="canvasModeToggle">
-                        <button type="button" class="btn btn-outline-secondary active" onclick="switchCanvasMode('linear')" id="btnLinear">
-                            <i class="bi bi-list-ul"></i> Linear
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary" onclick="switchCanvasMode('2d')" id="btn2D">
-                            <i class="bi bi-diagram-3"></i> 2D Canvas
-                        </button>
-                    </div>
                 </div>
 
-                <!-- Linear canvas (existing) -->
-                <div id="linearCanvasWrap">
+                <!-- Hidden linear canvas (kept for data, not shown) -->
+                <div id="linearCanvasWrap" style="display:none">
                     <div class="workflow-canvas" id="workflowCanvas">
-                        <div class="empty-canvas" id="emptyState">
-                            <i class="bi bi-diagram-3"></i>
-                            <h4>{{ t.start_building }}</h4>
-                            <p class="text-muted">{{ t.drag_steps_start }}</p>
-                        </div>
+                        <div class="empty-canvas" id="emptyState"></div>
                     </div>
                 </div>
 
-                <!-- 2D Drawflow canvas (new) -->
-                <div id="drawflowCanvasWrap" style="display:none;position:relative">
+                <!-- 2D Drawflow canvas -->
+                <div id="drawflowCanvasWrap" style="position:relative">
                     <div id="drawflowCanvas" class="workflow-canvas" style="width:100%;height:calc(100vh - 200px);min-height:500px;border-radius:12px;overflow:auto;padding:0"></div>
                 </div>
 

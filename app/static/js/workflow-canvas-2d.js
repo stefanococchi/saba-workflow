@@ -24,23 +24,28 @@ var _stepTypeConfig = {
 // ========== Canvas Mode Switching ==========
 
 function switchCanvasMode(mode) {
-    _canvasMode = mode;
-    document.getElementById('btnLinear').classList.toggle('active', mode === 'linear');
-    document.getElementById('btn2D').classList.toggle('active', mode === '2d');
-    document.getElementById('linearCanvasWrap').style.display = mode === 'linear' ? '' : 'none';
-    document.getElementById('drawflowCanvasWrap').style.display = mode === '2d' ? '' : 'none';
+    _canvasMode = mode || '2d';
 
-    if (mode === '2d') {
+    if (_canvasMode === '2d') {
         if (!_drawflowEditor) {
             initDrawflow();
         }
         syncStepsToDrawflow();
         _addZoomControls();
         setTimeout(_dfZoomFit, 200);
-    } else {
-        renderCanvas(); // re-render linear
     }
 }
+
+// Auto-init 2D canvas when steps are loaded
+var _dfInitCheck = setInterval(function() {
+    if (typeof workflowSteps !== 'undefined' && document.getElementById('drawflowCanvas')) {
+        clearInterval(_dfInitCheck);
+        // Wait for steps to load from DB
+        setTimeout(function() {
+            switchCanvasMode('2d');
+        }, 300);
+    }
+}, 100);
 
 // ========== Drawflow Init ==========
 
@@ -100,10 +105,10 @@ function initDrawflow() {
         _syncConnectionsToSteps();
     });
 
-    // Event: node moved — auto-save
+    // Event: node moved — save positions only
     _drawflowEditor.on('nodeMoved', function(nodeId) {
         _saveNodePositions();
-        _dfAutoSaveDebounced();
+        _dfAutoSaveDebounced(false);
     });
 
     // Update zoom label on zoom change
@@ -547,21 +552,20 @@ function _escHtml(str) {
 
 var _dfSaveTimer = null;
 
-function _dfAutoSaveAndRefresh() {
+function _dfAutoSaveAndRefresh(fullRefresh) {
     _saveNodePositions();
-    // Save workflow silently (no alert)
     _dfSilentSave(function() {
-        // After save, refresh canvas
-        syncStepsToDrawflow();
-        _addZoomControls();
+        if (fullRefresh) {
+            syncStepsToDrawflow();
+            _addZoomControls();
+        }
     });
 }
 
-function _dfAutoSaveDebounced() {
-    // Debounce: wait 1s after last change before saving
+function _dfAutoSaveDebounced(fullRefresh) {
     if (_dfSaveTimer) clearTimeout(_dfSaveTimer);
     _dfSaveTimer = setTimeout(function() {
-        _dfAutoSaveAndRefresh();
+        _dfAutoSaveAndRefresh(fullRefresh);
     }, 1000);
 }
 
@@ -584,7 +588,7 @@ function _dfDeleteStep(index) {
     workflowSteps.splice(index, 1);
     workflowSteps.forEach(function(s, i) { s.order = i + 1; });
 
-    _dfAutoSaveAndRefresh();
+    _dfAutoSaveAndRefresh(true);
 }
 
 // ========== Zoom Controls ==========
@@ -763,7 +767,11 @@ function syncStepsToDrawflow() {
     var x = 40;
 
     // Create START node
-    var startId = _drawflowEditor.addNode('start', 0, 1, x, centerY - 20, 'start-node', {},
+    var savedStartPos = null;
+    try { savedStartPos = JSON.parse(localStorage.getItem('df_start_pos')); } catch(e) {}
+    var startX = savedStartPos ? savedStartPos.x : x;
+    var startY2 = savedStartPos ? savedStartPos.y : centerY - 20;
+    var startId = _drawflowEditor.addNode('start', 0, 1, startX, startY2, 'start-node', {},
         '<div class="df-pill start"><i class="bi bi-play-fill"></i> START</div>');
     x += 160;
 
@@ -794,7 +802,11 @@ function syncStepsToDrawflow() {
     });
 
     // END node
-    var endId = _drawflowEditor.addNode('end', 1, 0, x, centerY - 20, 'end-node', {},
+    var savedEndPos = null;
+    try { savedEndPos = JSON.parse(localStorage.getItem('df_end_pos')); } catch(e) {}
+    var endX = savedEndPos ? savedEndPos.x : x;
+    var endY = savedEndPos ? savedEndPos.y : centerY - 20;
+    var endId = _drawflowEditor.addNode('end', 1, 0, endX, endY, 'end-node', {},
         '<div class="df-pill end"><i class="bi bi-stop-fill"></i> END</div>');
 
     // === PHASE 2: Create ALL connections using explicit next_step ===
@@ -1046,6 +1058,13 @@ function _saveNodePositions() {
         if (stepIndex !== undefined && workflowSteps[stepIndex]) {
             workflowSteps[stepIndex]._dfPos = { x: node.pos_x, y: node.pos_y };
         }
+        // Save START and END positions
+        if (node.name === 'start') {
+            localStorage.setItem('df_start_pos', JSON.stringify({ x: node.pos_x, y: node.pos_y }));
+        }
+        if (node.name === 'end') {
+            localStorage.setItem('df_end_pos', JSON.stringify({ x: node.pos_x, y: node.pos_y }));
+        }
     });
 }
 
@@ -1110,7 +1129,7 @@ function _setupPaletteDragForDrawflow() {
                 _dfNodeMap[nodeId] = workflowSteps.length - 1;
                 _dfStepMap[step.id] = nodeId;
 
-                // Open edit modal
+                // Open edit modal — no auto-save/refresh, node stays unconnected
                 setTimeout(function() {
                     editStep(workflowSteps.length - 1);
                 }, 200);
@@ -1118,6 +1137,9 @@ function _setupPaletteDragForDrawflow() {
         });
     });
 }
+
+// Override: when dropping a new node in 2D mode, don't auto-save (which rebuilds connections)
+var _skipAutoSaveOnce = false;
 
 // ========== Refresh Node Content ==========
 
@@ -1216,9 +1238,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
             _orig.apply(this, arguments);
 
-            // After save, auto-save workflow and refresh 2D canvas
+            // After save, auto-save and update node content (no full rebuild)
             if (_canvasMode === '2d') {
-                _dfAutoSaveAndRefresh();
+                var idx2 = editingBranchContext ? editingBranchContext.parentIndex : editingStepIndex;
+                if (idx2 !== null) refreshDrawflowNode(idx2);
+                _dfAutoSaveAndRefresh(false);
             }
         };
         saveStepEdit._hooked2d = true;
