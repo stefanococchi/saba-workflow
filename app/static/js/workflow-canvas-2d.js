@@ -67,6 +67,12 @@ function initDrawflow() {
             '</marker>' +
             '<marker id="df-arrowhead-jump" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">' +
             '<polygon points="0 0, 10 3.5, 0 7" fill="#fb923c"/>' +
+            '</marker>' +
+            '<marker id="df-arrowhead-true" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">' +
+            '<polygon points="0 0, 10 3.5, 0 7" fill="#4ade80"/>' +
+            '</marker>' +
+            '<marker id="df-arrowhead-false" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">' +
+            '<polygon points="0 0, 10 3.5, 0 7" fill="#f87171"/>' +
             '</marker></defs>';
         document.body.appendChild(markerSvg);
     }
@@ -213,12 +219,33 @@ function _applyDrawflowStyles() {
             border-color: #8B6914;
         }
 
-        /* Jump connections — dashed, orange, with orange arrowhead */
+        /* Jump connections — dashed, orange */
         #drawflowCanvas .connection.df-jump .main-path {
             stroke: #fb923c !important;
             stroke-dasharray: 6 4;
             stroke-width: 1.5;
             marker-end: url(#df-arrowhead-jump) !important;
+        }
+        /* TRUE/MET/APPROVED output — green */
+        #drawflowCanvas .connection.df-true .main-path {
+            stroke: #4ade80 !important;
+            marker-end: url(#df-arrowhead-true) !important;
+        }
+        /* FALSE/NOT MET/REJECTED output — red */
+        #drawflowCanvas .connection.df-false .main-path {
+            stroke: #f87171 !important;
+            marker-end: url(#df-arrowhead-false) !important;
+        }
+        /* Jump + true/false combos */
+        #drawflowCanvas .connection.df-jump.df-true .main-path {
+            stroke: #4ade80 !important;
+            stroke-dasharray: 6 4;
+            marker-end: url(#df-arrowhead-true) !important;
+        }
+        #drawflowCanvas .connection.df-jump.df-false .main-path {
+            stroke: #f87171 !important;
+            stroke-dasharray: 6 4;
+            marker-end: url(#df-arrowhead-false) !important;
         }
 
         /* Ports — use Drawflow defaults (left input, right output) */
@@ -816,6 +843,16 @@ function syncStepsToDrawflow() {
 }
 
 function _markJumpConnections() {
+    // Build a set of branching node IDs and their types
+    var branchNodes = {}; // nodeId → step type
+    workflowSteps.forEach(function(step, idx) {
+        var outputs = _getOutputCount(step);
+        if (outputs > 1) {
+            var nodeId = _dfStepMap[step.id];
+            if (nodeId) branchNodes[nodeId] = step.type;
+        }
+    });
+
     var conns = document.querySelectorAll('#drawflowCanvas svg.connection');
     conns.forEach(function(conn) {
         var cls = conn.getAttribute('class') || '';
@@ -825,8 +862,19 @@ function _markJumpConnections() {
 
         var outId = parseInt(nodeOutMatch[1]);
         var inId = parseInt(nodeInMatch[1]);
+        var isOutput1 = cls.indexOf('output_1') !== -1;
+        var isOutput2 = cls.indexOf('output_2') !== -1;
 
-        // Check if this is a backward connection (target node is before source)
+        // Color true/false for branching nodes
+        if (branchNodes[outId]) {
+            if (isOutput1) {
+                conn.classList.add('df-true');
+            } else if (isOutput2) {
+                conn.classList.add('df-false');
+            }
+        }
+
+        // Check if this is a backward connection
         var outNode = document.getElementById('node-' + outId);
         var inNode = document.getElementById('node-' + inId);
         if (outNode && inNode) {
@@ -842,7 +890,6 @@ function _markJumpConnections() {
         var outStepIdx = _dfNodeMap[outId];
         var inStepIdx = _dfNodeMap[inId];
         if (outStepIdx !== undefined && inStepIdx !== undefined) {
-            // If it skips more than 1 step forward, it's a jump
             if (inStepIdx - outStepIdx > 1) {
                 conn.classList.add('df-jump');
             }
