@@ -786,6 +786,7 @@ function renderNodeSubtitle(step) {
             if (step.config.delay_hours) parts.push(step.config.delay_hours + 'h delay');
             var attCount = (step.config.attachments || []).length;
             if (attCount) parts.push(attCount + ' allegat' + (attCount === 1 ? 'o' : 'i'));
+            if (step.config.wait_for_landing) parts.push('⏳ ' + (step.config.landing_timeout_days || 7) + 'd');
             return parts.join(' · ') || 'Not configured';
         case 'wait_until':
             var wt = step.config.wait_type;
@@ -1011,10 +1012,55 @@ function renderStepEditForm(step, index) {
                 </div>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="editHasLanding"
-                           ${step.config.has_landing ? 'checked' : ''}>
+                           ${step.config.has_landing ? 'checked' : ''}
+                           onchange="toggleWaitForLanding()">
                     <label class="form-check-label" for="editHasLanding">
                         Includi landing page per raccolta dati
                     </label>
+                </div>
+                <div id="waitForLandingFields" class="mt-2 ms-4" ${step.config.has_landing ? '' : 'style="display:none"'}>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="editWaitForLanding"
+                               ${step.config.wait_for_landing ? 'checked' : ''}
+                               onchange="toggleWaitForLandingTimeout()">
+                        <label class="form-check-label" for="editWaitForLanding">
+                            Wait for form submission before proceeding
+                        </label>
+                    </div>
+                    <div id="waitForLandingTimeout" class="mt-2" ${step.config.wait_for_landing ? '' : 'style="display:none"'}>
+                        <div class="mb-3">
+                            <label class="form-label">Timeout (days)</label>
+                            <input type="number" class="form-control form-control-sm" id="editLandingTimeout"
+                                   value="${step.config.landing_timeout_days || 7}" min="1" max="90" style="max-width:120px">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label text-success"><i class="bi bi-check-circle"></i> If form submitted</label>
+                                <select class="form-select form-select-sm" id="editLandingIfFilled" onchange="toggleLandingJump('Filled')">
+                                    <option value="continue" ${(step.config.landing_if_filled || 'continue') === 'continue' ? 'selected' : ''}>Continue to next step</option>
+                                    <option value="jump" ${step.config.landing_if_filled === 'jump' ? 'selected' : ''}>Jump to step...</option>
+                                </select>
+                                <div id="jumpFilledRow" class="mt-1" ${step.config.landing_if_filled === 'jump' ? '' : 'style="display:none"'}>
+                                    <select class="form-select form-select-sm" id="editLandingIfFilledStep">
+                                        ${buildStepOptions(step.config.landing_if_filled_step, index)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label text-danger"><i class="bi bi-clock"></i> If timeout (no response)</label>
+                                <select class="form-select form-select-sm" id="editLandingIfTimeout" onchange="toggleLandingJump('Timeout')">
+                                    <option value="continue" ${(step.config.landing_if_timeout || 'continue') === 'continue' ? 'selected' : ''}>Continue to next step</option>
+                                    <option value="jump" ${step.config.landing_if_timeout === 'jump' ? 'selected' : ''}>Jump to step...</option>
+                                    <option value="stop" ${step.config.landing_if_timeout === 'stop' ? 'selected' : ''}>Stop workflow</option>
+                                </select>
+                                <div id="jumpTimeoutRow" class="mt-1" ${step.config.landing_if_timeout === 'jump' ? '' : 'style="display:none"'}>
+                                    <select class="form-select form-select-sm" id="editLandingIfTimeoutStep">
+                                        ${buildStepOptions(step.config.landing_if_timeout_step, index)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             `;
         case 'wait_until':
@@ -1686,6 +1732,26 @@ function onExcelSourceChange(sourceSelect) {
     _populateExcelFieldSelect(fieldSel, sourceSelect.value, '');
 }
 
+function toggleWaitForLanding() {
+    var hasLanding = document.getElementById('editHasLanding').checked;
+    document.getElementById('waitForLandingFields').style.display = hasLanding ? '' : 'none';
+    if (!hasLanding) {
+        document.getElementById('editWaitForLanding').checked = false;
+        document.getElementById('waitForLandingTimeout').style.display = 'none';
+    }
+}
+
+function toggleWaitForLandingTimeout() {
+    var wait = document.getElementById('editWaitForLanding').checked;
+    document.getElementById('waitForLandingTimeout').style.display = wait ? '' : 'none';
+}
+
+function toggleLandingJump(which) {
+    var sel = document.getElementById('editLandingIf' + which);
+    var row = document.getElementById('jump' + which + 'Row');
+    row.style.display = sel.value === 'jump' ? '' : 'none';
+}
+
 function toggleGoalJump(which) {
     var sel = document.getElementById('editIf' + which);
     var row = document.getElementById('jump' + which + 'Row');
@@ -2083,6 +2149,15 @@ function saveStepEdit() {
             step.config.body_template = ($body.length && $.fn.summernote) ? $body.summernote('code') : document.getElementById('editEmailBody').value;
             step.config.delay_hours = parseInt(document.getElementById('editEmailDelay').value);
             step.config.has_landing = document.getElementById('editHasLanding').checked;
+            step.config.wait_for_landing = document.getElementById('editWaitForLanding')?.checked || false;
+            step.config.landing_timeout_days = parseInt(document.getElementById('editLandingTimeout')?.value) || 7;
+            step.config.landing_if_filled = document.getElementById('editLandingIfFilled')?.value || 'continue';
+            step.config.landing_if_filled_step = parseInt(document.getElementById('editLandingIfFilledStep')?.value) || 0;
+            step.config.landing_if_timeout = document.getElementById('editLandingIfTimeout')?.value || 'continue';
+            step.config.landing_if_timeout_step = parseInt(document.getElementById('editLandingIfTimeoutStep')?.value) || 0;
+            if (!step.config.has_landing) {
+                step.config.wait_for_landing = false;
+            }
             destroyEmailEditor();
             break;
         case 'delay':

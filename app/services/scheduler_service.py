@@ -243,6 +243,15 @@ class SchedulerService:
                 
                 if step.type.value == 'email':
                     success = SchedulerService._execute_email_step(participant, step, execution)
+                    # If wait_for_landing is enabled, handle waiting internally
+                    email_config = step.skip_conditions or {}
+                    if success and email_config.get('wait_for_landing'):
+                        execution.status = ExecutionStatus.SENT
+                        execution.sent_at = datetime.utcnow()
+                        participant.last_interaction = datetime.utcnow()
+                        _db().commit()
+                        SchedulerService._schedule_landing_wait(participant, step, email_config)
+                        return  # Don't use default next-step logic
                 elif step.type.value == 'wait_until':
                     # Wait until step just triggers next step
                     success = True
@@ -306,6 +315,97 @@ class SchedulerService:
                 logger.error(f"✗ Error executing step {execution_id}: {str(e)}")
                 _db().rollback()
     
+    @staticmethod
+    def _schedule_landing_wait(participant, step, config):
+        """
+        After sending email with landing, poll for form submission.
+        Checks every 6 hours. After timeout_days, branches based on config.
+        """
+        timeout_days = config.get('landing_timeout_days', 7)
+        timeout_at = datetime.utcnow() + timedelta(days=timeout_days)
+        if_filled = config.get('landing_if_filled', 'continue')
+        if_filled_step = config.get('landing_if_filled_step', 0)
+        if_timeout = config.get('landing_if_timeout', 'continue')
+        if_timeout_step = config.get('landing_if_timeout_step', 0)
+
+        def _check_landing(participant_id, step_id, timeout_iso, cfg):
+            from app import create_app
+            app = create_app()
+            with app.app_context():
+                try:
+                    p = _db().get(Participant, participant_id)
+                    s = _db().get(WorkflowStep, step_id)
+                    if not p or not s:
+                        return
+
+                    timeout_dt = datetime.fromisoformat(timeout_iso)
+                    now = datetime.utcnow()
+
+                    # Check if form was submitted
+                    if p.collected_data and len(p.collected_data) > 0:
+                        logger.info(f"✓ Landing form submitted by participant {participant_id}")
+                        SchedulerService._handle_landing_branch(p, s, cfg['if_filled'], cfg['if_filled_step'])
+                        return
+
+                    # Check timeout
+                    if now >= timeout_dt:
+                        logger.info(f"⏰ Landing wait timeout for participant {participant_id}")
+                        SchedulerService._handle_landing_branch(p, s, cfg['if_timeout'], cfg['if_timeout_step'])
+                        return
+
+                    # Re-schedule check in 6 hours
+                    import threading
+                    def _delayed():
+                        import time
+                        time.sleep(6 * 3600)
+                        _check_landing(participant_id, step_id, timeout_iso, cfg)
+                    t = threading.Thread(target=_delayed, daemon=True)
+                    t.start()
+
+                except Exception as e:
+                    logger.error(f"✗ Landing wait check error: {str(e)}")
+
+        # Start first check in 6 hours
+        import threading
+        cfg = {
+            'if_filled': if_filled, 'if_filled_step': if_filled_step,
+            'if_timeout': if_timeout, 'if_timeout_step': if_timeout_step
+        }
+        def _delayed_start():
+            import time
+            time.sleep(6 * 3600)
+            _check_landing(participant.id, step.id, timeout_at.isoformat(), cfg)
+        t = threading.Thread(target=_delayed_start, daemon=True)
+        t.start()
+        logger.info(f"✓ Landing wait started for participant {participant.id}, timeout in {timeout_days} days")
+
+    @staticmethod
+    def _handle_landing_branch(participant, step, action, jump_target):
+        """Handle branching after landing wait (filled or timeout)."""
+        if action == 'jump' and jump_target:
+            target_step = _db().query(WorkflowStep).filter_by(
+                workflow_id=step.workflow_id,
+                order=jump_target
+            ).first()
+            if target_step:
+                SchedulerService.schedule_step(participant, target_step, delay_hours=target_step.delay_hours)
+                participant.current_step_id = target_step.id
+                participant.status = ParticipantStatus.IN_PROGRESS
+                _db().commit()
+                logger.info(f"→ Jumped to step {target_step.order}: {target_step.name}")
+                return
+            logger.warning(f"⚠ Jump target step {jump_target} not found, continuing")
+        elif action == 'stop':
+            SchedulerService.cancel_scheduled_executions(participant.id)
+            participant.status = ParticipantStatus.COMPLETED
+            _db().commit()
+            logger.info(f"✓ Workflow stopped for participant {participant.id}")
+            return
+
+        # Default: continue
+        SchedulerService._schedule_next_step(participant, step)
+        _db().commit()
+
     @staticmethod
     def _execute_email_step(participant, step, execution):
         """
