@@ -316,16 +316,37 @@ function _applyDrawflowStyles() {
             top: 12px;
             right: 12px;
             display: flex;
-            gap: 5px;
+            gap: 12px;
             z-index: 10;
+            background: var(--node-bg, #2a2a2a);
+            border: 1px solid var(--node-border, #444);
+            border-radius: 10px;
+            padding: 6px 10px;
         }
         .df-theme-btn {
             width: 20px; height: 20px; border-radius: 50%;
             border: 2px solid var(--node-border, #555);
             cursor: pointer; transition: transform 0.15s;
         }
-        .df-theme-btn:hover { transform: scale(1.2); }
-        .df-theme-btn.active { border-color: #8B6914; box-shadow: 0 0 0 2px rgba(139,105,20,0.3); }
+        .df-color-pick {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            color: var(--canvas-text-muted, #888);
+            font-size: 13px;
+        }
+        .df-color-pick input[type="color"] {
+            width: 22px; height: 22px;
+            border: 2px solid var(--node-border, #555);
+            border-radius: 50%;
+            padding: 0;
+            cursor: pointer;
+            background: none;
+            -webkit-appearance: none;
+        }
+        .df-color-pick input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        .df-color-pick input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
 
         /* Diamond shape for decision nodes — perfect square rotated 45° */
         #drawflowCanvas .drawflow-node.df-decision {
@@ -535,20 +556,46 @@ function _addZoomControls() {
     wrap.style.position = 'relative';
     wrap.appendChild(zc);
 
-    // Theme switcher
+    // Color pickers for canvas and palette
     var ts = document.createElement('div');
     ts.className = 'df-theme-switcher';
+    var savedCanvasBg = localStorage.getItem('df_canvas_bg') || '';
+    var savedPaletteBg = localStorage.getItem('df_palette_bg') || '';
     ts.innerHTML = '' +
-        '<div class="df-theme-btn' + (_canvasTheme === 'dark' ? ' active' : '') + '" style="background:#1a1a1a" onclick="setCanvasTheme(\'dark\',this);_updateDfThemeBtns(this)" title="Dark"></div>' +
-        '<div class="df-theme-btn' + (_canvasTheme === 'white' ? ' active' : '') + '" style="background:#fff;border-color:#ddd" onclick="setCanvasTheme(\'white\',this);_updateDfThemeBtns(this)" title="White"></div>' +
-        '<div class="df-theme-btn' + (_canvasTheme === 'cream' ? ' active' : '') + '" style="background:#f5f0e8;border-color:#d5cfc3" onclick="setCanvasTheme(\'cream\',this);_updateDfThemeBtns(this)" title="Cream"></div>' +
-        '<div class="df-theme-btn' + (_canvasTheme === 'warm-dark' ? ' active' : '') + '" style="background:#2d2a25" onclick="setCanvasTheme(\'warm-dark\',this);_updateDfThemeBtns(this)" title="Warm Dark"></div>';
+        '<label class="df-color-pick" title="Canvas background">' +
+            '<i class="bi bi-palette"></i>' +
+            '<input type="color" value="' + (savedCanvasBg || '#1a1a1a') + '" onchange="_dfSetCanvasColor(this.value)">' +
+        '</label>' +
+        '<label class="df-color-pick" title="Step palette background">' +
+            '<i class="bi bi-list-ul"></i>' +
+            '<input type="color" value="' + (savedPaletteBg || '#222222') + '" onchange="_dfSetPaletteColor(this.value)">' +
+        '</label>';
     wrap.appendChild(ts);
+
+    // Apply saved colors
+    if (savedCanvasBg) _dfSetCanvasColor(savedCanvasBg);
+    if (savedPaletteBg) _dfSetPaletteColor(savedPaletteBg);
 }
 
-function _updateDfThemeBtns(activeBtn) {
-    document.querySelectorAll('.df-theme-btn').forEach(function(b) { b.classList.remove('active'); });
-    if (activeBtn) activeBtn.classList.add('active');
+function _dfSetCanvasColor(color) {
+    var canvas = document.getElementById('drawflowCanvas');
+    if (canvas) canvas.style.background = color;
+    // Also update dot grid color based on brightness
+    var r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), b = parseInt(color.slice(5,7),16);
+    var bright = (r*299 + g*587 + b*114) / 1000;
+    var dotColor = bright > 128 ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.08)';
+    var drawflow = canvas.querySelector('.drawflow');
+    if (drawflow) {
+        drawflow.style.backgroundImage = 'radial-gradient(circle, ' + dotColor + ' 1px, transparent 1px)';
+        drawflow.style.backgroundSize = '20px 20px';
+    }
+    localStorage.setItem('df_canvas_bg', color);
+}
+
+function _dfSetPaletteColor(color) {
+    var palette = document.querySelector('.step-palette');
+    if (palette) palette.style.background = color;
+    localStorage.setItem('df_palette_bg', color);
 }
 
 function _updateZoomLabel() {
