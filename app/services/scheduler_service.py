@@ -1182,36 +1182,56 @@ class SchedulerService:
     @staticmethod
     def _schedule_next_step(participant, current_step):
         """
-        Schedule next step in sequence
-        
-        Args:
-            participant: Participant instance
-            current_step: Just completed WorkflowStep
+        Schedule next step — uses explicit next_step config if set,
+        otherwise falls back to sequential order.
         """
         try:
-            # Find next step
-            next_step = _db().query(WorkflowStep).filter_by(
-                workflow_id=current_step.workflow_id,
-                order=current_step.order + 1
-            ).first()
-            
+            config = current_step.skip_conditions or {}
+            explicit_next = config.get('next_step')
+
+            next_step = None
+
+            if explicit_next == 'end':
+                # Explicit END
+                logger.info(f"✓ Workflow completed for participant {participant.id} (explicit END)")
+                participant.status = ParticipantStatus.COMPLETED
+                _db().commit()
+                return
+            elif explicit_next and explicit_next != 'auto':
+                # Jump to specific step by order
+                try:
+                    target_order = int(explicit_next)
+                    next_step = _db().query(WorkflowStep).filter_by(
+                        workflow_id=current_step.workflow_id,
+                        order=target_order
+                    ).first()
+                    if next_step:
+                        logger.info(f"→ Explicit next_step: jumping to step {target_order}")
+                except (ValueError, TypeError):
+                    pass
+
+            if not next_step:
+                # Fallback: sequential order
+                next_step = _db().query(WorkflowStep).filter_by(
+                    workflow_id=current_step.workflow_id,
+                    order=current_step.order + 1
+                ).first()
+
             if next_step:
-                # Schedule with configured delay
                 SchedulerService.schedule_step(
                     participant,
                     next_step,
                     delay_hours=next_step.delay_hours
                 )
-                
-                # Update participant current step
                 participant.current_step_id = next_step.id
                 participant.status = ParticipantStatus.IN_PROGRESS
                 _db().commit()
-                
                 logger.info(f"→ Scheduled next step {next_step.id} for participant {participant.id}")
             else:
                 logger.info(f"✓ Workflow completed for participant {participant.id} (no more steps)")
-                
+                participant.status = ParticipantStatus.COMPLETED
+                _db().commit()
+
         except Exception as e:
             logger.error(f"✗ Error scheduling next step: {str(e)}")
     

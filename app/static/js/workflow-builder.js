@@ -953,7 +953,21 @@ function renderStepEditForm(step, index) {
             <input type="text" class="form-control" id="editStepName" value="${step.name}">
         </div>
     `;
-    
+
+    // For branching steps, the next-step is already handled by their true/false selectors
+    var _branchingTypes = ['condition', 'goal_check', 'human_approval'];
+    var needsNextStep = _branchingTypes.indexOf(step.type) === -1;
+    // Email with wait_for_landing is also branching
+    if (step.type === 'email' && step.config && step.config.wait_for_landing) {
+        needsNextStep = false;
+    }
+    var footer = needsNextStep ? _buildNextStepFooter(step, index) : '';
+
+    var result = _renderStepEditFormInner(step, index, common);
+    return result ? result + footer : common + footer;
+}
+
+function _renderStepEditFormInner(step, index, common) {
     switch(step.type) {
         case 'email':
             return common + `
@@ -2006,14 +2020,36 @@ function addSurveyChoice() {
 }
 
 // Update wait until form based on type
-function buildStepOptions(selectedOrder, currentIndex) {
+function buildStepOptions(selectedOrder, currentIndex, includeEnd) {
     var html = '<option value="0">-- Seleziona step --</option>';
     workflowSteps.forEach(function(s, i) {
-        if (i === currentIndex) return; // Non mostrare se stesso
+        if (i === currentIndex) return;
         var sel = (parseInt(selectedOrder) === s.order) ? ' selected' : '';
         html += '<option value="' + s.order + '"' + sel + '>Step ' + s.order + ': ' + s.name + '</option>';
     });
+    if (includeEnd !== false) {
+        var endSel = selectedOrder === 'end' ? ' selected' : '';
+        html += '<option value="end"' + endSel + '>END</option>';
+    }
     return html;
+}
+
+function _buildNextStepFooter(step, index) {
+    var nextStep = step.config.next_step || 'auto';
+    return `
+        <hr>
+        <div class="mb-3">
+            <label class="form-label"><i class="bi bi-arrow-right-circle"></i> Next Step</label>
+            <select class="form-select" id="editNextStep">
+                <option value="auto" ${nextStep === 'auto' ? 'selected' : ''}>Next in sequence (Step ${index + 2})</option>
+                ${workflowSteps.map(function(s, i) {
+                    if (i === index) return '';
+                    return '<option value="' + s.order + '"' + (parseInt(nextStep) === s.order ? ' selected' : '') + '>Step ' + s.order + ': ' + s.name + '</option>';
+                }).join('')}
+                <option value="end" ${nextStep === 'end' ? 'selected' : ''}>END (stop workflow)</option>
+            </select>
+        </div>
+    `;
 }
 
 function toggleJumpStep(which) {
@@ -2247,7 +2283,13 @@ function saveStepEdit() {
             });
             break;
     }
-    
+
+    // Save next_step for all step types
+    var nextStepEl = document.getElementById('editNextStep');
+    if (nextStepEl) {
+        step.config.next_step = nextStepEl.value;
+    }
+
     renderCanvas();
     bootstrap.Modal.getInstance(document.getElementById('stepEditModal')).hide();
 }
@@ -2542,6 +2584,12 @@ function saveWorkflow() {
                     sheet_name: step.config.sheet_name || 'Sheet1',
                     columns: step.config.columns || []
                 };
+            }
+
+            // Save next_step for all step types
+            if (step.config.next_step && step.config.next_step !== 'auto') {
+                stepData.skip_conditions = stepData.skip_conditions || {};
+                stepData.skip_conditions.next_step = step.config.next_step;
             }
 
             // Save 2D canvas position if available

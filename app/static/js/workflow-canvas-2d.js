@@ -797,46 +797,65 @@ function syncStepsToDrawflow() {
     var endId = _drawflowEditor.addNode('end', 1, 0, x, centerY - 20, 'end-node', {},
         '<div class="df-pill end"><i class="bi bi-stop-fill"></i> END</div>');
 
-    // === PHASE 2: Create ALL connections ===
-    var prevNodeId = startId;
-    var prevOutput = 1;
+    // === PHASE 2: Create ALL connections using explicit next_step ===
+
+    // Connect START → first step
+    if (nodeIds.length > 0) {
+        try {
+            _drawflowEditor.addConnection(startId, nodeIds[0], 'output_1', 'input_1');
+        } catch(e) {}
+    }
 
     workflowSteps.forEach(function(step, index) {
         var nodeId = nodeIds[index];
         var outputs = _getOutputCount(step);
 
-        // Jump connections first (so we know which outputs are used)
-        var jumpOutputs = [];
         if (outputs > 1) {
-            jumpOutputs = _addJumpConnections(step, nodeId, index);
-        }
+            // Branching step: use jump connections (already handles true/false → target)
+            _addJumpConnections(step, nodeId, index, endId);
 
-        // Linear connection from previous node
-        if (prevNodeId !== null && prevOutput > 0) {
-            try {
-                _drawflowEditor.addConnection(prevNodeId, nodeId, 'output_' + prevOutput, 'input_1');
-            } catch(e) {}
-        }
+            // For outputs not covered by jumps, connect to next in sequence or END
+            var jumpOutputs = _getJumpOutputs(step);
 
-        // Determine which output continues the linear chain
-        prevNodeId = nodeId;
-        prevOutput = 1;
+            // output_1 (true/met/approved)
+            if (jumpOutputs.indexOf(1) === -1) {
+                // No explicit jump — connect to next step or END
+                _connectToNextOrEnd(nodeId, index, 1, nodeIds, endId);
+            }
+            // output_2 (false/not met/rejected)
+            if (jumpOutputs.indexOf(2) === -1) {
+                _connectToNextOrEnd(nodeId, index, 2, nodeIds, endId);
+            }
+        } else {
+            // Single output: use explicit next_step config
+            var nextStep = step.config.next_step || 'auto';
 
-        if (outputs > 1) {
-            if (jumpOutputs.indexOf(1) !== -1 && jumpOutputs.indexOf(2) === -1) {
-                prevOutput = 2;
-            } else if (jumpOutputs.indexOf(1) !== -1 && jumpOutputs.indexOf(2) !== -1) {
-                prevOutput = 0;
+            if (nextStep === 'end') {
+                try {
+                    _drawflowEditor.addConnection(nodeId, endId, 'output_1', 'input_1');
+                } catch(e) {}
+            } else if (nextStep !== 'auto' && parseInt(nextStep) > 0) {
+                // Explicit jump to a specific step
+                var targetStep = workflowSteps.find(function(s) { return s.order === parseInt(nextStep); });
+                if (targetStep && _dfStepMap[targetStep.id]) {
+                    try {
+                        _drawflowEditor.addConnection(nodeId, _dfStepMap[targetStep.id], 'output_1', 'input_1');
+                    } catch(e) {}
+                }
+            } else {
+                // Auto: connect to next step in sequence, or END if last
+                if (index < workflowSteps.length - 1) {
+                    try {
+                        _drawflowEditor.addConnection(nodeId, nodeIds[index + 1], 'output_1', 'input_1');
+                    } catch(e) {}
+                } else {
+                    try {
+                        _drawflowEditor.addConnection(nodeId, endId, 'output_1', 'input_1');
+                    } catch(e) {}
+                }
             }
         }
     });
-
-    // Connect last to END
-    if (prevNodeId && prevOutput > 0) {
-        try {
-            _drawflowEditor.addConnection(prevNodeId, endId, 'output_' + prevOutput, 'input_1');
-        } catch(e) {}
-    }
 
     // Mark jump connections with df-jump class after all are rendered
     setTimeout(_markJumpConnections, 50);
@@ -897,7 +916,39 @@ function _markJumpConnections() {
     });
 }
 
-function _addJumpConnections(step, nodeId, index) {
+function _getJumpOutputs(step) {
+    // Returns which outputs have explicit jump targets (not 'continue')
+    var outputs = [];
+    if (step.type === 'condition') {
+        if (step.config.if_true === 'jump' || step.config.if_true === 'stop') outputs.push(1);
+        if (step.config.if_false === 'jump' || step.config.if_false === 'stop') outputs.push(2);
+    } else if (step.type === 'goal_check') {
+        if (step.config.if_met === 'jump' || step.config.if_met === 'complete') outputs.push(1);
+        if (step.config.if_not_met === 'jump' || step.config.if_not_met === 'complete') outputs.push(2);
+    } else if (step.type === 'human_approval') {
+        if (step.config.if_approved === 'jump' || step.config.if_approved === 'complete') outputs.push(1);
+        if (step.config.if_rejected === 'jump' || step.config.if_rejected === 'stop') outputs.push(2);
+    } else if (step.type === 'email' && step.config.wait_for_landing) {
+        if (step.config.landing_if_filled === 'jump' || step.config.landing_if_filled === 'stop') outputs.push(1);
+        if (step.config.landing_if_timeout === 'jump' || step.config.landing_if_timeout === 'stop') outputs.push(2);
+    }
+    return outputs;
+}
+
+function _connectToNextOrEnd(nodeId, index, outputNum, nodeIds, endId) {
+    // Connect output to next step in sequence, or END if last
+    if (index < workflowSteps.length - 1) {
+        try {
+            _drawflowEditor.addConnection(nodeId, nodeIds[index + 1], 'output_' + outputNum, 'input_1');
+        } catch(e) {}
+    } else {
+        try {
+            _drawflowEditor.addConnection(nodeId, endId, 'output_' + outputNum, 'input_1');
+        } catch(e) {}
+    }
+}
+
+function _addJumpConnections(step, nodeId, index, endId) {
     // For condition: output_1 = true, output_2 = false
     // For goal_check: output_1 = met, output_2 = not met
     // For human_approval: output_1 = approved, output_2 = rejected
@@ -908,42 +959,67 @@ function _addJumpConnections(step, nodeId, index) {
     if (step.type === 'condition') {
         if (step.config.if_true === 'jump' && step.config.if_true_step) {
             jumpConfigs.push({ output: 1, targetOrder: step.config.if_true_step });
+        } else if (step.config.if_true === 'stop') {
+            jumpConfigs.push({ output: 1, targetOrder: 'end' });
         }
         if (step.config.if_false === 'jump' && step.config.if_false_step) {
             jumpConfigs.push({ output: 2, targetOrder: step.config.if_false_step });
+        } else if (step.config.if_false === 'stop') {
+            jumpConfigs.push({ output: 2, targetOrder: 'end' });
         }
     } else if (step.type === 'goal_check') {
         if (step.config.if_met === 'jump' && step.config.if_met_step) {
             jumpConfigs.push({ output: 1, targetOrder: step.config.if_met_step });
+        } else if (step.config.if_met === 'complete') {
+            jumpConfigs.push({ output: 1, targetOrder: 'end' });
         }
         if (step.config.if_not_met === 'jump' && step.config.if_not_met_step) {
             jumpConfigs.push({ output: 2, targetOrder: step.config.if_not_met_step });
+        } else if (step.config.if_not_met === 'complete') {
+            jumpConfigs.push({ output: 2, targetOrder: 'end' });
         }
     } else if (step.type === 'human_approval') {
         if (step.config.if_approved === 'jump' && step.config.if_approved_step) {
             jumpConfigs.push({ output: 1, targetOrder: step.config.if_approved_step });
+        } else if (step.config.if_approved === 'complete') {
+            jumpConfigs.push({ output: 1, targetOrder: 'end' });
         }
         if (step.config.if_rejected === 'jump' && step.config.if_rejected_step) {
             jumpConfigs.push({ output: 2, targetOrder: step.config.if_rejected_step });
+        } else if (step.config.if_rejected === 'stop') {
+            jumpConfigs.push({ output: 2, targetOrder: 'end' });
         }
     } else if (step.type === 'email' && step.config.wait_for_landing) {
         if (step.config.landing_if_filled === 'jump' && step.config.landing_if_filled_step) {
             jumpConfigs.push({ output: 1, targetOrder: step.config.landing_if_filled_step });
+        } else if (step.config.landing_if_filled === 'stop') {
+            jumpConfigs.push({ output: 1, targetOrder: 'end' });
         }
         if (step.config.landing_if_timeout === 'jump' && step.config.landing_if_timeout_step) {
             jumpConfigs.push({ output: 2, targetOrder: step.config.landing_if_timeout_step });
+        } else if (step.config.landing_if_timeout === 'stop') {
+            jumpConfigs.push({ output: 2, targetOrder: 'end' });
         }
     }
 
     var jumpedOutputs = [];
     jumpConfigs.forEach(function(jc) {
         jumpedOutputs.push(jc.output);
-        // Find target step by order
-        var targetStep = workflowSteps.find(function(s) { return s.order === jc.targetOrder; });
-        if (targetStep && _dfStepMap[targetStep.id]) {
-            try {
-                _drawflowEditor.addConnection(nodeId, _dfStepMap[targetStep.id], 'output_' + jc.output, 'input_1');
-            } catch(e) {}
+        if (jc.targetOrder === 'end') {
+            // Connect to END node
+            if (endId) {
+                try {
+                    _drawflowEditor.addConnection(nodeId, endId, 'output_' + jc.output, 'input_1');
+                } catch(e) {}
+            }
+        } else {
+            // Find target step by order
+            var targetStep = workflowSteps.find(function(s) { return s.order === jc.targetOrder; });
+            if (targetStep && _dfStepMap[targetStep.id]) {
+                try {
+                    _drawflowEditor.addConnection(nodeId, _dfStepMap[targetStep.id], 'output_' + jc.output, 'input_1');
+                } catch(e) {}
+            }
         }
     });
     return jumpedOutputs;
