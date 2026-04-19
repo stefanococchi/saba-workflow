@@ -1125,21 +1125,35 @@ function renderStepEditForm(step, index) {
                 </div>
                 
                 <hr>
-                
-                <div class="mb-3">
-                    <label class="form-label">If Goal Met</label>
-                    <select class="form-select" id="editIfMet">
-                        <option value="complete" ${step.config.if_met === 'complete' ? 'selected' : ''}>Complete Workflow (stop all future steps)</option>
-                        <option value="continue" ${step.config.if_met === 'continue' ? 'selected' : ''}>Continue to Next Step</option>
-                    </select>
-                </div>
-                
-                <div class="mb-3">
-                    <label class="form-label">If Goal NOT Met</label>
-                    <select class="form-select" id="editIfNotMet">
-                        <option value="continue" ${step.config.if_not_met === 'continue' ? 'selected' : ''}>Continue to Next Step</option>
-                        <option value="skip" ${step.config.if_not_met === 'skip' ? 'selected' : ''}>Skip Next Step</option>
-                    </select>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-success"><i class="bi bi-check-circle"></i> If Goal Met</label>
+                        <select class="form-select" id="editIfMet" onchange="toggleGoalJump('Met')">
+                            <option value="continue" ${step.config.if_met === 'continue' ? 'selected' : ''}>Continue to Next Step</option>
+                            <option value="jump" ${step.config.if_met === 'jump' ? 'selected' : ''}>Jump to step...</option>
+                            <option value="complete" ${step.config.if_met === 'complete' ? 'selected' : ''}>Complete Workflow (stop)</option>
+                        </select>
+                        <div id="jumpMetRow" class="mt-2" ${step.config.if_met === 'jump' ? '' : 'style="display:none"'}>
+                            <select class="form-select form-select-sm" id="editIfMetStep">
+                                ${buildStepOptions(step.config.if_met_step, index)}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-danger"><i class="bi bi-x-circle"></i> If Goal NOT Met</label>
+                        <select class="form-select" id="editIfNotMet" onchange="toggleGoalJump('NotMet')">
+                            <option value="continue" ${step.config.if_not_met === 'continue' ? 'selected' : ''}>Continue to Next Step</option>
+                            <option value="jump" ${step.config.if_not_met === 'jump' ? 'selected' : ''}>Jump to step...</option>
+                            <option value="skip" ${step.config.if_not_met === 'skip' ? 'selected' : ''}>Skip Next Step</option>
+                            <option value="complete" ${step.config.if_not_met === 'complete' ? 'selected' : ''}>Complete Workflow (stop)</option>
+                        </select>
+                        <div id="jumpNotMetRow" class="mt-2" ${step.config.if_not_met === 'jump' ? '' : 'style="display:none"'}>
+                            <select class="form-select form-select-sm" id="editIfNotMetStep">
+                                ${buildStepOptions(step.config.if_not_met_step, index)}
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="alert alert-info">
@@ -1672,6 +1686,12 @@ function onExcelSourceChange(sourceSelect) {
     _populateExcelFieldSelect(fieldSel, sourceSelect.value, '');
 }
 
+function toggleGoalJump(which) {
+    var sel = document.getElementById('editIf' + which);
+    var row = document.getElementById('jump' + which + 'Row');
+    row.style.display = sel.value === 'jump' ? '' : 'none';
+}
+
 function toggleWaMessageType() {
     var type = document.getElementById('editWaMessageType').value;
     document.getElementById('waTemplateFields').style.display = type === 'template' ? '' : 'none';
@@ -2078,7 +2098,9 @@ function saveStepEdit() {
         case 'goal_check':
             step.config.goal = document.getElementById('editGoalType').value;
             step.config.if_met = document.getElementById('editIfMet').value;
+            step.config.if_met_step = parseInt(document.getElementById('editIfMetStep')?.value) || 0;
             step.config.if_not_met = document.getElementById('editIfNotMet').value;
+            step.config.if_not_met_step = parseInt(document.getElementById('editIfNotMetStep')?.value) || 0;
             step.config.field_name = document.getElementById('editGoalFieldName')?.value || '';
             step.config.field_value = document.getElementById('editGoalFieldValue')?.value || '';
             step.config.status_value = document.getElementById('editGoalStatusValue')?.value || 'completed';

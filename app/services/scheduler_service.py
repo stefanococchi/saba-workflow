@@ -248,8 +248,19 @@ class SchedulerService:
                     success = True
                     logger.info(f"✓ Wait Until step completed, triggering next step")
                 elif step.type.value == 'goal_check':
-                    # Goal check step
+                    # Goal check handles its own branching (jump/complete/skip)
                     success = SchedulerService._execute_goal_check_step(participant, step, execution)
+                    gc_action = (step.skip_conditions or {}).get(
+                        'if_met' if execution.result_data and execution.result_data.get('goal_met') else 'if_not_met',
+                        'continue'
+                    )
+                    if gc_action in ('jump', 'complete', 'skip'):
+                        # Already handled scheduling internally
+                        if not success:
+                            execution.status = ExecutionStatus.FAILED
+                            execution.error_message = "Goal check failed"
+                            _db().commit()
+                        return
                 elif step.type.value == 'condition':
                     # Condition step — branching
                     success = SchedulerService._execute_condition_step(participant, step, execution)
@@ -521,50 +532,70 @@ class SchedulerService:
     @staticmethod
     def _execute_goal_check_step(participant, step, execution):
         """
-        Execute goal check step
-        
-        Checks if participant reached goal. If yes, completes workflow.
-        
-        Returns:
-            bool: success (always True for goal check)
+        Execute goal check step with jump/continue/complete/skip support.
         """
         try:
-            # Get goal configuration from skip_conditions
             config = step.skip_conditions or {}
             goal_type = config.get('goal', 'form_submitted')
-            action_if_met = config.get('if_met', 'complete')
-            action_if_not_met = config.get('if_not_met', 'continue')
-            
-            # Check if goal is met
+
             goal_met = SchedulerService._check_goal(participant, goal_type, config)
-            
+
+            action = config.get('if_met', 'complete') if goal_met else config.get('if_not_met', 'continue')
+            jump_target = config.get('if_met_step', 0) if goal_met else config.get('if_not_met_step', 0)
+
             execution.result_data = {
                 'goal_type': goal_type,
                 'goal_met': goal_met,
-                'action_taken': action_if_met if goal_met else action_if_not_met
+                'action': action
             }
-            
-            if goal_met:
-                logger.info(f"✓ Goal '{goal_type}' MET for participant {participant.id}")
-                
-                if action_if_met == 'complete':
-                    # Cancel all future scheduled executions
-                    SchedulerService.cancel_scheduled_executions(participant.id)
-                    
-                    # Mark participant as completed
-                    participant.status = ParticipantStatus.COMPLETED
+
+            logger.info(f"{'✓' if goal_met else '⊘'} Goal '{goal_type}' {'MET' if goal_met else 'NOT MET'} for participant {participant.id} → {action}")
+
+            if action == 'complete':
+                SchedulerService.cancel_scheduled_executions(participant.id)
+                participant.status = ParticipantStatus.COMPLETED
+                _db().commit()
+                logger.info(f"✓ Workflow COMPLETED for participant {participant.id}")
+                # Mark execution as sent but don't schedule next
+                execution.status = ExecutionStatus.SENT
+                execution.sent_at = datetime.utcnow()
+                _db().commit()
+                return True
+            elif action == 'jump' and jump_target:
+                target_step = _db().query(WorkflowStep).filter_by(
+                    workflow_id=step.workflow_id,
+                    order=jump_target
+                ).first()
+                if target_step:
+                    SchedulerService.schedule_step(participant, target_step, delay_hours=target_step.delay_hours)
+                    participant.current_step_id = target_step.id
+                    participant.status = ParticipantStatus.IN_PROGRESS
+                    execution.status = ExecutionStatus.SENT
+                    execution.sent_at = datetime.utcnow()
                     _db().commit()
-                    
-                    logger.info(f"✓ Workflow COMPLETED for participant {participant.id}")
-                    
-                    # Don't schedule next step
+                    logger.info(f"→ Jumped to step {target_step.order}: {target_step.name}")
                     return True
-                    
-            else:
-                logger.info(f"⊘ Goal '{goal_type}' NOT MET for participant {participant.id}, continuing workflow")
-            
+                else:
+                    logger.warning(f"⚠ Jump target step {jump_target} not found, continuing")
+            elif action == 'skip':
+                # Skip next step — schedule the one after
+                next_order = step.order + 2
+                skip_target = _db().query(WorkflowStep).filter_by(
+                    workflow_id=step.workflow_id,
+                    order=next_order
+                ).first()
+                if skip_target:
+                    SchedulerService.schedule_step(participant, skip_target, delay_hours=skip_target.delay_hours)
+                    participant.current_step_id = skip_target.id
+                    execution.status = ExecutionStatus.SENT
+                    execution.sent_at = datetime.utcnow()
+                    _db().commit()
+                    logger.info(f"→ Skipped next, jumping to step {next_order}: {skip_target.name}")
+                    return True
+
+            # Default: continue to next step
             return True
-            
+
         except Exception as e:
             logger.error(f"✗ Goal check error: {str(e)}")
             return False
