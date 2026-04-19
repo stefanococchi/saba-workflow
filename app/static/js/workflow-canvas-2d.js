@@ -94,9 +94,10 @@ function initDrawflow() {
         _syncConnectionsToSteps();
     });
 
-    // Event: node moved — save positions
+    // Event: node moved — auto-save
     _drawflowEditor.on('nodeMoved', function(nodeId) {
         _saveNodePositions();
+        _dfAutoSaveDebounced();
     });
 
     // Update zoom label on zoom change
@@ -515,19 +516,50 @@ function _escHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ========== Auto-Save & Refresh ==========
+
+var _dfSaveTimer = null;
+
+function _dfAutoSaveAndRefresh() {
+    _saveNodePositions();
+    // Save workflow silently (no alert)
+    _dfSilentSave(function() {
+        // After save, refresh canvas
+        syncStepsToDrawflow();
+        _addZoomControls();
+    });
+}
+
+function _dfAutoSaveDebounced() {
+    // Debounce: wait 1s after last change before saving
+    if (_dfSaveTimer) clearTimeout(_dfSaveTimer);
+    _dfSaveTimer = setTimeout(function() {
+        _dfAutoSaveAndRefresh();
+    }, 1000);
+}
+
+function _dfSilentSave(callback) {
+    if (typeof saveWorkflow !== 'function') return;
+    // Temporarily replace alert to suppress "Workflow salvato!" message
+    var origAlert = window.alert;
+    window.alert = function() {};
+    saveWorkflow();
+    window.alert = origAlert;
+    // Wait a bit for save to complete, then callback
+    if (callback) setTimeout(callback, 500);
+}
+
 // ========== Delete Step from 2D Canvas ==========
 
 function _dfDeleteStep(index) {
     if (!confirm('Delete this step?')) return;
     var step = workflowSteps[index];
     if (!step) return;
-    var nodeId = _dfStepMap[step.id];
 
     workflowSteps.splice(index, 1);
     workflowSteps.forEach(function(s, i) { s.order = i + 1; });
 
-    // Re-sync entire canvas (simpler than partial update)
-    syncStepsToDrawflow();
+    _dfAutoSaveAndRefresh();
 }
 
 // ========== Zoom Controls ==========
@@ -710,10 +742,8 @@ function syncStepsToDrawflow() {
         '<div class="df-pill start"><i class="bi bi-play-fill"></i> START</div>');
     x += 160;
 
-    var prevNodeId = startId;
-    var prevOutput = 1;
-
-    // Create step nodes
+    // === PHASE 1: Create ALL nodes first ===
+    var nodeIds = [];
     workflowSteps.forEach(function(step, index) {
         var outputs = _getOutputCount(step);
         var savedPos = step._dfPos;
@@ -733,14 +763,30 @@ function syncStepsToDrawflow() {
 
         _dfNodeMap[nodeId] = index;
         _dfStepMap[step.id] = nodeId;
+        nodeIds.push(nodeId);
 
-        // For branching nodes, figure out jump outputs FIRST
+        x += isDec ? spacingX + 40 : spacingX;
+    });
+
+    // END node
+    var endId = _drawflowEditor.addNode('end', 1, 0, x, centerY - 20, 'end-node', {},
+        '<div class="df-pill end"><i class="bi bi-stop-fill"></i> END</div>');
+
+    // === PHASE 2: Create ALL connections ===
+    var prevNodeId = startId;
+    var prevOutput = 1;
+
+    workflowSteps.forEach(function(step, index) {
+        var nodeId = nodeIds[index];
+        var outputs = _getOutputCount(step);
+
+        // Jump connections first (so we know which outputs are used)
         var jumpOutputs = [];
         if (outputs > 1) {
             jumpOutputs = _addJumpConnections(step, nodeId, index);
         }
 
-        // Auto-connect from previous (only if previous output isn't a jump)
+        // Linear connection from previous node
         if (prevNodeId !== null && prevOutput > 0) {
             try {
                 _drawflowEditor.addConnection(prevNodeId, nodeId, 'output_' + prevOutput, 'input_1');
@@ -752,22 +798,15 @@ function syncStepsToDrawflow() {
         prevOutput = 1;
 
         if (outputs > 1) {
-            // If output_1 has a jump, the linear chain continues from output_2
             if (jumpOutputs.indexOf(1) !== -1 && jumpOutputs.indexOf(2) === -1) {
                 prevOutput = 2;
             } else if (jumpOutputs.indexOf(1) !== -1 && jumpOutputs.indexOf(2) !== -1) {
-                prevOutput = 0; // both are jumps, no linear chain
+                prevOutput = 0;
             }
-            // If only output_2 has a jump, output_1 stays as linear (default)
         }
-
-        x += isDec ? spacingX + 40 : spacingX;
     });
 
-    // Create END node
-    var endId = _drawflowEditor.addNode('end', 1, 0, x, centerY - 20, 'end-node', {},
-        '<div class="df-pill end"><i class="bi bi-stop-fill"></i> END</div>');
-
+    // Connect last to END
     if (prevNodeId && prevOutput > 0) {
         try {
             _drawflowEditor.addConnection(prevNodeId, endId, 'output_' + prevOutput, 'input_1');
@@ -988,11 +1027,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
             _orig.apply(this, arguments);
 
-            // After save, always refresh the 2D canvas fully
+            // After save, auto-save workflow and refresh 2D canvas
             if (_canvasMode === '2d') {
-                _saveNodePositions();
-                syncStepsToDrawflow();
-                _addZoomControls();
+                _dfAutoSaveAndRefresh();
             }
         };
         saveStepEdit._hooked2d = true;
