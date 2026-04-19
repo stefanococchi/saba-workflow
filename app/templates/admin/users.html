@@ -121,6 +121,13 @@
                         <input class="form-check-input" type="checkbox" name="is_superuser" id="isSuperuser">
                         <label class="form-check-label" for="isSuperuser">{{ t.superuser_full_access }}</label>
                     </div>
+                    <div class="alert alert-info mt-3 mb-0" style="font-size:13px">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Note:</strong> Non-superuser accounts can only access assigned workflows.
+                        If a workflow uses "Write to Excel", the Excel file is stored on the OneDrive of
+                        <strong>{{ config.MAIL_FROM_EMAIL }}</strong>. To let this user view the file,
+                        share it with them via OneDrive sharing link.
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cancel }}</button>

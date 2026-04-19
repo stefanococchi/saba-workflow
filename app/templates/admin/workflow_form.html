@@ -687,6 +687,14 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
                             <small>{{ t.human_approval_desc }}</small>
                         </div>
                     </div>
+
+                    <div class="step-template" draggable="true" data-type="excel_write">
+                        <i class="bi bi-file-earmark-spreadsheet"></i>
+                        <div>
+                            <strong>{{ t.excel_write }}</strong><br>
+                            <small>{{ t.excel_write_desc }}</small>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="mt-3 p-3 bg-light rounded">
@@ -774,7 +782,8 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=2.5.0"></script>
+<script>window._mailFromEmail = {{ config.MAIL_FROM_EMAIL | tojson }};</script>
+<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=2.6.0"></script>
 {% if mode == 'edit' and workflow and workflow.steps %}
 <script>
 window._currentWorkflowId = {{ workflow.id }};

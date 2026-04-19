@@ -270,6 +270,8 @@ class SchedulerService:
                 elif step.type.value == 'export_data':
                     # Export data step
                     success = SchedulerService._execute_export_data_step(participant, step, execution)
+                elif step.type.value == 'excel_write':
+                    success = SchedulerService._execute_excel_write_step(participant, step, execution)
                 else:
                     logger.warning(f"⚠ Unsupported step type: {step.type}")
 
@@ -787,6 +789,157 @@ class SchedulerService:
 
         except Exception as e:
             logger.error(f"✗ Condition error: {str(e)}")
+            return False
+
+    @staticmethod
+    def _execute_excel_write_step(participant, step, execution):
+        """Write a row to an Excel file (OneDrive, SharePoint, or local)."""
+        try:
+            from flask import current_app
+
+            config = step.skip_conditions or {}
+            file_path = config.get('file_path', '')
+            sheet_name = config.get('sheet_name', 'Sheet1')
+            columns = config.get('columns', [])
+            storage = config.get('storage', 'onedrive')
+
+            if not file_path or not columns:
+                logger.error("Excel write step: file_path or columns not configured")
+                return False
+
+            # Build row values from participant data
+            row_values = []
+            for col in columns:
+                field = col.get('field', '')
+                source = col.get('source', 'participant')
+                val = ''
+                if source == 'participant':
+                    if field in ('created_at', 'last_interaction'):
+                        dt = getattr(participant, field, None)
+                        val = dt.strftime('%Y-%m-%d %H:%M') if dt else ''
+                    else:
+                        val = getattr(participant, field, '')
+                        if hasattr(val, 'value'):
+                            val = val.value
+                elif source == 'collected_data':
+                    val = (participant.collected_data or {}).get(field, '')
+                elif source == 'sabaform_data':
+                    val = (participant.sabaform_data or {}).get(field, '')
+                row_values.append(str(val or ''))
+
+            # === LOCAL FILE ===
+            if storage == 'local':
+                return SchedulerService._excel_write_local(file_path, sheet_name, row_values, columns, execution)
+
+            # === GRAPH API (OneDrive / SharePoint) ===
+            from app.services.email_service import EmailService
+            import requests as http_requests
+
+            token = EmailService._get_access_token()
+            from_email = current_app.config.get('MAIL_FROM_EMAIL', '')
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            clean_path = file_path.strip('/')
+
+            if storage == 'sharepoint':
+                # SharePoint: resolve site then use its drive
+                sp_site = config.get('sharepoint_site', '').strip().strip('/')
+                if not sp_site:
+                    logger.error("Excel write: SharePoint site not configured")
+                    return False
+                site_url = f"https://graph.microsoft.com/v1.0/sites/{sp_site}"
+                site_resp = http_requests.get(site_url, headers=headers, timeout=15)
+                if site_resp.status_code != 200:
+                    logger.error(f"Excel write: SharePoint site not found — {site_resp.text}")
+                    return False
+                site_id = site_resp.json()['id']
+                drive_base = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive"
+            else:
+                # OneDrive personal
+                drive_base = f"https://graph.microsoft.com/v1.0/users/{from_email}/drive"
+
+            # Get file item by path
+            file_url = f"{drive_base}/root:/{clean_path}"
+            file_resp = http_requests.get(file_url, headers=headers, timeout=15)
+            if file_resp.status_code != 200:
+                logger.error(f"Excel write: file not found at {file_path} — {file_resp.text}")
+                return False
+
+            file_id = file_resp.json()['id']
+            workbook_base = f"{drive_base}/items/{file_id}/workbook/worksheets('{sheet_name}')"
+
+            # Try table first
+            add_url = f"{workbook_base}/tables/@/rows/add"
+            payload = {"values": [row_values]}
+            resp = http_requests.post(add_url, headers=headers, json=payload, timeout=15)
+
+            if resp.status_code in (200, 201):
+                logger.info(f"✓ Excel row added to {file_path} ({len(columns)} columns)")
+                execution.result_data = {'file': file_path, 'storage': storage, 'columns': len(columns)}
+                return True
+
+            # Fallback: append to used range
+            range_url = f"{workbook_base}/usedRange"
+            range_resp = http_requests.get(range_url, headers=headers, timeout=15)
+            if range_resp.status_code != 200:
+                logger.error(f"Excel write: cannot read used range — {range_resp.text}")
+                return False
+
+            next_row = range_resp.json().get('rowCount', 1) + 1
+            last_col_letter = chr(ord('A') + len(row_values) - 1) if len(row_values) <= 26 else 'Z'
+            cell_range = f"A{next_row}:{last_col_letter}{next_row}"
+
+            patch_url = f"{workbook_base}/range(address='{cell_range}')"
+            patch_resp = http_requests.patch(patch_url, headers=headers, json={"values": [row_values]}, timeout=15)
+
+            if patch_resp.status_code == 200:
+                logger.info(f"✓ Excel row written at {cell_range} in {file_path}")
+                execution.result_data = {'file': file_path, 'storage': storage, 'range': cell_range}
+                return True
+
+            logger.error(f"Excel write failed: {patch_resp.status_code} — {patch_resp.text}")
+            return False
+
+        except Exception as e:
+            logger.error(f"✗ Excel write error: {str(e)}")
+            return False
+
+    @staticmethod
+    def _excel_write_local(file_path, sheet_name, row_values, columns, execution):
+        """Write a row to a local Excel file using openpyxl."""
+        try:
+            import openpyxl
+            import os
+
+            if os.path.exists(file_path):
+                wb = openpyxl.load_workbook(file_path)
+            else:
+                # Create new file with headers
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = sheet_name
+                headers = [col.get('header', f'Col{i+1}') for i, col in enumerate(columns)]
+                ws.append(headers)
+
+            if sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+            else:
+                ws = wb.create_sheet(sheet_name)
+                headers = [col.get('header', f'Col{i+1}') for i, col in enumerate(columns)]
+                ws.append(headers)
+
+            ws.append(row_values)
+            wb.save(file_path)
+            wb.close()
+
+            logger.info(f"✓ Excel row written locally to {file_path} ({len(row_values)} columns)")
+            execution.result_data = {'file': file_path, 'storage': 'local', 'row': ws.max_row}
+            return True
+
+        except Exception as e:
+            logger.error(f"✗ Local Excel write error: {str(e)}")
             return False
 
     @staticmethod

@@ -696,3 +696,61 @@ def toggle_user_workflow(user_id, workflow_id):
     except Exception as e:
         db.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/onedrive/browse')
+def onedrive_browse():
+    """Browse OneDrive/SharePoint files via Microsoft Graph API."""
+    try:
+        import requests as http_requests
+        from app.services.email_service import EmailService
+
+        storage = request.args.get('storage', 'onedrive')
+        folder_path = request.args.get('path', '')
+        sharepoint_site = request.args.get('site', '')
+
+        token = EmailService._get_access_token()
+        from_email = current_app.config.get('MAIL_FROM_EMAIL', '')
+        headers = {"Authorization": f"Bearer {token}"}
+
+        if storage == 'sharepoint':
+            if not sharepoint_site:
+                return jsonify({'error': 'SharePoint site required'}), 400
+            site_url = f"https://graph.microsoft.com/v1.0/sites/{sharepoint_site.strip('/')}"
+            site_resp = http_requests.get(site_url, headers=headers, timeout=15)
+            if site_resp.status_code != 200:
+                return jsonify({'error': 'SharePoint site not found'}), 404
+            site_id = site_resp.json()['id']
+            drive_base = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive"
+        else:
+            drive_base = f"https://graph.microsoft.com/v1.0/users/{from_email}/drive"
+
+        if folder_path:
+            url = f"{drive_base}/root:/{folder_path.strip('/')}:/children"
+        else:
+            url = f"{drive_base}/root/children"
+
+        url += "?$select=name,id,folder,file,size,lastModifiedDateTime&$orderby=name"
+        resp = http_requests.get(url, headers=headers, timeout=15)
+
+        if resp.status_code != 200:
+            return jsonify({'error': f'Graph API error: {resp.status_code}'}), resp.status_code
+
+        items = []
+        for item in resp.json().get('value', []):
+            is_folder = 'folder' in item
+            is_excel = not is_folder and item.get('name', '').lower().endswith(('.xlsx', '.xls'))
+            if is_folder or is_excel:
+                items.append({
+                    'name': item['name'],
+                    'id': item['id'],
+                    'type': 'folder' if is_folder else 'file',
+                    'size': item.get('size', 0),
+                    'modified': item.get('lastModifiedDateTime', '')
+                })
+
+        return jsonify({'items': items, 'path': folder_path or '/'})
+
+    except Exception as e:
+        logger.error(f"OneDrive browse error: {str(e)}")
+        return jsonify({'error': str(e)}), 500

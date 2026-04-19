@@ -171,6 +171,13 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
+    <!-- Move modals to body so backdrop works with overflow containers -->
+    <script>
+    document.querySelectorAll('.admin-main .modal').forEach(function(m) {
+        document.body.appendChild(m);
+    });
+    </script>
+
     <!-- Sidebar resizer -->
     <script>
     (function() {

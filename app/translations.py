@@ -146,8 +146,8 @@ TRANSLATIONS = {
         'condition_desc': 'Ramifica in base ai dati',
         'survey_step': 'Survey',
         'survey_desc': 'Questionario multi-domanda',
-        'file_upload': 'Carica File',
-        'file_upload_desc': 'Richiedi documenti',
+        'excel_write': 'Scrivi su Excel',
+        'excel_write_desc': 'Aggiungi riga su OneDrive',
         'human_approval': 'Approvazione',
         'human_approval_desc': 'Attendi approvazione manuale',
 
@@ -365,8 +365,8 @@ TRANSLATIONS = {
         'condition_desc': 'Branch based on data',
         'survey_step': 'Survey',
         'survey_desc': 'Multi-question form',
-        'file_upload': 'File Upload',
-        'file_upload_desc': 'Request documents',
+        'excel_write': 'Write to Excel',
+        'excel_write_desc': 'Add row to OneDrive file',
         'human_approval': 'Human Approval',
         'human_approval_desc': 'Wait for manual approval',
 

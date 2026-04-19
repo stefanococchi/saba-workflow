@@ -26,6 +26,7 @@ class StepType(str, Enum):
     CONDITION = 'condition'
     SURVEY = 'survey'
     HUMAN_APPROVAL = 'human_approval'
+    EXCEL_WRITE = 'excel_write'
 
 
 class ParticipantStatus(str, Enum):

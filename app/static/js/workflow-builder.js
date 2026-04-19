@@ -3,6 +3,7 @@ let workflowSteps = [];
 let currentStep = 1;
 let editingStepIndex = null;
 
+
 // Canvas theme
 var _canvasTheme = localStorage.getItem('wf_canvas_theme') || 'dark';
 
@@ -165,6 +166,13 @@ function getDefaultConfig(type) {
             on_timeout: 'reject',
             approved_steps: [],
             rejected_steps: [],
+        },
+        excel_write: {
+            storage: 'onedrive',
+            file_path: '',
+            sharepoint_site: '',
+            sheet_name: 'Sheet1',
+            columns: []
         },
         export_data: {
             format: 'csv',
@@ -700,7 +708,7 @@ function editBranchStep(parentIndex, branchKey, childIndex) {
     editingBranchContext = { parentIndex: parentIndex, branchKey: branchKey, childIndex: childIndex };
     editingStepIndex = parentIndex; // fallback
 
-    var modal = new bootstrap.Modal(document.getElementById('stepEditModal'));
+    var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('stepEditModal'));
     var content = document.getElementById('stepEditContent');
     content.innerHTML = renderStepEditForm(step, childIndex);
 
@@ -734,7 +742,8 @@ function renderStep(step, index) {
         engagement_tracker: 'graph-up',
         survey: 'ui-checks',
         human_approval: 'person-check',
-        export_data: 'download'
+        export_data: 'download',
+        excel_write: 'file-earmark-spreadsheet'
     };
 
     var subtitle = renderNodeSubtitle(step);
@@ -789,6 +798,10 @@ function renderNodeSubtitle(step) {
             return (step.config.goal || 'form_submitted').replace(/_/g, ' ');
         case 'export_data':
             return (step.config.format || 'CSV').toUpperCase() + (step.config.send_to ? ' → ' + step.config.send_to : '');
+        case 'excel_write':
+            var path = step.config.file_path || '';
+            var fname = path.split('/').pop() || 'Not configured';
+            return fname + ' · ' + (step.config.columns || []).length + ' col';
         default:
             return capitalize(step.type);
     }
@@ -870,7 +883,7 @@ function editStep(index) {
     var modalEl = document.getElementById('stepEditModal');
     if (modalEl.classList.contains('show') || modalEl.classList.contains('showing')) return;
 
-    const modal = new bootstrap.Modal(modalEl);
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     const content = document.getElementById('stepEditContent');
     
     content.innerHTML = renderStepEditForm(step, index);
@@ -898,6 +911,19 @@ function editStep(index) {
         }, 300);
     }
     
+    // Populate excel column field selects with correct source data
+    if (step.type === 'excel_write') {
+        setTimeout(function() {
+            document.querySelectorAll('.excel-col-row').forEach(function(row) {
+                var sourceSel = row.querySelector('.excel-col-source');
+                var fieldSel = row.querySelector('.excel-col-field');
+                if (sourceSel && fieldSel) {
+                    _populateExcelFieldSelect(fieldSel, sourceSel.value, fieldSel.dataset.current || '');
+                }
+            });
+        }, 100);
+    }
+
     // Destroy Summernote when modal closes
     document.getElementById('stepEditModal').addEventListener('hidden.bs.modal', function() {
         destroyEmailEditor();
@@ -1368,7 +1394,248 @@ function renderStepEditForm(step, index) {
                     </small>
                 </div>
             `;
+        case 'excel_write': {
+            var columnsHtml = (step.config.columns || []).map(function(col, i) {
+                return _buildExcelColRow(col, i);
+            }).join('');
+            var storage = step.config.storage || 'onedrive';
+            return common + `
+                <div class="mb-3">
+                    <label class="form-label">Posizione file</label>
+                    <select class="form-select" id="editExcelStorage" onchange="onExcelStorageChange()">
+                        <option value="onedrive" ${storage === 'onedrive' ? 'selected' : ''}>OneDrive (account email)</option>
+                        <option value="sharepoint" ${storage === 'sharepoint' ? 'selected' : ''}>SharePoint (sito condiviso)</option>
+                    </select>
+                </div>
+                <div id="excelSharepointField" class="mb-3" ${storage === 'sharepoint' ? '' : 'style="display:none"'}>
+                    <label class="form-label">URL sito SharePoint</label>
+                    <input type="text" class="form-control" id="editExcelSharepointSite"
+                           value="${step.config.sharepoint_site || ''}"
+                           placeholder="es. contoso.sharepoint.com:/sites/TeamSito">
+                    <div class="form-text">Il sito SharePoint dove si trova il file.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" id="excelPathLabel">${storage === 'local' ? 'Percorso file sul server' : 'Percorso file'}</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="editExcelFilePath"
+                               value="${step.config.file_path || ''}"
+                               placeholder="${storage === 'local' ? 'es. /data/iscrizioni.xlsx' : 'es. /Documenti/Iscrizioni.xlsx'}">
+                        <button class="btn btn-outline-secondary" type="button" id="excelBrowseBtn"
+                                onclick="openExcelFileBrowser()" ${storage === 'local' ? 'style="display:none"' : ''}>
+                            <i class="bi bi-folder2-open"></i> Sfoglia
+                        </button>
+                    </div>
+                    <div class="form-text" id="excelPathHint">${storage === 'local' ? 'Percorso assoluto sul filesystem del server.' : 'Percorso relativo alla root del drive.'}</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nome foglio</label>
+                    <input type="text" class="form-control" id="editExcelSheetName"
+                           value="${step.config.sheet_name || 'Sheet1'}"
+                           placeholder="Sheet1">
+                </div>
+                <hr>
+                <h6><i class="bi bi-table"></i> Mappatura colonne</h6>
+                <div class="form-text mb-2">Ogni riga corrisponde a una colonna Excel (A, B, C...). Scegli la sorgente e il campo.</div>
+                <div id="excelColumnsList">${columnsHtml}</div>
+                <button type="button" class="btn btn-sm btn-outline-primary mt-1" onclick="addExcelColumn()">
+                    <i class="bi bi-plus"></i> Aggiungi colonna
+                </button>
+                <div class="alert alert-info mt-3">
+                    <small><i class="bi bi-info-circle"></i>
+                    <strong>How it works:</strong><br>
+                    1. Create an Excel file on the OneDrive of the configured email account (${window._mailFromEmail || 'info@...'})<br>
+                    2. Add column headers in the first row<br>
+                    3. Use <strong>Browse</strong> to select the file, then map each column to a participant field<br>
+                    4. Each time this step runs, a new row is appended with the participant's data<br>
+                    5. Share the file with others via OneDrive — they'll see updates in real time<br><br>
+                    <strong>SharePoint:</strong> Use this option for files on a shared SharePoint site instead of personal OneDrive.<br>
+                    <strong>Permissions:</strong> The Azure app needs <code>Files.ReadWrite.All</code> (Application) permission in Microsoft Entra.
+                    </small>
+                </div>
+            `;
+        }
     }
+}
+
+var _excelColCounter = 0;
+
+function _buildExcelColRow(col, idx) {
+    col = col || {};
+    var id = _excelColCounter++;
+    var source = col.source || 'participant';
+    var colLetter = String.fromCharCode(65 + (idx != null ? idx : document.querySelectorAll('.excel-col-row').length));
+    return '<div class="excel-col-row card card-body p-2 mb-2">' +
+        '<div class="d-flex align-items-center gap-2 mb-1">' +
+            '<span class="badge bg-secondary">' + colLetter + '</span>' +
+            '<input type="text" class="form-control form-control-sm excel-col-header" value="' + (col.header || '') + '" placeholder="Intestazione colonna">' +
+            '<button class="btn btn-sm btn-outline-danger" type="button" onclick="this.closest(\'.excel-col-row\').remove()"><i class="bi bi-x"></i></button>' +
+        '</div>' +
+        '<div class="d-flex gap-2">' +
+            '<select class="form-select form-select-sm excel-col-source" style="max-width:40%" onchange="onExcelSourceChange(this)">' +
+                '<option value="participant"' + (source === 'participant' ? ' selected' : '') + '>Partecipante</option>' +
+                '<option value="collected_data"' + (source === 'collected_data' ? ' selected' : '') + '>Dati raccolti</option>' +
+                '<option value="sabaform_data"' + (source === 'sabaform_data' ? ' selected' : '') + '>Dati Saba Form</option>' +
+            '</select>' +
+            '<select class="form-select form-select-sm excel-col-field" data-current="' + (col.field || '') + '">' +
+                '<option value="">Caricamento...</option>' +
+            '</select>' +
+        '</div>' +
+    '</div>';
+}
+
+function _populateExcelFieldSelect(sel, source, currentValue) {
+    sel.innerHTML = '<option value="">-- Seleziona campo --</option>';
+    if (source === 'participant') {
+        ['first_name','last_name','full_name','email','phone','status','created_at','last_interaction'].forEach(function(f) {
+            sel.innerHTML += '<option value="' + f + '"' + (f === currentValue ? ' selected' : '') + '>' + f + '</option>';
+        });
+    } else if (source === 'collected_data') {
+        var wfId = window._currentWorkflowId;
+        if (wfId) {
+            fetch('/api/landing-fields/workflow/' + wfId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                (data.fields || []).forEach(function(f) {
+                    sel.innerHTML += '<option value="' + f.name + '"' + (f.name === currentValue ? ' selected' : '') + '>' + (f.label || f.name) + '</option>';
+                });
+            });
+        }
+    } else {
+        // sabaform_data
+        ['company','gender','birth_date','nucleo','doc_type','doc_number','doc_expiry','volo_arrivo','volo_partenza','notes','first_name','last_name','email','phone'].forEach(function(f) {
+            sel.innerHTML += '<option value="' + f + '"' + (f === currentValue ? ' selected' : '') + '>' + f + '</option>';
+        });
+    }
+}
+
+// === Excel File Browser ===
+var _excelBrowsePath = '';
+
+function openExcelFileBrowser() {
+    _excelBrowsePath = '';
+    var modal = document.getElementById('excelBrowseModal');
+    if (!modal) {
+        // Create modal dynamically
+        modal = document.createElement('div');
+        modal.id = 'excelBrowseModal';
+        modal.className = 'modal fade';
+        modal.tabIndex = -1;
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-folder2-open"></i> Sfoglia file Excel</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <nav aria-label="breadcrumb" id="excelBrowseBreadcrumb">
+                            <ol class="breadcrumb" style="font-size:13px">
+                                <li class="breadcrumb-item active">Root</li>
+                            </ol>
+                        </nav>
+                        <div id="excelBrowseList" style="max-height:350px;overflow-y:auto">
+                            <div class="text-center text-muted p-3"><i class="bi bi-hourglass-split"></i> Caricamento...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    bootstrap.Modal.getOrCreateInstance(modal).show();
+    _loadExcelBrowse('');
+}
+
+function _loadExcelBrowse(path) {
+    _excelBrowsePath = path;
+    var list = document.getElementById('excelBrowseList');
+    list.innerHTML = '<div class="text-center text-muted p-3"><i class="bi bi-hourglass-split"></i> Caricamento...</div>';
+
+    var storage = document.getElementById('editExcelStorage').value;
+    var site = document.getElementById('editExcelSharepointSite')?.value || '';
+    var url = '/admin/api/onedrive/browse?storage=' + storage + '&path=' + encodeURIComponent(path);
+    if (site) url += '&site=' + encodeURIComponent(site);
+
+    // Update breadcrumb
+    var parts = path ? path.split('/').filter(Boolean) : [];
+    var bc = '<li class="breadcrumb-item"><a href="#" onclick="_loadExcelBrowse(\'\');return false">Root</a></li>';
+    var cumPath = '';
+    parts.forEach(function(p, i) {
+        cumPath += '/' + p;
+        if (i === parts.length - 1) {
+            bc += '<li class="breadcrumb-item active">' + p + '</li>';
+        } else {
+            var cp = cumPath;
+            bc += '<li class="breadcrumb-item"><a href="#" onclick="_loadExcelBrowse(\'' + cp + '\');return false">' + p + '</a></li>';
+        }
+    });
+    document.querySelector('#excelBrowseBreadcrumb .breadcrumb').innerHTML = bc;
+
+    fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            list.innerHTML = '<div class="alert alert-danger">' + data.error + '</div>';
+            return;
+        }
+        if (!data.items || data.items.length === 0) {
+            list.innerHTML = '<div class="text-muted text-center p-3">Nessun file Excel trovato in questa cartella</div>';
+            return;
+        }
+        var html = '<div class="list-group list-group-flush">';
+        data.items.forEach(function(item) {
+            var itemPath = (path ? path + '/' : '') + item.name;
+            if (item.type === 'folder') {
+                html += '<a href="#" class="list-group-item list-group-item-action d-flex align-items-center" onclick="_loadExcelBrowse(\'' + itemPath.replace(/'/g, "\\'") + '\');return false">' +
+                    '<i class="bi bi-folder-fill text-warning me-2"></i> ' + item.name + '</a>';
+            } else {
+                var size = item.size ? ' <small class="text-muted">(' + (item.size / 1024).toFixed(0) + ' KB)</small>' : '';
+                html += '<a href="#" class="list-group-item list-group-item-action d-flex align-items-center" onclick="_selectExcelFile(\'' + itemPath.replace(/'/g, "\\'") + '\');return false">' +
+                    '<i class="bi bi-file-earmark-spreadsheet text-success me-2"></i> ' + item.name + size + '</a>';
+            }
+        });
+        html += '</div>';
+        list.innerHTML = html;
+    })
+    .catch(function(e) {
+        list.innerHTML = '<div class="alert alert-danger">Errore: ' + e.message + '</div>';
+    });
+}
+
+function _selectExcelFile(path) {
+    document.getElementById('editExcelFilePath').value = '/' + path.replace(/^\//, '');
+    bootstrap.Modal.getInstance(document.getElementById('excelBrowseModal')).hide();
+}
+
+function onExcelSourceChange(sourceSelect) {
+    var row = sourceSelect.closest('.excel-col-row');
+    var fieldSel = row.querySelector('.excel-col-field');
+    _populateExcelFieldSelect(fieldSel, sourceSelect.value, '');
+}
+
+function onExcelStorageChange() {
+    var storage = document.getElementById('editExcelStorage').value;
+    var spField = document.getElementById('excelSharepointField');
+    var pathLabel = document.getElementById('excelPathLabel');
+    var pathInput = document.getElementById('editExcelFilePath');
+    var pathHint = document.getElementById('excelPathHint');
+    var browseBtn = document.getElementById('excelBrowseBtn');
+
+    spField.style.display = storage === 'sharepoint' ? '' : 'none';
+    if (storage === 'sharepoint') {
+        pathLabel.textContent = 'Percorso file nel sito';
+        pathInput.placeholder = 'es. /Documenti condivisi/Iscrizioni.xlsx';
+        pathHint.textContent = 'Percorso relativo alla root del drive SharePoint.';
+    } else {
+        pathLabel.textContent = 'Percorso file';
+        pathInput.placeholder = 'es. /Documenti/Iscrizioni.xlsx';
+        pathHint.textContent = 'Percorso relativo alla root di OneDrive.';
+    }
+}
+
+function addExcelColumn() {
+    var idx = document.querySelectorAll('.excel-col-row').length;
+    var row = _buildExcelColRow(null, idx);
+    document.getElementById('excelColumnsList').insertAdjacentHTML('beforeend', row);
 }
 
 // Summernote WYSIWYG editor for email body
@@ -1793,6 +2060,21 @@ function saveStepEdit() {
             step.config.format = document.getElementById('editExportFormat').value;
             step.config.send_to = document.getElementById('editExportSendTo').value;
             step.config.save_local = document.getElementById('editExportSaveLocal').checked;
+            break;
+        case 'excel_write':
+            step.config.storage = document.getElementById('editExcelStorage').value;
+            step.config.file_path = document.getElementById('editExcelFilePath').value;
+            step.config.sharepoint_site = document.getElementById('editExcelSharepointSite')?.value || '';
+            step.config.sheet_name = document.getElementById('editExcelSheetName').value || 'Sheet1';
+            step.config.columns = [];
+            document.querySelectorAll('.excel-col-row').forEach(function(row) {
+                var header = row.querySelector('.excel-col-header').value.trim();
+                var source = row.querySelector('.excel-col-source').value;
+                var field = row.querySelector('.excel-col-field').value;
+                if (header || field) {
+                    step.config.columns.push({header: header, source: source, field: field});
+                }
+            });
             break;
     }
     
