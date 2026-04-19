@@ -972,6 +972,19 @@ function _renderStepEditFormInner(step, index, common) {
         case 'email':
             return common + `
                 <div class="mb-3">
+                    <label class="form-label">Destinatario</label>
+                    <select class="form-select" id="editEmailRecipient" onchange="toggleCustomRecipient()">
+                        <option value="participant" ${(step.config.recipient || 'participant') === 'participant' ? 'selected' : ''}>Partecipante (default)</option>
+                        <option value="custom" ${step.config.recipient === 'custom' ? 'selected' : ''}>Indirizzo fisso</option>
+                    </select>
+                    <div id="customRecipientField" class="mt-2" ${step.config.recipient === 'custom' ? '' : 'style="display:none"'}>
+                        <input type="email" class="form-control" id="editEmailCustomTo"
+                               value="${step.config.custom_to || ''}"
+                               placeholder="es. organizzatore@sabae20.it">
+                        <div class="form-text">L'email verrà inviata a questo indirizzo invece che al partecipante. Puoi usare {{ participant.full_name }}, {{ participant.phone }} nel testo.</div>
+                    </div>
+                </div>
+                <div class="mb-3">
                     <label class="form-label">Oggetto email</label>
                     <input type="text" class="form-control" id="editEmailSubject"
                            value="${step.config.subject || ''}"
@@ -1746,6 +1759,11 @@ function onExcelSourceChange(sourceSelect) {
     _populateExcelFieldSelect(fieldSel, sourceSelect.value, '');
 }
 
+function toggleCustomRecipient() {
+    var val = document.getElementById('editEmailRecipient').value;
+    document.getElementById('customRecipientField').style.display = val === 'custom' ? '' : 'none';
+}
+
 function toggleWaitForLanding() {
     var hasLanding = document.getElementById('editHasLanding').checked;
     document.getElementById('waitForLandingFields').style.display = hasLanding ? '' : 'none';
@@ -2179,6 +2197,8 @@ function saveStepEdit() {
     
     switch(step.type) {
         case 'email':
+            step.config.recipient = document.getElementById('editEmailRecipient').value;
+            step.config.custom_to = document.getElementById('editEmailCustomTo')?.value || '';
             step.config.subject = document.getElementById('editEmailSubject').value;
             // Read from Summernote editor
             const $body = $('#editEmailBody');
@@ -2516,6 +2536,8 @@ function saveWorkflow() {
                 stepData.skip_conditions = {
                     has_landing: !!step.config.has_landing,
                     attachment_ids: (step.config.attachments || []).map(a => a.id),
+                    recipient: step.config.recipient || 'participant',
+                    custom_to: step.config.custom_to || '',
                     wait_for_landing: !!step.config.wait_for_landing,
                     landing_timeout_days: step.config.landing_timeout_days || 7,
                     landing_if_filled: step.config.landing_if_filled || 'continue',
@@ -2624,6 +2646,13 @@ function saveWorkflow() {
         }
         // Ricarica gli step dal server per avere i nuovi ID (dopo save vengono ricreati)
         var wfId = result.id || window._currentWorkflowId;
+        var _afterSave = function() {
+            if (typeof _onWorkflowSaved === 'function') {
+                var cb = _onWorkflowSaved;
+                _onWorkflowSaved = null;
+                cb();
+            }
+        };
         if (wfId) {
             fetch('/api/workflows/' + wfId)
             .then(function(r) { return r.json(); })
@@ -2634,12 +2663,19 @@ function saveWorkflow() {
                         if (local) local.id = serverStep.id;
                     });
                 }
-            }).catch(function(){});
+                _afterSave();
+            }).catch(function() { _afterSave(); });
+        } else {
+            _afterSave();
         }
-        if (typeof _onWorkflowSaved === 'function') _onWorkflowSaved();
     })
     .catch(error => {
         console.error('Save error:', error);
+        if (typeof _onWorkflowSaved === 'function') {
+            var cb = _onWorkflowSaved;
+            _onWorkflowSaved = null;
+            cb();
+        }
     });
 }
 

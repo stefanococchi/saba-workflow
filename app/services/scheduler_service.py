@@ -431,8 +431,13 @@ class SchedulerService:
                 attachments = _db().query(Attachment).filter(Attachment.id.in_(attachment_ids)).all()
                 logger.info(f"Loaded {len(attachments)} attachments for email step")
 
+            # Determine recipient
+            to_override = None
+            if skip_cond.get('recipient') == 'custom' and skip_cond.get('custom_to'):
+                to_override = skip_cond['custom_to']
+
             # Send email
-            success = EmailService.send_workflow_email(participant, step, landing_url, attachments=attachments)
+            success = EmailService.send_workflow_email(participant, step, landing_url, attachments=attachments, to_override=to_override)
 
             return success
 

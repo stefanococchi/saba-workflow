@@ -201,7 +201,7 @@ class EmailService:
             raise
 
     @staticmethod
-    def send_workflow_email(participant, step, landing_url=None, attachments=None):
+    def send_workflow_email(participant, step, landing_url=None, attachments=None, to_override=None):
         """
         Invia email per uno step del workflow
 
@@ -219,9 +219,11 @@ class EmailService:
             context = {
                 'participant': {
                     'name': participant.full_name,
+                    'full_name': participant.full_name,
                     'first_name': participant.first_name,
                     'last_name': participant.last_name,
                     'email': participant.email,
+                    'phone': participant.phone or '',
                 },
                 'landing_url': landing_url or '',
                 'workflow_name': participant.workflow.name,
@@ -251,7 +253,7 @@ class EmailService:
 
             # Invia
             return EmailService.send_email(
-                to_email=participant.email,
+                to_email=to_override or participant.email,
                 subject=subject,
                 body_html=body_html,
                 file_attachments=attachments

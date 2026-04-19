@@ -534,13 +534,30 @@ function _escHtml(str) {
 // ========== Auto-Save & Refresh ==========
 
 var _dfSaveTimer = null;
+var _dfSaving = false;
+var _dfPendingSave = null;
 
 function _dfAutoSaveAndRefresh(fullRefresh) {
     _saveNodePositions();
+
+    if (_dfSaving) {
+        // Queue this save for after current one finishes
+        _dfPendingSave = fullRefresh;
+        return;
+    }
+
+    _dfSaving = true;
     _dfSilentSave(function() {
+        _dfSaving = false;
         if (fullRefresh) {
             syncStepsToDrawflow();
             _addZoomControls();
+        }
+        // Process queued save if any
+        if (_dfPendingSave !== null) {
+            var pending = _dfPendingSave;
+            _dfPendingSave = null;
+            _dfAutoSaveAndRefresh(pending);
         }
     });
 }
@@ -553,11 +570,12 @@ function _dfAutoSaveDebounced(fullRefresh) {
 }
 
 function _dfSilentSave(callback) {
-    if (typeof saveWorkflow !== 'function') return;
-    _onWorkflowSaved = function() {
-        _onWorkflowSaved = null;
+    if (typeof saveWorkflow !== 'function') {
+        _dfSaving = false;
         if (callback) callback();
-    };
+        return;
+    }
+    _onWorkflowSaved = callback || function() {};
     saveWorkflow();
 }
 

@@ -833,6 +833,8 @@ try {
             subject: {{ step.subject | default('', true) | tojson }},
             body_template: {{ step.body_template | default('', true) | tojson }},
             delay_hours: {{ step.delay_hours or 0 }},
+            recipient: _skipCond.recipient || 'participant',
+            custom_to: _skipCond.custom_to || '',
             has_landing: {{ 'true' if step.landing_page_config or (step.skip_conditions and step.skip_conditions.get('has_landing')) else 'false' }},
             wait_for_landing: _skipCond.wait_for_landing || false,
             landing_timeout_days: _skipCond.landing_timeout_days || 7,
