@@ -540,13 +540,11 @@ function _dfAutoSaveDebounced() {
 
 function _dfSilentSave(callback) {
     if (typeof saveWorkflow !== 'function') return;
-    // Temporarily replace alert to suppress "Workflow salvato!" message
-    var origAlert = window.alert;
-    window.alert = function() {};
+    _onWorkflowSaved = function() {
+        _onWorkflowSaved = null;
+        if (callback) callback();
+    };
     saveWorkflow();
-    window.alert = origAlert;
-    // Wait a bit for save to complete, then callback
-    if (callback) setTimeout(callback, 500);
 }
 
 // ========== Delete Step from 2D Canvas ==========
@@ -1012,6 +1010,41 @@ function refreshDrawflowNode(stepIndex) {
         el.innerHTML = _buildNodeHtml(step, stepIndex);
     }
 }
+
+// ========== Draggable Modal ==========
+
+document.addEventListener('DOMContentLoaded', function() {
+    var header = document.getElementById('stepEditModalHeader');
+    if (!header) return;
+    var modal = header.closest('.modal-dialog');
+    var startX, startY, origX, origY;
+
+    header.addEventListener('mousedown', function(e) {
+        if (e.target.classList.contains('btn-close')) return;
+        e.preventDefault();
+        startX = e.clientX;
+        startY = e.clientY;
+        var rect = modal.getBoundingClientRect();
+        origX = rect.left;
+        origY = rect.top;
+        document.addEventListener('mousemove', onDrag);
+        document.addEventListener('mouseup', stopDrag);
+    });
+
+    function onDrag(e) {
+        var dx = e.clientX - startX;
+        var dy = e.clientY - startY;
+        modal.style.position = 'fixed';
+        modal.style.left = (origX + dx) + 'px';
+        modal.style.top = (origY + dy) + 'px';
+        modal.style.margin = '0';
+    }
+
+    function stopDrag() {
+        document.removeEventListener('mousemove', onDrag);
+        document.removeEventListener('mouseup', stopDrag);
+    }
+});
 
 // Hook into saveStepEdit to refresh 2D canvas
 document.addEventListener('DOMContentLoaded', function() {

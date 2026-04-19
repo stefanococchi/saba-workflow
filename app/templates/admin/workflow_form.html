@@ -799,10 +799,10 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
 </form>
 
 <!-- Step Edit Modal -->
-<div class="modal fade" id="stepEditModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
+<div class="modal fade" id="stepEditModal" tabindex="-1" data-bs-backdrop="false" data-bs-keyboard="true">
+    <div class="modal-dialog modal-lg modal-draggable">
+        <div class="modal-content" style="box-shadow: 0 8px 30px rgba(0,0,0,0.3);">
+            <div class="modal-header" style="cursor:move" id="stepEditModalHeader">
                 <h5 class="modal-title">{{ t.edit_step }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>

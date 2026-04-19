@@ -2588,10 +2588,10 @@ function saveWorkflow() {
                 }
             }).catch(function(){});
         }
-        alert('Workflow salvato!');
+        if (typeof _onWorkflowSaved === 'function') _onWorkflowSaved();
     })
     .catch(error => {
-        alert('Errore salvataggio: ' + error);
+        console.error('Save error:', error);
     });
 }
 
