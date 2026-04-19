@@ -148,6 +148,8 @@ TRANSLATIONS = {
         'survey_desc': 'Questionario multi-domanda',
         'excel_write': 'Scrivi su Excel',
         'excel_write_desc': 'Aggiungi riga su OneDrive',
+        'whatsapp_step': 'WhatsApp',
+        'whatsapp_desc': 'Invia messaggio WhatsApp',
         'human_approval': 'Approvazione',
         'human_approval_desc': 'Attendi approvazione manuale',
 
@@ -367,6 +369,8 @@ TRANSLATIONS = {
         'survey_desc': 'Multi-question form',
         'excel_write': 'Write to Excel',
         'excel_write_desc': 'Add row to OneDrive file',
+        'whatsapp_step': 'WhatsApp',
+        'whatsapp_desc': 'Send WhatsApp message',
         'human_approval': 'Human Approval',
         'human_approval_desc': 'Wait for manual approval',
 

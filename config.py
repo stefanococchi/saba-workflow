@@ -26,6 +26,11 @@ class Config:
     MAIL_FROM_EMAIL = os.getenv('MAIL_FROM_EMAIL', '')
     MAIL_FROM_NAME = os.getenv('MAIL_FROM_NAME', 'Saba Workflow')
     
+    # WhatsApp Business API (Meta)
+    WHATSAPP_PHONE_ID = os.getenv('WHATSAPP_PHONE_ID', '')
+    WHATSAPP_TOKEN = os.getenv('WHATSAPP_TOKEN', '')
+    WHATSAPP_BUSINESS_ID = os.getenv('WHATSAPP_BUSINESS_ID', '')
+
     # JWT
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
     JWT_EXPIRATION_HOURS = int(os.getenv('JWT_EXPIRATION_HOURS', 72))

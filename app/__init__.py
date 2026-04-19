@@ -10,6 +10,7 @@ Base = declarative_base()
 # Sessione DB
 db_session = None
 scheduler = BackgroundScheduler()
+_flask_app = None  # Cached Flask app instance for background threads
 
 
 def init_db(app):
@@ -33,7 +34,12 @@ def init_db(app):
 
 def create_app(config_object=None):
     """Factory pattern per creazione app Flask"""
-    
+    global _flask_app
+
+    # Return cached app if already created (for background threads)
+    if _flask_app is not None:
+        return _flask_app
+
     app = Flask(__name__)
     
     # Configurazione
@@ -122,4 +128,5 @@ def create_app(config_object=None):
             'Execution': Execution
         }
     
+    _flask_app = app
     return app

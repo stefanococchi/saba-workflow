@@ -270,6 +270,8 @@ class SchedulerService:
                 elif step.type.value == 'export_data':
                     # Export data step
                     success = SchedulerService._execute_export_data_step(participant, step, execution)
+                elif step.type.value == 'whatsapp':
+                    success = SchedulerService._execute_whatsapp_step(participant, step, execution)
                 elif step.type.value == 'excel_write':
                     success = SchedulerService._execute_excel_write_step(participant, step, execution)
                 else:
@@ -789,6 +791,94 @@ class SchedulerService:
 
         except Exception as e:
             logger.error(f"✗ Condition error: {str(e)}")
+            return False
+
+    @staticmethod
+    def _execute_whatsapp_step(participant, step, execution):
+        """Send a WhatsApp message via Meta Business API."""
+        try:
+            from flask import current_app
+            import requests as http_requests
+            from jinja2 import Template
+
+            config = step.skip_conditions or {}
+            phone = participant.phone or ''
+            if not phone:
+                logger.warning(f"⚠ WhatsApp step skipped: no phone for participant {participant.id}")
+                execution.result_data = {'error': 'no_phone'}
+                return False
+
+            # Normalize phone: ensure starts with +, remove spaces/dashes
+            phone = phone.strip().replace(' ', '').replace('-', '')
+            if not phone.startswith('+'):
+                phone = '+' + phone
+            # WhatsApp API wants digits only, no +
+            phone_digits = phone.lstrip('+')
+
+            phone_id = current_app.config.get('WHATSAPP_PHONE_ID', '')
+            token = current_app.config.get('WHATSAPP_TOKEN', '')
+            if not phone_id or not token:
+                logger.error("WhatsApp step: WHATSAPP_PHONE_ID or WHATSAPP_TOKEN not configured")
+                return False
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            url = f"https://graph.facebook.com/v21.0/{phone_id}/messages"
+
+            message_type = config.get('message_type', 'template')
+
+            if message_type == 'text':
+                # Free text message (only within 24h conversation window)
+                body_text = config.get('body_text', '')
+                if body_text:
+                    # Render template variables
+                    try:
+                        tpl = Template(body_text)
+                        body_text = tpl.render(
+                            participant=participant,
+                            workflow_name=step.workflow.name if step.workflow else '',
+                            step_name=step.name
+                        )
+                    except Exception:
+                        pass
+
+                payload = {
+                    "messaging_product": "whatsapp",
+                    "to": phone_digits,
+                    "type": "text",
+                    "text": {"body": body_text}
+                }
+            else:
+                # Template message
+                template_name = config.get('template_name', 'hello_world')
+                template_lang = config.get('template_language', 'en_US')
+                payload = {
+                    "messaging_product": "whatsapp",
+                    "to": phone_digits,
+                    "type": "template",
+                    "template": {
+                        "name": template_name,
+                        "language": {"code": template_lang}
+                    }
+                }
+
+            resp = http_requests.post(url, headers=headers, json=payload, timeout=15)
+
+            if resp.status_code in (200, 201):
+                resp_data = resp.json()
+                msg_id = resp_data.get('messages', [{}])[0].get('id', '')
+                logger.info(f"✓ WhatsApp sent to {phone_digits} (msg: {msg_id})")
+                execution.result_data = {'phone': phone_digits, 'message_id': msg_id, 'type': message_type}
+                return True
+
+            logger.error(f"WhatsApp send failed ({resp.status_code}): {resp.text}")
+            execution.result_data = {'error': resp.text}
+            return False
+
+        except Exception as e:
+            logger.error(f"✗ WhatsApp error: {str(e)}")
             return False
 
     @staticmethod

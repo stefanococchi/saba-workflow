@@ -167,6 +167,12 @@ function getDefaultConfig(type) {
             approved_steps: [],
             rejected_steps: [],
         },
+        whatsapp: {
+            template_name: 'hello_world',
+            template_language: 'en_US',
+            body_text: '',
+            delay_hours: 0
+        },
         excel_write: {
             storage: 'onedrive',
             file_path: '',
@@ -743,6 +749,7 @@ function renderStep(step, index) {
         survey: 'ui-checks',
         human_approval: 'person-check',
         export_data: 'download',
+        whatsapp: 'whatsapp',
         excel_write: 'file-earmark-spreadsheet'
     };
 
@@ -798,6 +805,11 @@ function renderNodeSubtitle(step) {
             return (step.config.goal || 'form_submitted').replace(/_/g, ' ');
         case 'export_data':
             return (step.config.format || 'CSV').toUpperCase() + (step.config.send_to ? ' → ' + step.config.send_to : '');
+        case 'whatsapp':
+            if (step.config.message_type === 'text') {
+                return (step.config.body_text || 'No text').substring(0, 30) + (step.config.delay_hours ? ' · ' + step.config.delay_hours + 'h' : '');
+            }
+            return 'tpl: ' + (step.config.template_name || 'hello_world') + (step.config.delay_hours ? ' · ' + step.config.delay_hours + 'h' : '');
         case 'excel_write':
             var path = step.config.file_path || '';
             var fname = path.split('/').pop() || 'Not configured';
@@ -1394,6 +1406,54 @@ function renderStepEditForm(step, index) {
                     </small>
                 </div>
             `;
+        case 'whatsapp':
+            return common + `
+                <div class="mb-3">
+                    <label class="form-label">Message type</label>
+                    <select class="form-select" id="editWaMessageType" onchange="toggleWaMessageType()">
+                        <option value="template" ${(step.config.message_type || 'template') === 'template' ? 'selected' : ''}>Template (pre-approved by Meta)</option>
+                        <option value="text" ${step.config.message_type === 'text' ? 'selected' : ''}>Free text (only within 24h window)</option>
+                    </select>
+                    <div class="form-text">First contact must use a template. Free text only works if the user messaged you in the last 24h.</div>
+                </div>
+                <div id="waTemplateFields" ${step.config.message_type === 'text' ? 'style="display:none"' : ''}>
+                    <div class="mb-3">
+                        <label class="form-label">Template name</label>
+                        <input type="text" class="form-control" id="editWaTemplateName"
+                               value="${step.config.template_name || 'hello_world'}"
+                               placeholder="es. hello_world">
+                        <div class="form-text">The template must be created and approved in WhatsApp Manager on Meta Business.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Template language</label>
+                        <input type="text" class="form-control" id="editWaTemplateLanguage"
+                               value="${step.config.template_language || 'en_US'}"
+                               placeholder="en_US, it, pt_BR...">
+                    </div>
+                </div>
+                <div id="waTextFields" ${step.config.message_type !== 'text' ? 'style="display:none"' : ''}>
+                    <div class="mb-3">
+                        <label class="form-label">Message text</label>
+                        <textarea class="form-control" id="editWaBodyText" rows="4"
+                                  placeholder="Hi {{ participant.first_name }}, thanks for registering!">${step.config.body_text || ''}</textarea>
+                        <div class="form-text">You can use {{ participant.first_name }}, {{ participant.last_name }}, {{ participant.email }}, {{ workflow_name }}.</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Delay (hours after previous step)</label>
+                    <input type="number" class="form-control" id="editWaDelay"
+                           value="${step.config.delay_hours || 0}" min="0">
+                </div>
+                <div class="alert alert-info">
+                    <small><i class="bi bi-info-circle"></i>
+                    <strong>How it works:</strong><br>
+                    Messages are sent via Meta WhatsApp Business API to the participant's phone number.<br>
+                    The participant must have a <code>phone</code> field with international prefix (e.g. +39...).<br>
+                    <strong>Templates:</strong> Create them in <a href="https://business.facebook.com/wa/manage/message-templates/" target="_blank">WhatsApp Manager</a> — Meta approves them in 24-48h.<br>
+                    <strong>Free text:</strong> Only works if the participant messaged your WhatsApp number in the last 24 hours.
+                    </small>
+                </div>
+            `;
         case 'excel_write': {
             var columnsHtml = (step.config.columns || []).map(function(col, i) {
                 return _buildExcelColRow(col, i);
@@ -1610,6 +1670,12 @@ function onExcelSourceChange(sourceSelect) {
     var row = sourceSelect.closest('.excel-col-row');
     var fieldSel = row.querySelector('.excel-col-field');
     _populateExcelFieldSelect(fieldSel, sourceSelect.value, '');
+}
+
+function toggleWaMessageType() {
+    var type = document.getElementById('editWaMessageType').value;
+    document.getElementById('waTemplateFields').style.display = type === 'template' ? '' : 'none';
+    document.getElementById('waTextFields').style.display = type === 'text' ? '' : 'none';
 }
 
 function onExcelStorageChange() {
@@ -2060,6 +2126,13 @@ function saveStepEdit() {
             step.config.format = document.getElementById('editExportFormat').value;
             step.config.send_to = document.getElementById('editExportSendTo').value;
             step.config.save_local = document.getElementById('editExportSaveLocal').checked;
+            break;
+        case 'whatsapp':
+            step.config.message_type = document.getElementById('editWaMessageType').value;
+            step.config.template_name = document.getElementById('editWaTemplateName')?.value || '';
+            step.config.template_language = document.getElementById('editWaTemplateLanguage')?.value || 'en_US';
+            step.config.body_text = document.getElementById('editWaBodyText')?.value || '';
+            step.config.delay_hours = parseInt(document.getElementById('editWaDelay').value) || 0;
             break;
         case 'excel_write':
             step.config.storage = document.getElementById('editExcelStorage').value;
