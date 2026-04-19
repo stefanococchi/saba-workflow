@@ -718,8 +718,16 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
             
             <!-- Workflow Canvas -->
             <div class="col-md-9">
-                <!-- Canvas mode toggle -->
-                <div class="d-flex justify-content-end mb-2">
+                <!-- Canvas toolbar -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-success btn-sm" onclick="saveWorkflow()">
+                            <i class="bi bi-save"></i> {{ t.save }}
+                        </button>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="nextStep()">
+                            {{ t.next }}: {{ t.review }} <i class="bi bi-arrow-right"></i>
+                        </button>
+                    </div>
                     <div class="btn-group btn-group-sm" id="canvasModeToggle">
                         <button type="button" class="btn btn-outline-secondary active" onclick="switchCanvasMode('linear')" id="btnLinear">
                             <i class="bi bi-list-ul"></i> Linear
@@ -883,7 +891,8 @@ try {
             rejected_steps: (_skipCond.rejected_steps || []).map(function(bs) {
                 return { id: Date.now() + Math.random(), type: bs.type, order: 0, name: bs.name, config: bs.config || {} };
             })
-        }
+        },
+        _dfPos: _skipCond._dfPos || null
     });
     {% endfor %}
 

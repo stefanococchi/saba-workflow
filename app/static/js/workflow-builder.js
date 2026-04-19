@@ -2515,6 +2515,12 @@ function saveWorkflow() {
                 };
             }
             
+            // Save 2D canvas position if available
+            if (step._dfPos) {
+                stepData.skip_conditions = stepData.skip_conditions || {};
+                stepData.skip_conditions._dfPos = step._dfPos;
+            }
+
             return stepData;
         })
     };

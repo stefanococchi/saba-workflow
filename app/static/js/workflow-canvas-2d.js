@@ -914,15 +914,30 @@ function refreshDrawflowNode(stepIndex) {
 }
 
 // Hook into saveStepEdit to refresh 2D canvas
-var _origSaveStepEdit = typeof saveStepEdit === 'function' ? saveStepEdit : null;
 document.addEventListener('DOMContentLoaded', function() {
     if (typeof saveStepEdit === 'function' && !saveStepEdit._hooked2d) {
         var _orig = saveStepEdit;
         saveStepEdit = function() {
+            // Capture output count before edit
+            var prevOutputs = 0;
+            var idx = editingBranchContext ? editingBranchContext.parentIndex : editingStepIndex;
+            if (idx !== null && workflowSteps[idx]) {
+                prevOutputs = _getOutputCount(workflowSteps[idx]);
+            }
+
             _orig.apply(this, arguments);
-            // After save, refresh the node in 2D canvas
-            if (_canvasMode === '2d' && editingStepIndex !== null) {
-                refreshDrawflowNode(editingStepIndex);
+
+            // After save, refresh the 2D canvas
+            if (_canvasMode === '2d' && idx !== null && workflowSteps[idx]) {
+                var newOutputs = _getOutputCount(workflowSteps[idx]);
+                if (newOutputs !== prevOutputs) {
+                    // Output count changed — full re-sync needed
+                    _saveNodePositions();
+                    syncStepsToDrawflow();
+                    _addZoomControls();
+                } else {
+                    refreshDrawflowNode(idx);
+                }
             }
         };
         saveStepEdit._hooked2d = true;
