@@ -2456,38 +2456,126 @@ function prevStep() {
 
 // Generate review
 function generateReview() {
-    const name = document.getElementById('workflowName').value;
-    const description = document.getElementById('workflowDescription').value;
-    const status = document.getElementById('workflowStatus').value;
-    
-    let html = `
-        <h5>Workflow Details</h5>
-        <dl class="row">
-            <dt class="col-sm-3">Name:</dt>
-            <dd class="col-sm-9">${name}</dd>
-            <dt class="col-sm-3">Description:</dt>
-            <dd class="col-sm-9">${description || '<em class="text-muted">None</em>'}</dd>
-            <dt class="col-sm-3">Status:</dt>
-            <dd class="col-sm-9"><span class="status-badge status-${status}">${status}</span></dd>
-            <dt class="col-sm-3">Steps:</dt>
-            <dd class="col-sm-9">${workflowSteps.length}</dd>
-        </dl>
-        
-        <h5 class="mt-4">Workflow Steps</h5>
-        <ol class="list-group list-group-numbered">
-    `;
-    
-    workflowSteps.forEach(step => {
-        html += `
-            <li class="list-group-item">
-                <strong><i class="bi bi-${step.type === 'email' ? 'envelope' : step.type === 'delay' ? 'clock' : 'shuffle'}"></i> ${step.name}</strong><br>
-                <small class="text-muted">${renderStepSummary(step)}</small>
-            </li>
-        `;
+    var name = document.getElementById('workflowName').value;
+    var description = document.getElementById('workflowDescription').value;
+    var status = document.getElementById('workflowStatus').value;
+
+    // Analyze workflow
+    var warnings = [];
+    var stepTypes = {};
+    var hasStart = false;
+    var hasEnd = false;
+    var connectedSteps = {};
+    var stepsWithoutNext = [];
+
+    workflowSteps.forEach(function(step, i) {
+        stepTypes[step.type] = (stepTypes[step.type] || 0) + 1;
+
+        // Check connections
+        var nextStep = step.config.next_step || 'auto';
+        var outputs = typeof _getOutputCount === 'function' ? _getOutputCount(step) : 1;
+
+        if (outputs === 1) {
+            if (nextStep === 'end') {
+                hasEnd = true;
+            } else if (nextStep === 'auto') {
+                if (i === workflowSteps.length - 1) hasEnd = true;
+                else connectedSteps[i + 1] = true;
+            } else {
+                var target = workflowSteps.findIndex(function(s) { return s.order === parseInt(nextStep); });
+                if (target !== -1) connectedSteps[target] = true;
+            }
+        } else {
+            // Branching — check both outputs
+            var hasOutput1 = false, hasOutput2 = false;
+            if (step.type === 'condition') {
+                hasOutput1 = step.config.if_true === 'jump' || step.config.if_true === 'continue';
+                hasOutput2 = step.config.if_false === 'jump' || step.config.if_false === 'continue';
+                if (step.config.if_true === 'stop' || step.config.if_false === 'stop') hasEnd = true;
+            } else if (step.type === 'goal_check') {
+                hasOutput1 = step.config.if_met === 'jump' || step.config.if_met === 'continue';
+                hasOutput2 = step.config.if_not_met === 'jump' || step.config.if_not_met === 'continue';
+                if (step.config.if_met === 'complete' || step.config.if_not_met === 'complete') hasEnd = true;
+            }
+        }
+
+        // Step-specific warnings
+        if (step.type === 'email' && !step.config.subject) {
+            warnings.push({ step: step, msg: 'No subject configured' });
+        }
+        if (step.type === 'email' && step.config.has_landing && !step.config.landing_template_id) {
+            warnings.push({ step: step, msg: 'Landing enabled but no template selected' });
+        }
+        if (step.type === 'whatsapp' && step.config.message_type === 'template' && !step.config.template_name) {
+            warnings.push({ step: step, msg: 'No WhatsApp template configured' });
+        }
+        if (step.type === 'excel_write' && !step.config.file_path) {
+            warnings.push({ step: step, msg: 'No Excel file path configured' });
+        }
     });
-    
-    html += '</ol>';
-    
+
+    if (workflowSteps.length === 0) {
+        warnings.push({ step: null, msg: 'No steps in workflow' });
+    }
+
+    // Build HTML
+    var html = '';
+
+    // Overview cards
+    html += '<div class="row g-3 mb-4">';
+    html += '<div class="col-md-3"><div class="card text-center p-3"><h3>' + workflowSteps.length + '</h3><small class="text-muted">Steps</small></div></div>';
+    html += '<div class="col-md-3"><div class="card text-center p-3"><h3>' + Object.keys(stepTypes).length + '</h3><small class="text-muted">Step types</small></div></div>';
+    html += '<div class="col-md-3"><div class="card text-center p-3"><h3>' + warnings.length + '</h3><small class="text-muted">' + (warnings.length === 0 ? '<span class="text-success">No warnings</span>' : '<span class="text-warning">Warnings</span>') + '</small></div></div>';
+    html += '<div class="col-md-3"><div class="card text-center p-3"><span class="status-badge status-' + status + '">' + status + '</span><br><small class="text-muted">Status</small></div></div>';
+    html += '</div>';
+
+    // Workflow info
+    html += '<h6><i class="bi bi-info-circle"></i> Workflow Details</h6>';
+    html += '<table class="table table-sm"><tbody>';
+    html += '<tr><td class="text-muted" style="width:120px">Name</td><td><strong>' + (name || '—') + '</strong></td></tr>';
+    html += '<tr><td class="text-muted">Description</td><td>' + (description || '<em class="text-muted">—</em>') + '</td></tr>';
+    html += '</tbody></table>';
+
+    // Step type breakdown
+    html += '<h6 class="mt-3"><i class="bi bi-diagram-3"></i> Step Breakdown</h6>';
+    html += '<div class="d-flex flex-wrap gap-2 mb-3">';
+    var typeIcons = { email: 'envelope', wait_until: 'calendar-check', condition: 'shuffle', goal_check: 'trophy', human_approval: 'person-check', survey: 'ui-checks', export_data: 'download', whatsapp: 'whatsapp', excel_write: 'file-earmark-spreadsheet' };
+    Object.keys(stepTypes).forEach(function(type) {
+        html += '<span class="badge bg-secondary"><i class="bi bi-' + (typeIcons[type] || 'gear') + '"></i> ' + type.replace(/_/g, ' ') + ' x' + stepTypes[type] + '</span>';
+    });
+    html += '</div>';
+
+    // Steps table
+    html += '<h6 class="mt-3"><i class="bi bi-list-check"></i> All Steps</h6>';
+    html += '<table class="table table-sm table-hover"><thead><tr><th>#</th><th>Name</th><th>Type</th><th>Next</th></tr></thead><tbody>';
+    workflowSteps.forEach(function(step, i) {
+        var nextLabel = '';
+        var nextStep = step.config.next_step || 'auto';
+        var outputs = typeof _getOutputCount === 'function' ? _getOutputCount(step) : 1;
+        if (outputs > 1) {
+            nextLabel = '<span class="text-muted">branching</span>';
+        } else if (nextStep === 'end') {
+            nextLabel = '<span class="badge bg-danger">END</span>';
+        } else if (nextStep === 'auto') {
+            nextLabel = i < workflowSteps.length - 1 ? 'Step ' + (i + 2) : '<span class="badge bg-danger">END</span>';
+        } else {
+            var ts = workflowSteps.find(function(s) { return s.order === parseInt(nextStep); });
+            nextLabel = ts ? ts.name : 'Step ' + nextStep;
+        }
+        html += '<tr><td>' + (i + 1) + '</td><td><i class="bi bi-' + (typeIcons[step.type] || 'gear') + '"></i> ' + step.name + '</td><td><small>' + step.type.replace(/_/g, ' ') + '</small></td><td>' + nextLabel + '</td></tr>';
+    });
+    html += '</tbody></table>';
+
+    // Warnings
+    if (warnings.length > 0) {
+        html += '<h6 class="mt-3"><i class="bi bi-exclamation-triangle text-warning"></i> Warnings</h6>';
+        warnings.forEach(function(w) {
+            html += '<div class="alert alert-warning py-2" style="font-size:13px">';
+            if (w.step) html += '<strong>' + w.step.name + ':</strong> ';
+            html += w.msg + '</div>';
+        });
+    }
+
     document.getElementById('reviewContent').innerHTML = html;
 }
 
