@@ -786,7 +786,7 @@ function renderNodeSubtitle(step) {
             if (step.config.delay_hours) parts.push(step.config.delay_hours + 'h delay');
             var attCount = (step.config.attachments || []).length;
             if (attCount) parts.push(attCount + ' allegat' + (attCount === 1 ? 'o' : 'i'));
-            if (step.config.wait_for_landing) parts.push('⏳ ' + (step.config.landing_timeout_days || 7) + 'd');
+            if (step.config.wait_for_landing && step.config.wait_for_landing !== 'false') parts.push('⏳ ' + (step.config.landing_timeout_days || 7) + 'd');
             return parts.join(' · ') || 'Not configured';
         case 'wait_until':
             var wt = step.config.wait_type;

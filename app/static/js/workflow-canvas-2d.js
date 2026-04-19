@@ -4,7 +4,8 @@
  */
 
 var _drawflowEditor = null;
-var _canvasMode = 'linear'; // 'linear' or '2d'
+var _canvasMode = '2d';
+var _onWorkflowSaved = null;
 var _dfNodeMap = {}; // drawflow node id → workflowSteps index
 var _dfStepMap = {}; // step.id → drawflow node id
 
@@ -224,13 +225,6 @@ function _applyDrawflowStyles() {
             border-color: #8B6914;
         }
 
-        /* Jump connections — dashed, orange */
-        #drawflowCanvas .connection.df-jump .main-path {
-            stroke: #fb923c !important;
-            stroke-dasharray: 6 4;
-            stroke-width: 1.5;
-            marker-end: url(#df-arrowhead-jump) !important;
-        }
         /* TRUE/MET/APPROVED output — green */
         #drawflowCanvas .connection.df-true .main-path {
             stroke: #4ade80 !important;
@@ -239,17 +233,6 @@ function _applyDrawflowStyles() {
         /* FALSE/NOT MET/REJECTED output — red */
         #drawflowCanvas .connection.df-false .main-path {
             stroke: #f87171 !important;
-            marker-end: url(#df-arrowhead-false) !important;
-        }
-        /* Jump + true/false combos */
-        #drawflowCanvas .connection.df-jump.df-true .main-path {
-            stroke: #4ade80 !important;
-            stroke-dasharray: 6 4;
-            marker-end: url(#df-arrowhead-true) !important;
-        }
-        #drawflowCanvas .connection.df-jump.df-false .main-path {
-            stroke: #f87171 !important;
-            stroke-dasharray: 6 4;
             marker-end: url(#df-arrowhead-false) !important;
         }
 
@@ -874,13 +857,12 @@ function syncStepsToDrawflow() {
 }
 
 function _markJumpConnections() {
-    // Build a set of branching node IDs and their types
-    var branchNodes = {}; // nodeId → step type
-    workflowSteps.forEach(function(step, idx) {
-        var outputs = _getOutputCount(step);
-        if (outputs > 1) {
+    // Build a set of branching node IDs
+    var branchNodes = {};
+    workflowSteps.forEach(function(step) {
+        if (_getOutputCount(step) > 1) {
             var nodeId = _dfStepMap[step.id];
-            if (nodeId) branchNodes[nodeId] = step.type;
+            if (nodeId) branchNodes[nodeId] = true;
         }
     });
 
@@ -888,41 +870,16 @@ function _markJumpConnections() {
     conns.forEach(function(conn) {
         var cls = conn.getAttribute('class') || '';
         var nodeOutMatch = cls.match(/node_out_node-(\d+)/);
-        var nodeInMatch = cls.match(/node_in_node-(\d+)/);
-        if (!nodeOutMatch || !nodeInMatch) return;
+        if (!nodeOutMatch) return;
 
         var outId = parseInt(nodeOutMatch[1]);
-        var inId = parseInt(nodeInMatch[1]);
-        var isOutput1 = cls.indexOf('output_1') !== -1;
-        var isOutput2 = cls.indexOf('output_2') !== -1;
 
         // Color true/false for branching nodes
         if (branchNodes[outId]) {
-            if (isOutput1) {
+            if (cls.indexOf('output_1') !== -1) {
                 conn.classList.add('df-true');
-            } else if (isOutput2) {
+            } else if (cls.indexOf('output_2') !== -1) {
                 conn.classList.add('df-false');
-            }
-        }
-
-        // Check if this is a backward connection
-        var outNode = document.getElementById('node-' + outId);
-        var inNode = document.getElementById('node-' + inId);
-        if (outNode && inNode) {
-            var outX = parseFloat(outNode.style.left) || 0;
-            var inX = parseFloat(inNode.style.left) || 0;
-            if (inX < outX - 50) {
-                conn.classList.add('df-jump');
-                return;
-            }
-        }
-
-        // Check if this connection skips nodes (non-sequential forward jump)
-        var outStepIdx = _dfNodeMap[outId];
-        var inStepIdx = _dfNodeMap[inId];
-        if (outStepIdx !== undefined && inStepIdx !== undefined) {
-            if (inStepIdx - outStepIdx > 1) {
-                conn.classList.add('df-jump');
             }
         }
     });
@@ -1229,20 +1186,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (typeof saveStepEdit === 'function' && !saveStepEdit._hooked2d) {
         var _orig = saveStepEdit;
         saveStepEdit = function() {
-            // Capture output count before edit
-            var prevOutputs = 0;
+            // Capture index BEFORE _orig runs (it resets editingStepIndex)
             var idx = editingBranchContext ? editingBranchContext.parentIndex : editingStepIndex;
-            if (idx !== null && workflowSteps[idx]) {
-                prevOutputs = _getOutputCount(workflowSteps[idx]);
-            }
 
             _orig.apply(this, arguments);
 
-            // After save, auto-save and update node content (no full rebuild)
-            if (_canvasMode === '2d') {
-                var idx2 = editingBranchContext ? editingBranchContext.parentIndex : editingStepIndex;
-                if (idx2 !== null) refreshDrawflowNode(idx2);
-                _dfAutoSaveAndRefresh(false);
+            // After step edit save, do full save + refresh
+            if (_canvasMode === '2d' && _drawflowEditor) {
+                _dfAutoSaveAndRefresh(true);
             }
         };
         saveStepEdit._hooked2d = true;
