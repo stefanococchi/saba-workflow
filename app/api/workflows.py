@@ -239,6 +239,17 @@ def update_workflow(workflow_id):
                     step.landing_css = landing['landing_css']
                     step.landing_gjs_data = landing['landing_gjs_data']
 
+                # Apply landing template if selected
+                skip = step_data.get('skip_conditions') or {}
+                tpl_id = skip.get('landing_template_id')
+                if tpl_id:
+                    from app.models import LandingTemplate
+                    tpl = db.get(LandingTemplate, tpl_id)
+                    if tpl:
+                        step.landing_html = tpl.landing_html
+                        step.landing_css = tpl.landing_css
+                        step.landing_gjs_data = tpl.landing_gjs_data
+
                 db.add(step)
 
         # Aggiungi nuovi partecipanti (non elimina quelli esistenti)

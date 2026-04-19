@@ -132,11 +132,9 @@ class EmailService:
                         "content": body_html
                     },
                     "toRecipients": [
-                        {
-                            "emailAddress": {
-                                "address": to_email
-                            }
-                        }
+                        {"emailAddress": {"address": addr.strip()}}
+                        for addr in str(to_email).replace(';', ',').split(',')
+                        if addr.strip()
                     ]
                 },
                 "saveToSentItems": "true"

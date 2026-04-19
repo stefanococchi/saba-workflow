@@ -906,6 +906,7 @@ function editStep(index) {
     }
     if (step.type === 'email') {
         initAttachmentDropZone();
+        _loadLandingTemplateSelector(step);
     }
     // Populate landing field dropdowns for goal_check — from preceding landing steps
     if (step.type === 'goal_check') {
@@ -978,10 +979,10 @@ function _renderStepEditFormInner(step, index, common) {
                         <option value="custom" ${step.config.recipient === 'custom' ? 'selected' : ''}>Indirizzo fisso</option>
                     </select>
                     <div id="customRecipientField" class="mt-2" ${step.config.recipient === 'custom' ? '' : 'style="display:none"'}>
-                        <input type="email" class="form-control" id="editEmailCustomTo"
+                        <input type="text" class="form-control" id="editEmailCustomTo"
                                value="${step.config.custom_to || ''}"
-                               placeholder="es. organizzatore@sabae20.it">
-                        <div class="form-text">L'email verrà inviata a questo indirizzo invece che al partecipante. Puoi usare {{ participant.full_name }}, {{ participant.phone }} nel testo.</div>
+                               placeholder="es. organizzatore@sabae20.it, manager@sabae20.it">
+                        <div class="form-text">Separa più indirizzi con virgola o punto e virgola. Puoi usare {{ participant.full_name }}, {{ participant.phone }} nel testo.</div>
                     </div>
                 </div>
                 <div class="mb-3">
@@ -1046,6 +1047,13 @@ function _renderStepEditFormInner(step, index, common) {
                     </label>
                 </div>
                 <div id="waitForLandingFields" class="mt-2 ms-4" ${step.config.has_landing ? '' : 'style="display:none"'}>
+                    <div class="mb-2">
+                        <label class="form-label"><i class="bi bi-layout-text-window"></i> Landing template</label>
+                        <select class="form-select form-select-sm" id="editLandingTemplate">
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="form-text">Select a saved landing page template for this email step.</div>
+                    </div>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="editWaitForLanding"
                                ${step.config.wait_for_landing ? 'checked' : ''}
@@ -1759,6 +1767,26 @@ function onExcelSourceChange(sourceSelect) {
     _populateExcelFieldSelect(fieldSel, sourceSelect.value, '');
 }
 
+function _loadLandingTemplateSelector(step) {
+    var sel = document.getElementById('editLandingTemplate');
+    if (!sel) return;
+
+    fetch('/api/landing-templates')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var templates = data.templates || data || [];
+        sel.innerHTML = '<option value="">-- No template (configure in Landing Builder) --</option>';
+        (Array.isArray(templates) ? templates : []).forEach(function(t) {
+            var selected = step.config.landing_template_id === t.id ? ' selected' : '';
+            sel.innerHTML += '<option value="' + t.id + '"' + selected + '>' + t.name + '</option>';
+        });
+    })
+    .catch(function(e) {
+        console.error('Landing templates load error:', e);
+        sel.innerHTML = '<option value="">-- No templates available --</option>';
+    });
+}
+
 function toggleCustomRecipient() {
     var val = document.getElementById('editEmailRecipient').value;
     document.getElementById('customRecipientField').style.display = val === 'custom' ? '' : 'none';
@@ -2205,6 +2233,7 @@ function saveStepEdit() {
             step.config.body_template = ($body.length && $.fn.summernote) ? $body.summernote('code') : document.getElementById('editEmailBody').value;
             step.config.delay_hours = parseInt(document.getElementById('editEmailDelay').value);
             step.config.has_landing = document.getElementById('editHasLanding').checked;
+            step.config.landing_template_id = parseInt(document.getElementById('editLandingTemplate')?.value) || null;
             step.config.wait_for_landing = document.getElementById('editWaitForLanding')?.checked || false;
             step.config.landing_timeout_days = parseInt(document.getElementById('editLandingTimeout')?.value) || 7;
             step.config.landing_if_filled = document.getElementById('editLandingIfFilled')?.value || 'continue';
@@ -2538,6 +2567,7 @@ function saveWorkflow() {
                     attachment_ids: (step.config.attachments || []).map(a => a.id),
                     recipient: step.config.recipient || 'participant',
                     custom_to: step.config.custom_to || '',
+                    landing_template_id: step.config.landing_template_id || null,
                     wait_for_landing: !!step.config.wait_for_landing,
                     landing_timeout_days: step.config.landing_timeout_days || 7,
                     landing_if_filled: step.config.landing_if_filled || 'continue',
