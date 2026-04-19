@@ -718,14 +718,34 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
             
             <!-- Workflow Canvas -->
             <div class="col-md-9">
-                <div class="workflow-canvas" id="workflowCanvas">
-                    <div class="empty-canvas" id="emptyState">
-                        <i class="bi bi-diagram-3"></i>
-                        <h4>{{ t.start_building }}</h4>
-                        <p class="text-muted">{{ t.drag_steps_start }}</p>
+                <!-- Canvas mode toggle -->
+                <div class="d-flex justify-content-end mb-2">
+                    <div class="btn-group btn-group-sm" id="canvasModeToggle">
+                        <button type="button" class="btn btn-outline-secondary active" onclick="switchCanvasMode('linear')" id="btnLinear">
+                            <i class="bi bi-list-ul"></i> Linear
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="switchCanvasMode('2d')" id="btn2D">
+                            <i class="bi bi-diagram-3"></i> 2D Canvas
+                        </button>
                     </div>
                 </div>
-                
+
+                <!-- Linear canvas (existing) -->
+                <div id="linearCanvasWrap">
+                    <div class="workflow-canvas" id="workflowCanvas">
+                        <div class="empty-canvas" id="emptyState">
+                            <i class="bi bi-diagram-3"></i>
+                            <h4>{{ t.start_building }}</h4>
+                            <p class="text-muted">{{ t.drag_steps_start }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2D Drawflow canvas (new) -->
+                <div id="drawflowCanvasWrap" style="display:none;position:relative">
+                    <div id="drawflowCanvas" style="width:100%;height:calc(100vh - 200px);min-height:500px;border-radius:12px;overflow:auto;border:2px solid var(--palette-border,#333);background:var(--canvas-bg,#1a1a1a)"></div>
+                </div>
+
                 <!-- Feature Info Panel -->
                 <div class="alert alert-info mt-3">
                     <i class="bi bi-info-circle"></i> {{ t.drag_steps_start }}
@@ -790,8 +810,12 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<!-- Drawflow 2D canvas -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
+<script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
 <script>window._mailFromEmail = {{ config.MAIL_FROM_EMAIL | tojson }};</script>
 <script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=2.6.0"></script>
+<script src="{{ url_for('static', filename='js/workflow-canvas-2d.js') }}?v=1.0.0"></script>
 {% if mode == 'edit' and workflow and workflow.steps %}
 <script>
 window._currentWorkflowId = {{ workflow.id }};
