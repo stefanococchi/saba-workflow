@@ -2440,7 +2440,9 @@ function saveWorkflow() {
                 stepData.skip_conditions = {
                     goal: step.config.goal,
                     if_met: step.config.if_met,
+                    if_met_step: step.config.if_met_step || 0,
                     if_not_met: step.config.if_not_met,
+                    if_not_met_step: step.config.if_not_met_step || 0,
                     field_name: step.config.field_name,
                     field_value: step.config.field_value,
                     status_value: step.config.status_value
@@ -2471,7 +2473,13 @@ function saveWorkflow() {
             if (step.type === 'email') {
                 stepData.skip_conditions = {
                     has_landing: !!step.config.has_landing,
-                    attachment_ids: (step.config.attachments || []).map(a => a.id)
+                    attachment_ids: (step.config.attachments || []).map(a => a.id),
+                    wait_for_landing: !!step.config.wait_for_landing,
+                    landing_timeout_days: step.config.landing_timeout_days || 7,
+                    landing_if_filled: step.config.landing_if_filled || 'continue',
+                    landing_if_filled_step: step.config.landing_if_filled_step || 0,
+                    landing_if_timeout: step.config.landing_if_timeout || 'continue',
+                    landing_if_timeout_step: step.config.landing_if_timeout_step || 0
                 };
             }
 
@@ -2515,6 +2523,27 @@ function saveWorkflow() {
                 };
             }
             
+            // For whatsapp steps
+            if (step.type === 'whatsapp') {
+                stepData.skip_conditions = {
+                    message_type: step.config.message_type || 'template',
+                    template_name: step.config.template_name || 'hello_world',
+                    template_language: step.config.template_language || 'en_US',
+                    body_text: step.config.body_text || ''
+                };
+            }
+
+            // For excel_write steps
+            if (step.type === 'excel_write') {
+                stepData.skip_conditions = {
+                    storage: step.config.storage || 'onedrive',
+                    file_path: step.config.file_path || '',
+                    sharepoint_site: step.config.sharepoint_site || '',
+                    sheet_name: step.config.sheet_name || 'Sheet1',
+                    columns: step.config.columns || []
+                };
+            }
+
             // Save 2D canvas position if available
             if (step._dfPos) {
                 stepData.skip_conditions = stepData.skip_conditions || {};

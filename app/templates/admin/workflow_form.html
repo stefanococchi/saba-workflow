@@ -843,13 +843,21 @@ try {
             body_template: {{ step.body_template | default('', true) | tojson }},
             delay_hours: {{ step.delay_hours or 0 }},
             has_landing: {{ 'true' if step.landing_page_config or (step.skip_conditions and step.skip_conditions.get('has_landing')) else 'false' }},
+            wait_for_landing: _skipCond.wait_for_landing || false,
+            landing_timeout_days: _skipCond.landing_timeout_days || 7,
+            landing_if_filled: _skipCond.landing_if_filled || 'continue',
+            landing_if_filled_step: _skipCond.landing_if_filled_step || 0,
+            landing_if_timeout: _skipCond.landing_if_timeout || 'continue',
+            landing_if_timeout_step: _skipCond.landing_if_timeout_step || 0,
             wait_type: _skipCond.wait_type || 'date',
             target_date: _skipCond.target_date || '',
             target_time: _skipCond.target_time || '09:00',
             target_day: _skipCond.target_day || '',
             goal: _skipCond.goal || 'form_submitted',
             if_met: _skipCond.if_met || 'complete',
+            if_met_step: _skipCond.if_met_step || 0,
             if_not_met: _skipCond.if_not_met || 'continue',
+            if_not_met_step: _skipCond.if_not_met_step || 0,
             field_name: _skipCond.field_name || '',
             field_value: _skipCond.field_value || '',
             status_value: _skipCond.status_value || 'completed',
@@ -890,7 +898,16 @@ try {
             }),
             rejected_steps: (_skipCond.rejected_steps || []).map(function(bs) {
                 return { id: Date.now() + Math.random(), type: bs.type, order: 0, name: bs.name, config: bs.config || {} };
-            })
+            }),
+            message_type: _skipCond.message_type || 'template',
+            template_name: _skipCond.template_name || 'hello_world',
+            template_language: _skipCond.template_language || 'en_US',
+            body_text: _skipCond.body_text || '',
+            storage: _skipCond.storage || 'onedrive',
+            file_path: _skipCond.file_path || '',
+            sharepoint_site: _skipCond.sharepoint_site || '',
+            sheet_name: _skipCond.sheet_name || 'Sheet1',
+            columns: _skipCond.columns || []
         },
         _dfPos: _skipCond._dfPos || null
     });

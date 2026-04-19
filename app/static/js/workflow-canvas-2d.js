@@ -734,6 +734,12 @@ function syncStepsToDrawflow() {
         _dfNodeMap[nodeId] = index;
         _dfStepMap[step.id] = nodeId;
 
+        // For branching nodes, figure out jump outputs FIRST
+        var jumpOutputs = [];
+        if (outputs > 1) {
+            jumpOutputs = _addJumpConnections(step, nodeId, index);
+        }
+
         // Auto-connect from previous (only if previous output isn't a jump)
         if (prevNodeId !== null && prevOutput > 0) {
             try {
@@ -742,19 +748,17 @@ function syncStepsToDrawflow() {
         }
 
         // Determine which output continues the linear chain
-        // Default: output_1 goes to next step linearly
         prevNodeId = nodeId;
         prevOutput = 1;
 
-        // Jump connections for branching nodes
         if (outputs > 1) {
-            var jumpOutputs = _addJumpConnections(step, nodeId, index);
-            // If output_1 has a jump, the linear chain continues from output_2 (or stops)
+            // If output_1 has a jump, the linear chain continues from output_2
             if (jumpOutputs.indexOf(1) !== -1 && jumpOutputs.indexOf(2) === -1) {
-                prevOutput = 2; // linear chain uses the non-jump output
+                prevOutput = 2;
             } else if (jumpOutputs.indexOf(1) !== -1 && jumpOutputs.indexOf(2) !== -1) {
-                prevOutput = 0; // both outputs are jumps, no linear chain
+                prevOutput = 0; // both are jumps, no linear chain
             }
+            // If only output_2 has a jump, output_1 stays as linear (default)
         }
 
         x += isDec ? spacingX + 40 : spacingX;
@@ -777,23 +781,33 @@ function syncStepsToDrawflow() {
 function _markJumpConnections() {
     var conns = document.querySelectorAll('#drawflowCanvas svg.connection');
     conns.forEach(function(conn) {
-        // Drawflow connection classes contain output_X info
         var cls = conn.getAttribute('class') || '';
-        if (cls.indexOf('output_2') !== -1) {
-            conn.classList.add('df-jump');
-        }
-        // Also check backward connections
         var nodeOutMatch = cls.match(/node_out_node-(\d+)/);
         var nodeInMatch = cls.match(/node_in_node-(\d+)/);
-        if (nodeOutMatch && nodeInMatch) {
-            var outNode = document.getElementById('node-' + nodeOutMatch[1]);
-            var inNode = document.getElementById('node-' + nodeInMatch[1]);
-            if (outNode && inNode) {
-                var outX = parseFloat(outNode.style.left) || 0;
-                var inX = parseFloat(inNode.style.left) || 0;
-                if (inX < outX - 50) {
-                    conn.classList.add('df-jump');
-                }
+        if (!nodeOutMatch || !nodeInMatch) return;
+
+        var outId = parseInt(nodeOutMatch[1]);
+        var inId = parseInt(nodeInMatch[1]);
+
+        // Check if this is a backward connection (target node is before source)
+        var outNode = document.getElementById('node-' + outId);
+        var inNode = document.getElementById('node-' + inId);
+        if (outNode && inNode) {
+            var outX = parseFloat(outNode.style.left) || 0;
+            var inX = parseFloat(inNode.style.left) || 0;
+            if (inX < outX - 50) {
+                conn.classList.add('df-jump');
+                return;
+            }
+        }
+
+        // Check if this connection skips nodes (non-sequential forward jump)
+        var outStepIdx = _dfNodeMap[outId];
+        var inStepIdx = _dfNodeMap[inId];
+        if (outStepIdx !== undefined && inStepIdx !== undefined) {
+            // If it skips more than 1 step forward, it's a jump
+            if (inStepIdx - outStepIdx > 1) {
+                conn.classList.add('df-jump');
             }
         }
     });
@@ -974,17 +988,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
             _orig.apply(this, arguments);
 
-            // After save, refresh the 2D canvas
-            if (_canvasMode === '2d' && idx !== null && workflowSteps[idx]) {
-                var newOutputs = _getOutputCount(workflowSteps[idx]);
-                if (newOutputs !== prevOutputs) {
-                    // Output count changed — full re-sync needed
-                    _saveNodePositions();
-                    syncStepsToDrawflow();
-                    _addZoomControls();
-                } else {
-                    refreshDrawflowNode(idx);
-                }
+            // After save, always refresh the 2D canvas fully
+            if (_canvasMode === '2d') {
+                _saveNodePositions();
+                syncStepsToDrawflow();
+                _addZoomControls();
             }
         };
         saveStepEdit._hooked2d = true;
