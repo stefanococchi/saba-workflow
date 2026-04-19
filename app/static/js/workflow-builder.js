@@ -158,11 +158,6 @@ function getDefaultConfig(type) {
             scale_max: 5,
             allow_comment: true
         },
-        file_upload: {
-            required_files: [],
-            max_size_mb: 10,
-            allowed_types: ['pdf', 'jpg', 'png']
-        },
         human_approval: {
             approver_email: '',
             approval_message: '',
@@ -738,7 +733,6 @@ function renderStep(step, index) {
         goal_check: 'trophy',
         engagement_tracker: 'graph-up',
         survey: 'ui-checks',
-        file_upload: 'file-earmark-arrow-up',
         human_approval: 'person-check',
         export_data: 'download'
     };
