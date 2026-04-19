@@ -1058,6 +1058,39 @@ function refreshDrawflowNode(stepIndex) {
     }
 }
 
+// ========== Palette / Canvas Resizer ==========
+
+document.addEventListener('DOMContentLoaded', function() {
+    var resizer = document.getElementById('paletteResizer');
+    var palette = document.getElementById('paletteCol');
+    if (!resizer || !palette) return;
+
+    var saved = localStorage.getItem('paletteWidth');
+    if (saved) palette.style.width = saved + 'px';
+
+    var startX, startW;
+    resizer.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        startX = e.clientX;
+        startW = palette.offsetWidth;
+        resizer.style.background = 'var(--md-primary, #8B6914)';
+        resizer.style.opacity = '0.4';
+        document.addEventListener('mousemove', onDrag);
+        document.addEventListener('mouseup', stopDrag);
+    });
+    function onDrag(e) {
+        var w = Math.min(400, Math.max(160, startW + e.clientX - startX));
+        palette.style.width = w + 'px';
+    }
+    function stopDrag() {
+        resizer.style.background = 'transparent';
+        resizer.style.opacity = '1';
+        document.removeEventListener('mousemove', onDrag);
+        document.removeEventListener('mouseup', stopDrag);
+        localStorage.setItem('paletteWidth', palette.offsetWidth);
+    }
+});
+
 // ========== Draggable Modal ==========
 
 document.addEventListener('DOMContentLoaded', function() {
