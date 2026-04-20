@@ -3482,7 +3482,10 @@ function dryRunStepOne() {
     drState.paused = false;
     drState.stepping = true;
     document.getElementById('drResumeBtn').style.display = 'none';
-    document.getElementById('drStepBtn').style.display = 'none';
+    var stepBtn = document.getElementById('drStepBtn');
+    stepBtn.style.display = 'none';
+    stepBtn.className = 'btn btn-sm btn-outline-primary';
+    stepBtn.innerHTML = '<i class="bi bi-skip-forward-fill"></i> ' + _t('step');
     document.getElementById('drStopBtn').style.display = '';
     drExecuteStep(drState.resumeIdx);
 }
@@ -3727,8 +3730,11 @@ function drResolveStep(idx, result) {
             drState.paused = true;
             drState.resumeIdx = nextIdx;
             document.getElementById('drStopBtn').style.display = 'none';
-            document.getElementById('drResumeBtn').style.display = '';
-            document.getElementById('drStepBtn').style.display = '';
+            document.getElementById('drResumeBtn').style.display = 'none';
+            var stepBtn = document.getElementById('drStepBtn');
+            stepBtn.style.display = '';
+            stepBtn.className = 'btn btn-sm btn-primary dr-step-pulse';
+            stepBtn.innerHTML = '<i class="bi bi-skip-forward-fill"></i> ' + _t('dr_next_step');
             drBuildTimeline();
             drRenderDetail();
         } else {

@@ -685,6 +685,13 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
     flex: 1; min-width: 0;
     display: flex; flex-direction: column; gap: 16px;
 }
+@keyframes drPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(var(--md-primary-rgb, 121, 89, 57), 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(var(--md-primary-rgb, 121, 89, 57), 0); }
+}
+.dr-step-pulse {
+    animation: drPulse 1.5s ease-in-out 3;
+}
 .dr-empty-state {
     text-align: center; padding: 60px 20px;
     color: var(--md-on-surface-variant, #4D4639);
@@ -1470,6 +1477,7 @@ window._drT = {
     dr_started_stepping: {{ t.dr_started_stepping | tojson }},
     dr_paused: {{ t.dr_paused | tojson }},
     dr_resumed: {{ t.dr_resumed | tojson }},
+    dr_next_step: {{ t.dr_next_step | tojson }},
     dr_completed: {{ t.dr_completed | tojson }},
     dr_stopped: {{ t.dr_stopped | tojson }},
     dr_loop_detected: {{ t.dr_loop_detected | tojson }},
