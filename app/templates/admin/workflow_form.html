@@ -513,6 +513,453 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
     background: #198754;
     color: white;
 }
+
+/* ===== Dry Run — Review Tab Styles ===== */
+.review-tabs {
+    display: flex; gap: 4px;
+    background: var(--md-surface-container-high, #EDE9E1);
+    border-radius: 12px; padding: 4px;
+}
+.review-tab {
+    flex: 1; padding: 10px 20px; border: none; border-radius: 10px;
+    background: transparent; font-family: var(--md-font, inherit);
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    color: var(--md-on-surface-variant, #4D4639);
+    transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.review-tab.active {
+    background: var(--md-surface-container-lowest, #fff);
+    color: var(--md-primary, #8B6914);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-weight: 600;
+}
+.review-tab:hover:not(.active) { background: rgba(0,0,0,0.04); }
+
+/* Dry Run topbar */
+.dr-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--md-surface-container-lowest, #fff);
+    border: 1px solid var(--md-outline-variant, #D1C8B8);
+    border-radius: 12px; margin-bottom: 0;
+}
+.dr-topbar-left { display: flex; align-items: center; gap: 12px; }
+.dr-topbar-title { font-weight: 600; font-size: 15px; color: var(--md-on-surface, #1D1B16); }
+.dr-topbar-subtitle { font-size: 12px; color: var(--md-on-surface-variant, #4D4639); }
+.dr-topbar-right { display: flex; align-items: center; gap: 10px; }
+.dr-speed-control {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--md-on-surface-variant, #4D4639);
+}
+.dr-speed-control select {
+    padding: 4px 8px; border: 1px solid var(--md-outline-variant, #D1C8B8);
+    border-radius: 8px; font-size: 12px; background: var(--md-surface-container, #F4F0E8);
+}
+
+/* Progress */
+.dr-progress {
+    height: 4px; background: var(--md-surface-container-high, #EDE9E1);
+    border-radius: 0; overflow: hidden;
+}
+.dr-progress-bar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--md-primary, #8B6914), var(--md-tertiary, #9C5A2E));
+    transition: width 0.5s ease;
+}
+
+/* Timeline */
+.dr-timeline-section {
+    background: var(--md-surface-container-lowest, #fff);
+    border: 1px solid var(--md-outline-variant, #D1C8B8);
+    border-top: none; border-radius: 0 0 12px 12px;
+    padding: 16px 16px 12px; margin-bottom: 16px;
+}
+.dr-timeline-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+}
+.dr-timeline-label {
+    font-size: 12px; font-weight: 600; color: var(--md-on-surface-variant, #4D4639);
+    text-transform: uppercase; letter-spacing: 0.06em;
+}
+.dr-timeline-stats { display: flex; gap: 14px; }
+.dr-tl-stat {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--md-on-surface-variant, #4D4639);
+}
+.dr-tl-stat .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+}
+.dr-tl-stat .dot.done { background: var(--md-success, #386A20); }
+.dr-tl-stat .dot.running { background: var(--md-primary, #8B6914); }
+.dr-tl-stat .dot.pending { background: var(--md-outline-variant, #D1C8B8); }
+.dr-tl-stat .dot.skipped { background: var(--md-outline, #7F7667); }
+
+.dr-timeline-track-wrap { overflow-x: auto; padding-bottom: 4px; }
+.dr-timeline-track { display: flex; align-items: flex-start; min-width: max-content; padding: 0 4px; }
+
+/* Timeline node */
+.dr-tl-node {
+    display: flex; flex-direction: column; align-items: center;
+    cursor: pointer; min-width: 90px; transition: all 0.15s;
+}
+.dr-tl-node:hover .dr-tl-dot { transform: scale(1.1); }
+.dr-tl-node.selected .dr-tl-dot {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 3px var(--md-primary, #8B6914), 0 0 0 6px rgba(139,105,20,0.15) !important;
+}
+
+.dr-tl-dot-row { display: flex; align-items: center; width: 100%; }
+.dr-tl-connector { flex: 1; height: 3px; background: var(--md-outline-variant, #D1C8B8); transition: background 0.3s; }
+.dr-tl-connector.done { background: var(--md-success, #386A20); }
+.dr-tl-connector.active { background: var(--md-primary, #8B6914); }
+.dr-tl-connector.hide { visibility: hidden; }
+
+.dr-tl-dot {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; color: #fff; flex-shrink: 0;
+    transition: all 0.3s; position: relative;
+}
+.dr-tl-dot.pending { opacity: 0.4; filter: grayscale(0.4); }
+.dr-tl-dot.done { box-shadow: 0 0 0 3px var(--md-success-container, #B6F29B); }
+.dr-tl-dot.active { box-shadow: 0 0 0 3px var(--md-primary-container, #FFDEA1); animation: drPulse 2s ease-out infinite; }
+.dr-tl-dot.skipped { opacity: 0.35; }
+
+@keyframes drPulse {
+    0% { box-shadow: 0 0 0 3px var(--md-primary-container, #FFDEA1); }
+    50% { box-shadow: 0 0 0 7px rgba(139,105,20,0.08); }
+    100% { box-shadow: 0 0 0 3px var(--md-primary-container, #FFDEA1); }
+}
+
+/* Step type colors */
+.dr-tl-dot.t-email { background: #8B6914; }
+.dr-tl-dot.t-condition { background: #7B61C2; }
+.dr-tl-dot.t-wait_until { background: #5C6134; }
+.dr-tl-dot.t-human_approval { background: #9C5A2E; }
+.dr-tl-dot.t-goal_check { background: #386A20; }
+.dr-tl-dot.t-whatsapp { background: #25D366; }
+.dr-tl-dot.t-survey { background: #0277BD; }
+.dr-tl-dot.t-export_data { background: #6D4C41; }
+.dr-tl-dot.t-excel_write { background: #6D4C41; }
+.dr-tl-dot.t-sms { background: #E65100; }
+.dr-tl-dot.t-webhook { background: #455A64; }
+
+.dr-tl-status {
+    position: absolute; bottom: -2px; right: -2px;
+    width: 15px; height: 15px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; color: #fff;
+}
+.dr-tl-status.done { background: var(--md-success, #386A20); }
+.dr-tl-status.running { background: var(--md-primary, #8B6914); }
+.dr-tl-status.skip { background: var(--md-outline, #7F7667); }
+.dr-tl-status.error { background: var(--md-error, #B3261E); }
+
+.dr-tl-label { margin-top: 6px; text-align: center; max-width: 100px; }
+.dr-tl-label .name {
+    font-size: 10px; font-weight: 600; color: var(--md-on-surface, #1D1B16);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+}
+.dr-tl-label .type {
+    font-size: 9px; color: var(--md-on-surface-variant, #4D4639);
+    text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+/* Delay badge */
+.dr-tl-delay {
+    position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+    background: var(--md-warning-container, #FFDEA1); color: var(--md-warning, #7C5800);
+    font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+    white-space: nowrap; z-index: 5;
+}
+
+/* Canvas area */
+.dr-canvas {
+    display: flex; gap: 16px; min-height: 400px;
+}
+.dr-config-panel {
+    width: 300px; flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 12px;
+}
+.dr-detail-canvas {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; gap: 16px;
+}
+.dr-empty-state {
+    text-align: center; padding: 60px 20px;
+    color: var(--md-on-surface-variant, #4D4639);
+}
+
+/* Panel cards */
+.dr-panel-card {
+    background: var(--md-surface-container-lowest, #fff);
+    border: 1px solid var(--md-outline-variant, #D1C8B8);
+    border-radius: 12px; overflow: hidden;
+}
+.dr-panel-header {
+    padding: 12px 14px; display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none;
+    border-bottom: 1px solid var(--md-outline-variant, #D1C8B8);
+}
+.dr-panel-header h6 {
+    margin: 0; font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; gap: 7px;
+    color: var(--md-on-surface, #1D1B16);
+}
+.dr-panel-header h6 i { color: var(--md-on-surface-variant, #4D4639); }
+.dr-collapse-icon { font-size: 14px; color: var(--md-on-surface-variant); transition: transform 0.2s; }
+.dr-panel-header.collapsed .dr-collapse-icon { transform: rotate(-90deg); }
+.dr-panel-body { padding: 12px 14px; }
+.dr-panel-body.collapsed { display: none; }
+
+/* Fields */
+.dr-field { margin-bottom: 10px; }
+.dr-field:last-child { margin-bottom: 0; }
+.dr-field label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--md-on-surface-variant, #4D4639);
+    margin-bottom: 4px; display: block;
+}
+.dr-input {
+    width: 100%; padding: 8px 12px;
+    border: 1px solid var(--md-outline-variant, #D1C8B8);
+    border-radius: 8px; font-family: var(--md-font, inherit);
+    font-size: 13px; background: var(--md-surface-container-low, #FAF6EE);
+    color: var(--md-on-surface, #1D1B16); outline: none; transition: border-color 0.2s;
+}
+.dr-input:focus { border-color: var(--md-primary, #8B6914); box-shadow: 0 0 0 2px rgba(139,105,20,0.12); }
+.dr-json {
+    font-family: 'Fira Code', 'JetBrains Mono', monospace;
+    font-size: 11px; line-height: 1.5; resize: vertical;
+}
+
+/* Chips */
+.dr-chip-group { display: flex; flex-wrap: wrap; gap: 5px; }
+.dr-chip {
+    padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    border: 1px solid var(--md-outline-variant, #D1C8B8);
+    background: transparent; color: var(--md-on-surface-variant, #4D4639);
+    cursor: pointer; transition: all 0.15s;
+}
+.dr-chip.active {
+    background: var(--md-primary-container, #FFDEA1);
+    color: var(--md-on-primary-container, #2B1D00);
+    border-color: var(--md-primary, #8B6914);
+}
+.dr-chip:hover:not(.active) { background: var(--md-surface-container-high, #EDE9E1); }
+
+/* Validation */
+.dr-validation-list { display: flex; flex-direction: column; gap: 6px; }
+.dr-val-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 500;
+}
+.dr-val-item.pass { background: rgba(56,106,32,0.06); color: var(--md-success, #386A20); }
+.dr-val-item.fail { background: rgba(179,38,30,0.06); color: var(--md-error, #B3261E); }
+.dr-val-item.warn { background: rgba(124,88,0,0.06); color: var(--md-warning, #7C5800); }
+.dr-val-item i { font-size: 14px; }
+
+/* Detail cards */
+.dr-step-card {
+    background: var(--md-surface-container-lowest, #fff);
+    border: 1px solid var(--md-outline-variant, #D1C8B8);
+    border-radius: 12px; overflow: hidden;
+}
+.dr-step-card.past { opacity: 0.65; }
+.dr-step-header {
+    padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--md-outline-variant, #D1C8B8);
+}
+.dr-step-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: #fff;
+}
+.dr-step-info h5 { margin: 0; font-size: 14px; font-weight: 600; }
+.dr-step-meta {
+    font-size: 11px; color: var(--md-on-surface-variant, #4D4639);
+    display: flex; align-items: center; gap: 10px; margin-top: 2px;
+}
+.dr-badge {
+    padding: 2px 8px; border-radius: 20px; font-size: 9px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.dr-badge.done { background: var(--md-success-container, #B6F29B); color: var(--md-success, #386A20); }
+.dr-badge.running { background: var(--md-primary-container, #FFDEA1); color: var(--md-primary, #8B6914); }
+.dr-badge.skipped { background: var(--md-surface-container-high, #EDE9E1); color: var(--md-outline, #7F7667); }
+.dr-step-body { padding: 16px; }
+
+/* Email preview */
+.dr-email-preview {
+    border: 1px solid var(--md-outline-variant, #D1C8B8); border-radius: 10px; overflow: hidden;
+}
+.dr-email-bar {
+    background: var(--md-surface-container-high, #EDE9E1);
+    padding: 8px 12px; font-size: 12px;
+    border-bottom: 1px solid var(--md-outline-variant, #D1C8B8);
+}
+.dr-email-bar .row-lbl { display: flex; gap: 6px; margin-bottom: 2px; }
+.dr-email-bar .lbl { color: var(--md-on-surface-variant); font-weight: 600; min-width: 25px; }
+.dr-email-body {
+    padding: 16px; background: #fff; min-height: 100px;
+    font-size: 13px; line-height: 1.7; color: #333;
+}
+.dr-placeholder {
+    background: var(--md-primary-container, #FFDEA1);
+    padding: 1px 5px; border-radius: 3px; font-weight: 500;
+    font-size: 12px; color: var(--md-on-primary-container, #2B1D00);
+}
+
+/* Condition evaluation */
+.dr-condition-rule {
+    background: var(--md-surface-container, #F4F0E8); border-radius: 10px;
+    padding: 12px 14px; display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px;
+}
+.dr-cond-field {
+    font-family: 'Fira Code', monospace; font-size: 12px;
+    background: var(--md-surface-container-highest, #E7E3DB);
+    padding: 3px 8px; border-radius: 6px;
+}
+.dr-cond-op { font-size: 11px; font-weight: 700; color: #7B61C2; text-transform: uppercase; }
+.dr-cond-val { font-family: 'Fira Code', monospace; font-size: 12px; }
+.dr-cond-result { margin-left: auto; font-size: 16px; }
+
+.dr-branch-outcome {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-radius: 10px; font-size: 12px; font-weight: 500;
+    margin-bottom: 6px;
+}
+.dr-branch-outcome.taken {
+    background: var(--md-success-container, #B6F29B); color: var(--md-success, #386A20);
+    border: 1px solid rgba(56,106,32,0.15);
+}
+.dr-branch-outcome.not-taken {
+    background: var(--md-surface-container, #F4F0E8);
+    color: var(--md-on-surface-variant, #4D4639); opacity: 0.5;
+}
+
+/* Approval buttons */
+.dr-approval-area {
+    text-align: center; padding: 16px;
+    background: var(--md-surface-container, #F4F0E8); border-radius: 10px;
+}
+.dr-approval-area p { font-size: 12px; color: var(--md-on-surface-variant); margin-bottom: 12px; }
+.dr-approval-btns { display: flex; gap: 10px; justify-content: center; }
+
+/* Log */
+.dr-log-entry {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid var(--md-outline-variant, #D1C8B8);
+    font-size: 12px;
+}
+.dr-log-entry:last-child { border-bottom: none; }
+.dr-log-time {
+    font-family: 'Fira Code', monospace; font-size: 10px; white-space: nowrap;
+    color: var(--md-on-surface-variant); min-width: 48px;
+}
+.dr-log-icon {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: #fff; flex-shrink: 0;
+}
+.dr-log-text { color: var(--md-on-surface); line-height: 1.5; }
+.dr-log-text strong { font-weight: 600; }
+.dr-log-detail { display: block; font-size: 11px; color: var(--md-on-surface-variant); }
+
+/* Landing mini-form */
+.dr-landing-form {
+    margin-top: 12px;
+    background: linear-gradient(135deg, var(--md-surface-container, #F4F0E8) 0%, var(--md-surface-container-high, #EDE9E1) 100%);
+    border: 2px solid var(--md-primary, #8B6914);
+    border-radius: 14px;
+    padding: 20px;
+    animation: drInteractivePulse 2s ease-in-out infinite;
+}
+.dr-landing-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--md-on-surface, #1D1B16);
+    margin-bottom: 4px;
+}
+.dr-landing-subtitle {
+    font-size: 12px;
+    color: var(--md-on-surface-variant, #4D4639);
+    margin-bottom: 14px;
+}
+.dr-landing-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.dr-landing-field {
+    min-width: 0;
+}
+.dr-landing-field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--md-on-surface-variant, #4D4639);
+    margin-bottom: 4px;
+    display: block;
+}
+.dr-landing-field .dr-input {
+    background: var(--md-surface-container-lowest, #fff);
+}
+.dr-radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.dr-radio-item {
+    font-size: 12px;
+    color: var(--md-on-surface, #1D1B16);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+.dr-radio-item input { cursor: pointer; }
+.dr-landing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--md-outline-variant, #D1C8B8);
+}
+
+/* Interactive action box */
+.dr-interactive-box {
+    margin-top: 12px;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--md-primary-container, #FFDEA1) 0%, var(--md-tertiary-container, #FFDBC9) 100%);
+    border-radius: 12px;
+    border: 2px solid var(--md-primary, #8B6914);
+    animation: drInteractivePulse 2s ease-in-out infinite;
+}
+@keyframes drInteractivePulse {
+    0%, 100% { border-color: var(--md-primary, #8B6914); }
+    50% { border-color: var(--md-tertiary, #9C5A2E); }
+}
+.dr-interactive-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--md-on-primary-container, #2B1D00);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.dr-interactive-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+@media (max-width: 900px) {
+    .dr-canvas { flex-direction: column; }
+    .dr-config-panel { width: 100%; }
+}
 </style>
 {% endblock %}
 
@@ -767,17 +1214,189 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
         </div>
     </div>
 
-    <!-- Step 3: Review -->
+    <!-- Step 3: Review & Dry Run -->
     <div class="wizard-content" data-step="3" style="display: none;">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-check-circle"></i> {{ t.review_save }}</h5>
-            </div>
-            <div class="card-body">
-                <div id="reviewContent"></div>
+        <!-- Review tabs -->
+        <div class="review-tabs mb-3">
+            <button type="button" class="review-tab active" data-tab="review" onclick="switchReviewTab('review')">
+                <i class="bi bi-check-circle"></i> {{ t.review_save }}
+            </button>
+            <button type="button" class="review-tab" data-tab="dryrun" onclick="switchReviewTab('dryrun')">
+                <i class="bi bi-play-circle"></i> {{ t.dry_run }}
+            </button>
+        </div>
+
+        <!-- Tab: Review (existing) -->
+        <div class="review-tab-content" data-tab="review">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-check-circle"></i> {{ t.review_save }}</h5>
+                </div>
+                <div class="card-body">
+                    <div id="reviewContent"></div>
+                </div>
             </div>
         </div>
-        
+
+        <!-- Tab: Dry Run -->
+        <div class="review-tab-content" data-tab="dryrun" style="display:none">
+
+            <!-- Dry Run Top Bar -->
+            <div class="dr-topbar">
+                <div class="dr-topbar-left">
+                    <span class="dr-topbar-title"><i class="bi bi-bug"></i> {{ t.dry_run_test }}</span>
+                    <span class="dr-topbar-subtitle" id="drStepCount"></span>
+                </div>
+                <div class="dr-topbar-right">
+                    <div class="dr-speed-control">
+                        <i class="bi bi-speedometer2"></i>
+                        <select id="drSpeed">
+                            <option value="0">{{ t.instant }}</option>
+                            <option value="1000" selected>1x</option>
+                            <option value="200">5x</option>
+                            <option value="100">10x</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dryRunReset()" id="drResetBtn" style="display:none">
+                        <i class="bi bi-arrow-counterclockwise"></i> {{ t.reset }}
+                    </button>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="dryRunStop()" id="drStopBtn" style="display:none">
+                        <i class="bi bi-pause-fill"></i> {{ t.pause }}
+                    </button>
+                    <button type="button" class="btn btn-sm btn-success" onclick="dryRunResume()" id="drResumeBtn" style="display:none">
+                        <i class="bi bi-play-fill"></i> {{ t.resume }}
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="dryRunStepOne()" id="drStepBtn">
+                        <i class="bi bi-skip-forward-fill"></i> {{ t.step }}
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="dryRunStart()" id="drStartBtn">
+                        <i class="bi bi-play-fill"></i> {{ t.start_dry_run }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="dr-progress"><div class="dr-progress-bar" id="drProgressBar"></div></div>
+
+            <!-- Timeline -->
+            <div class="dr-timeline-section">
+                <div class="dr-timeline-header">
+                    <span class="dr-timeline-label"><i class="bi bi-bezier2"></i> {{ t.execution_timeline }}</span>
+                    <div class="dr-timeline-stats" id="drTimelineStats"></div>
+                </div>
+                <div class="dr-timeline-track-wrap">
+                    <div class="dr-timeline-track" id="drTimeline"></div>
+                </div>
+            </div>
+
+            <!-- Main canvas area -->
+            <div class="dr-canvas">
+                <!-- Left: config -->
+                <div class="dr-config-panel">
+
+                    <!-- Test Persona -->
+                    <div class="dr-panel-card">
+                        <div class="dr-panel-header" onclick="toggleDrPanel(this)">
+                            <h6><i class="bi bi-person-badge"></i> {{ t.test_persona }}</h6>
+                            <i class="bi bi-chevron-down dr-collapse-icon"></i>
+                        </div>
+                        <div class="dr-panel-body">
+                            <div class="dr-field">
+                                <label>{{ t.name }}</label>
+                                <input class="dr-input" id="drPersonaName" value="Marco Rossi" />
+                            </div>
+                            <div class="dr-field">
+                                <label>{{ t.email }}</label>
+                                <input class="dr-input" id="drPersonaEmail" value="test@example.com" />
+                            </div>
+                            <div class="dr-field">
+                                <label>{{ t.phone }}</label>
+                                <input class="dr-input" id="drPersonaPhone" value="+39 333 1234567" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dati simulati -->
+                    <div class="dr-panel-card">
+                        <div class="dr-panel-header" onclick="toggleDrPanel(this)">
+                            <h6><i class="bi bi-braces"></i> {{ t.simulated_data }}</h6>
+                            <i class="bi bi-chevron-down dr-collapse-icon"></i>
+                        </div>
+                        <div class="dr-panel-body">
+                            <div class="dr-field">
+                                <label>collected_data (JSON)</label>
+                                <textarea class="dr-input dr-json" id="drCollectedData" rows="4">{
+  "azienda": "Acme Srl",
+  "ruolo": "CTO",
+  "budget": "premium"
+}</textarea>
+                            </div>
+                            <div class="dr-field">
+                                <label>sabaform_data (JSON)</label>
+                                <textarea class="dr-input dr-json" id="drSabaformData" rows="3">{
+  "evento": "Workshop 2026",
+  "data_iscrizione": "2026-04-15"
+}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Risposte simulate -->
+                    <div class="dr-panel-card">
+                        <div class="dr-panel-header" onclick="toggleDrPanel(this)">
+                            <h6><i class="bi bi-toggles"></i> {{ t.simulated_responses }}</h6>
+                            <i class="bi bi-chevron-down dr-collapse-icon"></i>
+                        </div>
+                        <div class="dr-panel-body">
+                            <div class="dr-field">
+                                <label>{{ t.landing_form }}</label>
+                                <div class="dr-chip-group">
+                                    <span class="dr-chip active" data-group="landing" data-val="filled">{{ t.filled }}</span>
+                                    <span class="dr-chip" data-group="landing" data-val="empty">{{ t.not_filled }}</span>
+                                    <span class="dr-chip" data-group="landing" data-val="timeout">{{ t.timeout }}</span>
+                                </div>
+                            </div>
+                            <div class="dr-field">
+                                <label>{{ t.approval }}</label>
+                                <div class="dr-chip-group">
+                                    <span class="dr-chip active" data-group="approval" data-val="approved">{{ t.approved }}</span>
+                                    <span class="dr-chip" data-group="approval" data-val="rejected">{{ t.rejected }}</span>
+                                    <span class="dr-chip" data-group="approval" data-val="timeout">{{ t.no_response }}</span>
+                                </div>
+                            </div>
+                            <div class="dr-field">
+                                <label>{{ t.email_open }}</label>
+                                <div class="dr-chip-group">
+                                    <span class="dr-chip active" data-group="email_open" data-val="opened">{{ t.opened }}</span>
+                                    <span class="dr-chip" data-group="email_open" data-val="not_opened">{{ t.not_opened }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Validazione -->
+                    <div class="dr-panel-card">
+                        <div class="dr-panel-header" onclick="toggleDrPanel(this)">
+                            <h6><i class="bi bi-shield-check"></i> {{ t.validation }}</h6>
+                            <i class="bi bi-chevron-down dr-collapse-icon"></i>
+                        </div>
+                        <div class="dr-panel-body">
+                            <div id="drValidation" class="dr-validation-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: detail canvas -->
+                <div class="dr-detail-canvas" id="drDetailCanvas">
+                    <div class="dr-empty-state">
+                        <i class="bi bi-play-circle" style="font-size:3rem;opacity:0.3"></i>
+                        <p>{{ t.dr_empty_title }}</p>
+                        <p class="text-muted" style="font-size:12px">{{ t.dr_empty_subtitle }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="mt-3 d-flex justify-content-between">
             <button type="button" class="btn btn-outline-secondary" onclick="prevStep()">
                 <i class="bi bi-arrow-left"></i> {{ t.back }}
@@ -812,8 +1431,117 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
 <!-- Drawflow 2D canvas -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
 <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
-<script>window._mailFromEmail = {{ config.MAIL_FROM_EMAIL | tojson }};</script>
-<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=3.0.0"></script>
+<script>window._mailFromEmail = {{ config.MAIL_FROM_EMAIL | tojson }};
+window._drT = {
+    dry_run_test: {{ t.dry_run_test | tojson }},
+    start_dry_run: {{ t.start_dry_run | tojson }},
+    pause: {{ t.pause | tojson }},
+    resume: {{ t.resume | tojson }},
+    reset: {{ t.reset | tojson }},
+    step: {{ t.step | tojson }},
+    speed: {{ t.speed | tojson }},
+    instant: {{ t.instant | tojson }},
+    execution_timeline: {{ t.execution_timeline | tojson }},
+    completed_pl: {{ t.completed_pl | tojson }},
+    running: {{ t.running | tojson }},
+    waiting_pl: {{ t.waiting_pl | tojson }},
+    skipped_pl: {{ t.skipped_pl | tojson }},
+    test_persona: {{ t.test_persona | tojson }},
+    simulated_data: {{ t.simulated_data | tojson }},
+    simulated_responses: {{ t.simulated_responses | tojson }},
+    validation: {{ t.validation | tojson }},
+    landing_form: {{ t.landing_form | tojson }},
+    filled: {{ t.filled | tojson }},
+    not_filled: {{ t.not_filled | tojson }},
+    timeout: {{ t.timeout | tojson }},
+    approval: {{ t.approval | tojson }},
+    approved: {{ t.approved | tojson }},
+    rejected: {{ t.rejected | tojson }},
+    no_response: {{ t.no_response | tojson }},
+    email_open: {{ t.email_open | tojson }},
+    opened: {{ t.opened | tojson }},
+    not_opened: {{ t.not_opened | tojson }},
+    name: {{ t.name | tojson }},
+    email: {{ t.email | tojson }},
+    phone: {{ t.phone | tojson }},
+    dr_empty_title: {{ t.dr_empty_title | tojson }},
+    dr_empty_subtitle: {{ t.dr_empty_subtitle | tojson }},
+    dr_started: {{ t.dr_started | tojson }},
+    dr_started_stepping: {{ t.dr_started_stepping | tojson }},
+    dr_paused: {{ t.dr_paused | tojson }},
+    dr_resumed: {{ t.dr_resumed | tojson }},
+    dr_completed: {{ t.dr_completed | tojson }},
+    dr_stopped: {{ t.dr_stopped | tojson }},
+    dr_loop_detected: {{ t.dr_loop_detected | tojson }},
+    dr_loop_step: {{ t.dr_loop_step | tojson }},
+    dr_loop_limit: {{ t.dr_loop_limit | tojson }},
+    dr_loop_step_msg: {{ t.dr_loop_step_msg | tojson }},
+    dr_resume_from: {{ t.dr_resume_from | tojson }},
+    dr_from: {{ t.dr_from | tojson }},
+    dr_persona: {{ t.dr_persona | tojson }},
+    dr_steps_to_run: {{ t.dr_steps_to_run | tojson }},
+    dr_executed: {{ t.dr_executed | tojson }},
+    dr_email_sent: {{ t.dr_email_sent | tojson }},
+    dr_wait_skip: {{ t.dr_wait_skip | tojson }},
+    dr_condition_evaluated: {{ t.dr_condition_evaluated | tojson }},
+    dr_goal_waiting: {{ t.dr_goal_waiting | tojson }},
+    dr_goal_reached: {{ t.dr_goal_reached | tojson }},
+    dr_goal_not_reached: {{ t.dr_goal_not_reached | tojson }},
+    dr_approval_waiting: {{ t.dr_approval_waiting | tojson }},
+    dr_survey_waiting: {{ t.dr_survey_waiting | tojson }},
+    dr_whatsapp_sent: {{ t.dr_whatsapp_sent | tojson }},
+    dr_export_simulated: {{ t.dr_export_simulated | tojson }},
+    dr_type_unhandled: {{ t.dr_type_unhandled | tojson }},
+    dr_skipped: {{ t.dr_skipped | tojson }},
+    dr_branch_skip: {{ t.dr_branch_skip | tojson }},
+    dr_waiting_execution: {{ t.dr_waiting_execution | tojson }},
+    dr_current_value: {{ t.dr_current_value | tojson }},
+    dr_reached: {{ t.dr_reached | tojson }},
+    dr_not_reached: {{ t.dr_not_reached | tojson }},
+    dr_approval_request: {{ t.dr_approval_request | tojson }},
+    dr_approved_label: {{ t.dr_approved_label | tojson }},
+    dr_rejected_label: {{ t.dr_rejected_label | tojson }},
+    dr_auto_skip: {{ t.dr_auto_skip | tojson }},
+    dr_response: {{ t.dr_response | tojson }},
+    dr_simulated: {{ t.dr_simulated | tojson }},
+    dr_execution_log: {{ t.dr_execution_log | tojson }},
+    dr_events: {{ t.dr_events | tojson }},
+    dr_subject_configured: {{ t.dr_subject_configured | tojson }},
+    dr_subject_missing: {{ t.dr_subject_missing | tojson }},
+    dr_landing_no_template: {{ t.dr_landing_no_template | tojson }},
+    dr_condition_field: {{ t.dr_condition_field | tojson }},
+    dr_configured: {{ t.dr_configured | tojson }},
+    dr_missing: {{ t.dr_missing | tojson }},
+    dr_file_path_missing: {{ t.dr_file_path_missing | tojson }},
+    dr_approver_missing: {{ t.dr_approver_missing | tojson }},
+    dr_no_steps: {{ t.dr_no_steps | tojson }},
+    dr_workflow_valid: {{ t.dr_workflow_valid | tojson }},
+    dr_no_step_remaining: {{ t.dr_no_step_remaining | tojson }},
+    dr_simulate_landing: {{ t.dr_simulate_landing | tojson }},
+    dr_simulate_approver: {{ t.dr_simulate_approver | tojson }},
+    dr_goal_question: {{ t.dr_goal_question | tojson }},
+    dr_yes_reached: {{ t.dr_yes_reached | tojson }},
+    dr_no_not_reached: {{ t.dr_no_not_reached | tojson }},
+    dr_submit_form: {{ t.dr_submit_form | tojson }},
+    dr_does_not_fill: {{ t.dr_does_not_fill | tojson }},
+    dr_landing_waiting: {{ t.dr_landing_waiting | tojson }},
+    dr_landing_filled: {{ t.dr_landing_filled | tojson }},
+    dr_fields: {{ t.dr_fields | tojson }},
+    dr_no_fields_found: {{ t.dr_no_fields_found | tojson }},
+    dr_form_filled: {{ t.dr_form_filled | tojson }},
+    dr_select_option: {{ t.dr_select_option | tojson }},
+    dr_file_upload_sim: {{ t.dr_file_upload_sim | tojson }},
+    dr_collected_data_label: {{ t.dr_collected_data_label | tojson }},
+    dr_if_approved: {{ t.dr_if_approved | tojson }},
+    dr_if_rejected: {{ t.dr_if_rejected | tojson }},
+    dr_if_reached: {{ t.dr_if_reached | tojson }},
+    dr_if_not_reached: {{ t.dr_if_not_reached | tojson }},
+    completed: {{ t.completed | tojson }},
+    in_progress: {{ t.get('in_progress', 'In Progress') | tojson }},
+    waiting: {{ t.get('pending', 'Pending') | tojson }},
+    skipped: {{ t.dr_skipped | tojson }}
+};</script>
+<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=4.1.0"></script>
 <script src="{{ url_for('static', filename='js/workflow-canvas-2d.js') }}?v=1.0.0"></script>
 {% if mode == 'edit' and workflow and workflow.steps %}
 <script>

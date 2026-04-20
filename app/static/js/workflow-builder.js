@@ -3216,3 +3216,1023 @@ function saveLpConfig() {
     })
     .catch(function() { alert('Errore di connessione'); });
 }
+
+
+/* =============================================
+   DRY RUN ENGINE
+   ============================================= */
+var drState = null;  // dry run state
+var drTimerId = null; // setTimeout id for stop support
+var DR_MAX_ITERATIONS = 50; // loop guard
+// Translation helper — falls back to key if not found
+function _t(key) { return (window._drT && window._drT[key]) || key; }
+
+var DR_TYPE_ICONS = {
+    email: 'bi-envelope-fill', sms: 'bi-phone-fill', webhook: 'bi-globe',
+    wait_until: 'bi-hourglass-split', goal_check: 'bi-bullseye',
+    export_data: 'bi-download', condition: 'bi-signpost-split-fill',
+    survey: 'bi-ui-checks', human_approval: 'bi-person-check-fill',
+    excel_write: 'bi-file-earmark-spreadsheet-fill', whatsapp: 'bi-whatsapp'
+};
+
+var DR_TYPE_COLORS = {
+    email: '#8B6914', condition: '#7B61C2', wait_until: '#5C6134',
+    human_approval: '#9C5A2E', goal_check: '#386A20', whatsapp: '#25D366',
+    survey: '#0277BD', export_data: '#6D4C41', excel_write: '#6D4C41',
+    sms: '#E65100', webhook: '#455A64'
+};
+
+function switchReviewTab(tab) {
+    document.querySelectorAll('.review-tab').forEach(function(t) {
+        t.classList.toggle('active', t.dataset.tab === tab);
+    });
+    document.querySelectorAll('.review-tab-content').forEach(function(c) {
+        c.style.display = c.dataset.tab === tab ? '' : 'none';
+    });
+    if (tab === 'dryrun') {
+        drBuildTimeline();
+        drRunValidation();
+    }
+}
+
+function toggleDrPanel(header) {
+    header.classList.toggle('collapsed');
+    var body = header.nextElementSibling;
+    body.classList.toggle('collapsed');
+}
+
+// Chip toggle
+document.addEventListener('click', function(e) {
+    if (!e.target.classList.contains('dr-chip')) return;
+    var group = e.target.closest('.dr-chip-group');
+    if (!group) return;
+    group.querySelectorAll('.dr-chip').forEach(function(c) { c.classList.remove('active'); });
+    e.target.classList.add('active');
+});
+
+function drGetSimConfig() {
+    var responses = {};
+    document.querySelectorAll('.dr-chip.active[data-group]').forEach(function(c) {
+        responses[c.dataset.group] = c.dataset.val;
+    });
+    var collectedData = {}, sabaformData = {};
+    try { collectedData = JSON.parse(document.getElementById('drCollectedData').value || '{}'); } catch(e) {}
+    try { sabaformData = JSON.parse(document.getElementById('drSabaformData').value || '{}'); } catch(e) {}
+    return {
+        persona: {
+            name: document.getElementById('drPersonaName').value,
+            email: document.getElementById('drPersonaEmail').value,
+            phone: document.getElementById('drPersonaPhone').value
+        },
+        collected_data: collectedData,
+        sabaform_data: sabaformData,
+        responses: responses
+    };
+}
+
+// Build timeline from workflowSteps
+function drBuildTimeline() {
+    var track = document.getElementById('drTimeline');
+    if (!track) return;
+    var html = '';
+    var count = document.getElementById('drStepCount');
+    if (count) count.textContent = workflowSteps.length + ' steps';
+
+    workflowSteps.forEach(function(step, i) {
+        var stateClass = drState ? (drState.stepStates[i] || 'pending') : 'pending';
+        var dotState = stateClass;
+        var selected = drState && drState.selectedIdx === i ? ' selected' : '';
+        var connL = i === 0 ? ' hide' : (drState && drState.stepStates[i-1] === 'done' ? ' done' : (drState && drState.stepStates[i] === 'active' ? ' active' : ''));
+        var connR = i === workflowSteps.length - 1 ? ' hide' : (drState && drState.stepStates[i] === 'done' ? ' done' : '');
+
+        html += '<div class="dr-tl-node' + selected + '" data-idx="' + i + '" onclick="drSelectNode(' + i + ')">';
+        html += '<div class="dr-tl-dot-row">';
+
+        // delay badge on connector
+        if (i > 0 && step.config.delay_hours) {
+            html += '<div class="dr-tl-connector' + connL + '" style="position:relative">';
+            html += '<span class="dr-tl-delay"><i class="bi bi-clock"></i> ' + step.config.delay_hours + 'h</span>';
+            html += '</div>';
+        } else {
+            html += '<div class="dr-tl-connector' + connL + '"></div>';
+        }
+
+        html += '<div class="dr-tl-dot t-' + step.type + ' ' + dotState + '">';
+        html += '<i class="bi ' + (DR_TYPE_ICONS[step.type] || 'bi-gear') + '"></i>';
+        if (stateClass === 'done') html += '<span class="dr-tl-status done"><i class="bi bi-check"></i></span>';
+        else if (stateClass === 'active') html += '<span class="dr-tl-status running"><i class="bi bi-three-dots"></i></span>';
+        else if (stateClass === 'skipped') html += '<span class="dr-tl-status skip"><i class="bi bi-dash"></i></span>';
+        html += '</div>';
+        html += '<div class="dr-tl-connector' + connR + '"></div>';
+        html += '</div>';
+        html += '<div class="dr-tl-label"><span class="name">' + step.name + '</span>';
+        html += '<span class="type">' + step.type.replace(/_/g, ' ') + '</span></div>';
+        html += '</div>';
+    });
+    track.innerHTML = html;
+    drUpdateStats();
+}
+
+function drUpdateStats() {
+    var el = document.getElementById('drTimelineStats');
+    if (!el || !drState) { if (el) el.innerHTML = ''; return; }
+    var counts = { done: 0, active: 0, pending: 0, skipped: 0 };
+    drState.stepStates.forEach(function(s) { counts[s] = (counts[s] || 0) + 1; });
+    var html = '';
+    if (counts.done) html += '<span class="dr-tl-stat"><span class="dot done"></span> ' + counts.done + ' ' + _t('completed_pl') + '</span>';
+    if (counts.active) html += '<span class="dr-tl-stat"><span class="dot running"></span> ' + counts.active + ' ' + _t('running') + '</span>';
+    if (counts.pending) html += '<span class="dr-tl-stat"><span class="dot pending"></span> ' + counts.pending + ' ' + _t('waiting_pl') + '</span>';
+    if (counts.skipped) html += '<span class="dr-tl-stat"><span class="dot skipped"></span> ' + counts.skipped + ' ' + _t('skipped_pl') + '</span>';
+    el.innerHTML = html;
+}
+
+function drSelectNode(idx) {
+    if (!drState) return;
+    drState.selectedIdx = idx;
+    drBuildTimeline();
+    drRenderDetail();
+}
+
+// Validation
+function drRunValidation() {
+    var el = document.getElementById('drValidation');
+    if (!el) return;
+    var checks = [];
+
+    workflowSteps.forEach(function(step) {
+        if (step.type === 'email' && step.config.subject) {
+            checks.push({ ok: true, msg: step.name + ': ' + _t('dr_subject_configured') });
+        } else if (step.type === 'email' && !step.config.subject) {
+            checks.push({ ok: false, msg: step.name + ': ' + _t('dr_subject_missing'), warn: false });
+        }
+        if (step.type === 'email' && step.config.has_landing && !step.config.landing_template_id) {
+            checks.push({ ok: false, msg: step.name + ': ' + _t('dr_landing_no_template'), warn: true });
+        }
+        if (step.type === 'condition') {
+            var fieldOk = step.config.field && step.config.field.length > 0;
+            checks.push({ ok: fieldOk, msg: step.name + ': ' + _t('dr_condition_field') + ' ' + (fieldOk ? _t('dr_configured') : _t('dr_missing')), warn: !fieldOk });
+        }
+        if (step.type === 'excel_write' && !step.config.file_path) {
+            checks.push({ ok: false, msg: step.name + ': ' + _t('dr_file_path_missing'), warn: true });
+        }
+        if (step.type === 'human_approval' && !step.config.approver_email) {
+            checks.push({ ok: false, msg: step.name + ': ' + _t('dr_approver_missing'), warn: true });
+        }
+    });
+
+    if (workflowSteps.length === 0) {
+        checks.push({ ok: false, msg: _t('dr_no_steps') });
+    }
+    if (checks.length === 0) {
+        checks.push({ ok: true, msg: _t('dr_workflow_valid') });
+    }
+
+    el.innerHTML = checks.map(function(c) {
+        var cls = c.ok ? 'pass' : (c.warn ? 'warn' : 'fail');
+        var icon = c.ok ? 'bi-check-circle-fill' : (c.warn ? 'bi-exclamation-triangle-fill' : 'bi-x-circle-fill');
+        return '<div class="dr-val-item ' + cls + '"><i class="bi ' + icon + '"></i> ' + c.msg + '</div>';
+    }).join('');
+}
+
+// Start dry run
+function drRunStart(stepping) {
+    if (workflowSteps.length === 0) return;
+
+    var cfg = drGetSimConfig();
+    drState = {
+        config: cfg,
+        stepStates: workflowSteps.map(function() { return 'pending'; }),
+        stepResults: [],
+        log: [],
+        currentIdx: 0,
+        selectedIdx: 0,
+        running: true,
+        paused: false,
+        stepping: !!stepping,
+        startTime: Date.now(),
+        iterations: 0,
+        visitCount: workflowSteps.map(function() { return 0; }),
+        resumeIdx: 0
+    };
+    drTimerId = null;
+
+    document.getElementById('drStartBtn').style.display = 'none';
+    document.getElementById('drResetBtn').style.display = '';
+    document.getElementById('drStopBtn').style.display = '';
+    document.getElementById('drStepBtn').style.display = 'none';
+    document.getElementById('drResumeBtn').style.display = 'none';
+    document.getElementById('drProgressBar').style.width = '0%';
+
+    drLog('success', 'bi-play-fill', stepping ? _t('dr_started_stepping') : _t('dr_started'),
+        _t('dr_persona') + ': ' + cfg.persona.name + ' — ' + workflowSteps.length + ' ' + _t('dr_steps_to_run'));
+    drState.stepStates[0] = 'active';
+    drBuildTimeline();
+    drRenderDetail();
+    drExecuteStep(0);
+}
+
+function dryRunStart() { drRunStart(false); }
+
+function dryRunStop() {
+    if (drTimerId) { clearTimeout(drTimerId); drTimerId = null; }
+    if (drState && drState.running) {
+        drState.running = false;
+        drState.paused = true;
+        // Find the next step to resume from — the current active or next pending
+        var resumeIdx = -1;
+        for (var i = 0; i < drState.stepStates.length; i++) {
+            if (drState.stepStates[i] === 'active' || drState.stepStates[i] === 'pending') {
+                resumeIdx = i;
+                break;
+            }
+        }
+        drState.resumeIdx = resumeIdx;
+        drLog('warning', 'bi-pause-circle-fill', _t('dr_paused'),
+            resumeIdx >= 0 ? _t('dr_resume_from') + ': ' + workflowSteps[resumeIdx].name : _t('dr_no_step_remaining'));
+        drBuildTimeline();
+        drRenderDetail();
+    }
+    document.getElementById('drStopBtn').style.display = 'none';
+    if (drState && drState.resumeIdx >= 0) {
+        document.getElementById('drResumeBtn').style.display = '';
+        document.getElementById('drStepBtn').style.display = '';
+    }
+}
+
+function dryRunResume() {
+    if (!drState || drState.resumeIdx < 0) return;
+    drState.running = true;
+    drState.paused = false;
+    drState.stepping = false;
+    document.getElementById('drResumeBtn').style.display = 'none';
+    document.getElementById('drStepBtn').style.display = 'none';
+    document.getElementById('drStopBtn').style.display = '';
+    drLog('success', 'bi-play-circle-fill', _t('dr_resumed'), _t('dr_from') + ': ' + workflowSteps[drState.resumeIdx].name);
+    drExecuteStep(drState.resumeIdx);
+}
+
+function dryRunStepOne() {
+    if (!drState) {
+        // First click — start in stepping mode
+        drRunStart(true);
+        return;
+    }
+    if (drState.resumeIdx < 0 || drState.resumeIdx >= workflowSteps.length) return;
+    drState.running = true;
+    drState.paused = false;
+    drState.stepping = true;
+    document.getElementById('drResumeBtn').style.display = 'none';
+    document.getElementById('drStepBtn').style.display = 'none';
+    document.getElementById('drStopBtn').style.display = '';
+    drExecuteStep(drState.resumeIdx);
+}
+
+function dryRunReset() {
+    if (drTimerId) { clearTimeout(drTimerId); drTimerId = null; }
+    drState = null;
+    document.getElementById('drStartBtn').style.display = '';
+    document.getElementById('drResetBtn').style.display = 'none';
+    document.getElementById('drStopBtn').style.display = 'none';
+    document.getElementById('drResumeBtn').style.display = 'none';
+    document.getElementById('drStepBtn').style.display = '';
+    document.getElementById('drProgressBar').style.width = '0%';
+    document.getElementById('drDetailCanvas').innerHTML = '<div class="dr-empty-state"><i class="bi bi-play-circle" style="font-size:3rem;opacity:0.3"></i><p>' + _t('dr_empty_title') + '</p><p class="text-muted" style="font-size:12px">' + _t('dr_empty_subtitle') + '</p></div>';
+    drBuildTimeline();
+}
+
+function drLog(iconClass, iconBi, title, detail) {
+    if (!drState) return;
+    var elapsed = ((Date.now() - drState.startTime) / 1000).toFixed(1);
+    drState.log.push({ time: elapsed, iconClass: iconClass, iconBi: iconBi, title: title, detail: detail });
+}
+
+// Execute a step in dry run
+function drExecuteStep(idx) {
+    if (!drState) return;
+    if (!drState.running) {
+        // Paused — save resume point, don't finish
+        drState.resumeIdx = idx;
+        return;
+    }
+    if (idx >= workflowSteps.length) {
+        drFinish();
+        return;
+    }
+
+    // Loop guard — global iteration limit
+    drState.iterations++;
+    if (drState.iterations > DR_MAX_ITERATIONS) {
+        drLog('error', 'bi-exclamation-octagon-fill', _t('dr_loop_detected'),
+            _t('dr_loop_limit').replace('{0}', DR_MAX_ITERATIONS));
+        drState.running = false;
+        drState.paused = true;
+        drState.resumeIdx = idx;
+        document.getElementById('drStopBtn').style.display = 'none';
+        document.getElementById('drResumeBtn').style.display = '';
+        drBuildTimeline();
+        drRenderDetail();
+        return;
+    }
+
+    // Per-step visit counter — detect tight loops
+    drState.visitCount[idx]++;
+    if (drState.visitCount[idx] > 3) {
+        drLog('error', 'bi-arrow-repeat', _t('dr_loop_step') + ' "' + workflowSteps[idx].name + '"',
+            _t('dr_loop_step_msg').replace('{0}', drState.visitCount[idx]));
+        drState.running = false;
+        drState.paused = true;
+        drState.resumeIdx = idx;
+        document.getElementById('drStopBtn').style.display = 'none';
+        document.getElementById('drResumeBtn').style.display = '';
+        drBuildTimeline();
+        drRenderDetail();
+        return;
+    }
+
+    var step = workflowSteps[idx];
+    var cfg = drState.config;
+    var delay = parseInt(document.getElementById('drSpeed').value) || 0;
+    var result = { type: step.type, name: step.name, idx: idx, visit: drState.visitCount[idx] };
+
+    // Progress
+    var pct = Math.round(((idx + 1) / workflowSteps.length) * 100);
+    document.getElementById('drProgressBar').style.width = pct + '%';
+
+    drState.stepStates[idx] = 'active';
+    drState.selectedIdx = idx;
+    drBuildTimeline();
+
+    drTimerId = setTimeout(function() {
+        if (!drState || !drState.running) return;  // check stop
+
+        // — Phase 1: prepare result (non-interactive parts) —
+        var isInteractive = false;
+
+        switch (step.type) {
+            case 'email':
+                var nameParts = cfg.persona.name.split(' ');
+                result.subject = (step.config.subject || '(no subject)')
+                    .replace(/\{\{\s*participant\.name\s*\}\}/g, cfg.persona.name)
+                    .replace(/\{\{\s*participant\.first_name\s*\}\}/g, nameParts[0] || '')
+                    .replace(/\{\{\s*participant\.email\s*\}\}/g, cfg.persona.email);
+                result.body = (step.config.body_template || '')
+                    .replace(/\{\{\s*participant\.name\s*\}\}/g, '<span class="dr-placeholder">' + cfg.persona.name + '</span>')
+                    .replace(/\{\{\s*participant\.first_name\s*\}\}/g, '<span class="dr-placeholder">' + (nameParts[0] || '') + '</span>')
+                    .replace(/\{\{\s*participant\.email\s*\}\}/g, '<span class="dr-placeholder">' + cfg.persona.email + '</span>')
+                    .replace(/\{\{\s*landing_url\s*\}\}/g, '<span class="dr-placeholder">https://example.com/landing/xxx</span>');
+                Object.keys(cfg.collected_data).forEach(function(k) {
+                    var re = new RegExp('\\{\\{\\s*collected_data\\.' + k + '\\s*\\}\\}', 'g');
+                    result.body = result.body.replace(re, '<span class="dr-placeholder">' + cfg.collected_data[k] + '</span>');
+                    result.subject = result.subject.replace(re, cfg.collected_data[k]);
+                });
+                result.to = step.config.recipient === 'custom' ? step.config.custom_to : cfg.persona.email;
+                // If email has landing, it's interactive (with or without wait)
+                if (step.config.has_landing) {
+                    isInteractive = true;
+                    result.waitingFor = 'landing';
+                    result.landingFields = null; // will be loaded
+                    // Try to load landing fields
+                    if (step.id && window._currentWorkflowId) {
+                        drLoadLandingFields(step.id, idx);
+                    }
+                    drLog('email', 'bi-envelope', step.name + ' — ' + _t('dr_email_sent'),
+                        'To: ' + result.to + ' — ' + _t('dr_landing_waiting'));
+                } else {
+                    drLog('email', 'bi-envelope', step.name + ' — ' + _t('dr_email_sent'),
+                        'To: ' + result.to + ' — Subject: "' + result.subject + '"');
+                }
+                break;
+
+            case 'wait_until':
+                var waitDesc = '';
+                if (step.config.wait_type === 'delay_hours') waitDesc = step.config.delay_hours + 'h delay';
+                else if (step.config.wait_type === 'date') waitDesc = 'fino a ' + (step.config.target_date || '?') + ' ' + (step.config.target_time || '');
+                else if (step.config.wait_type === 'time') waitDesc = 'ogni giorno alle ' + (step.config.target_time || '?');
+                else if (step.config.wait_type === 'day') waitDesc = step.config.target_day + ' alle ' + (step.config.target_time || '?');
+                result.waitDesc = waitDesc;
+                drLog('wait', 'bi-hourglass', step.name + ' — ' + _t('dr_wait_skip'), waitDesc);
+                break;
+
+            case 'condition':
+                var fieldSource = step.config.field_source || 'sabaform_data';
+                var dataPool = fieldSource === 'collected_data' ? cfg.collected_data : cfg.sabaform_data;
+                var fieldVal = dataPool[step.config.field] || '';
+                var condResult = drEvalCondition(fieldVal, step.config.operator, step.config.value);
+                result.field = step.config.field;
+                result.fieldSource = fieldSource;
+                result.fieldVal = fieldVal;
+                result.operator = step.config.operator;
+                result.compareVal = step.config.value;
+                result.condResult = condResult;
+
+                if (condResult) {
+                    if (step.config.if_true === 'stop') { result.action = 'STOP'; result.nextIdx = workflowSteps.length; }
+                    else if (step.config.if_true === 'jump') { result.nextIdx = drFindStepByOrder(step.config.if_true_step); result.action = 'jump to ' + (workflowSteps[result.nextIdx] ? workflowSteps[result.nextIdx].name : '?'); }
+                    else { result.action = 'continue'; }
+                } else {
+                    if (step.config.if_false === 'stop') { result.action = 'STOP'; result.nextIdx = workflowSteps.length; }
+                    else if (step.config.if_false === 'jump') { result.nextIdx = drFindStepByOrder(step.config.if_false_step); result.action = 'jump to ' + (workflowSteps[result.nextIdx] ? workflowSteps[result.nextIdx].name : '?'); }
+                    else { result.action = 'continue'; }
+                }
+                drLog('condition', 'bi-signpost-split', step.name + ' — ' + _t('dr_condition_evaluated'),
+                    step.config.field + ' ' + step.config.operator + ' "' + step.config.value + '" → ' + (condResult ? 'TRUE' : 'FALSE') + ' → ' + result.action);
+                break;
+
+            case 'goal_check':
+                isInteractive = true;
+                result.waitingFor = 'goal';
+                result.goalType = step.config.goal;
+                drLog('goal', 'bi-bullseye', step.name + ' — ' + _t('dr_goal_waiting'), step.config.goal);
+                break;
+
+            case 'human_approval':
+                isInteractive = true;
+                result.waitingFor = 'approval';
+                result.approverEmail = step.config.approver_email || '(non configurato)';
+                drLog('approval', 'bi-person-check', step.name + ' — ' + _t('dr_approval_waiting'),
+                    'Approver: ' + result.approverEmail);
+                break;
+
+            case 'survey':
+                isInteractive = true;
+                result.waitingFor = 'survey';
+                result.question = step.config.question || '(domanda non configurata)';
+                result.choices = step.config.choices || [];
+                result.scaleMax = step.config.scale_max || 5;
+                result.responseType = step.config.response_type || 'choices';
+                drLog('survey', 'bi-ui-checks', step.name + ' — ' + _t('dr_survey_waiting'), result.question);
+                break;
+
+            case 'whatsapp':
+                result.to = cfg.persona.phone;
+                result.template = step.config.template_name || step.config.body_text || '';
+                drLog('whatsapp', 'bi-whatsapp', step.name + ' — ' + _t('dr_whatsapp_sent'), 'To: ' + result.to);
+                break;
+
+            case 'export_data':
+            case 'excel_write':
+                result.format = step.config.format || step.config.storage || '';
+                result.filePath = step.config.file_path || '';
+                drLog('export', 'bi-download', step.name + ' — ' + _t('dr_export_simulated'), result.format + ' ' + result.filePath);
+                break;
+
+            default:
+                drLog('skip', 'bi-dash', step.name + ' — ' + _t('dr_type_unhandled'), step.type);
+                break;
+        }
+
+        drState.stepResults[idx] = result;
+
+        // — Phase 2: interactive steps wait for user input —
+        if (isInteractive) {
+            drState.waitingForInput = true;
+            drState.waitingIdx = idx;
+            drBuildTimeline();
+            drRenderDetail();
+            // Hide pause, show step controls are disabled while waiting
+            document.getElementById('drStopBtn').style.display = 'none';
+            document.getElementById('drStepBtn').style.display = 'none';
+            document.getElementById('drResumeBtn').style.display = 'none';
+            return;  // stop here — drSubmitResponse() will continue
+        }
+
+        // — Phase 3: non-interactive — resolve and continue —
+        drResolveStep(idx, result);
+    }, delay);
+}
+
+// Resolve a step result and advance to next
+function drResolveStep(idx, result) {
+    var step = workflowSteps[idx];
+    var nextIdx = result.nextIdx !== undefined ? result.nextIdx : idx + 1;
+
+    drState.stepStates[idx] = 'done';
+    drState.stepResults[idx] = result;
+
+    // Mark skipped steps between current and next (jump)
+    if (nextIdx > idx + 1) {
+        for (var s = idx + 1; s < nextIdx && s < workflowSteps.length; s++) {
+            drState.stepStates[s] = 'skipped';
+            drLog('skip', 'bi-dash', workflowSteps[s].name + ' — ' + _t('dr_skipped'), _t('dr_branch_skip'));
+        }
+    }
+
+    drBuildTimeline();
+    drRenderDetail();
+
+    // Next
+    if (nextIdx < workflowSteps.length) {
+        if (drState.stepping) {
+            drState.running = false;
+            drState.paused = true;
+            drState.resumeIdx = nextIdx;
+            document.getElementById('drStopBtn').style.display = 'none';
+            document.getElementById('drResumeBtn').style.display = '';
+            document.getElementById('drStepBtn').style.display = '';
+            drBuildTimeline();
+            drRenderDetail();
+        } else {
+            drExecuteStep(nextIdx);
+        }
+    } else {
+        drFinish();
+    }
+}
+
+// User submits a response for an interactive step
+function drSubmitResponse(responseType, value) {
+    if (!drState || !drState.waitingForInput) return;
+    var idx = drState.waitingIdx;
+    var step = workflowSteps[idx];
+    var result = drState.stepResults[idx];
+    var cfg = drState.config;
+
+    drState.waitingForInput = false;
+    drState.running = true;
+
+    switch (responseType) {
+        case 'approval':
+            result.approved = value === 'approved';
+            result.action = result.approved ? _t('approved').toLowerCase() : (value === 'timeout' ? _t('timeout').toLowerCase() : _t('rejected').toLowerCase());
+            if (result.approved) {
+                if (step.config.if_approved === 'jump') result.nextIdx = drFindStepByOrder(step.config.if_approved_step);
+                else if (step.config.if_approved === 'complete') result.nextIdx = workflowSteps.length;
+            } else {
+                if (step.config.if_rejected === 'stop') result.nextIdx = workflowSteps.length;
+                else if (step.config.if_rejected === 'jump') result.nextIdx = drFindStepByOrder(step.config.if_rejected_step);
+            }
+            drLog('approval', 'bi-person-check', step.name + ' — ' + result.action,
+                _t('dr_response') + ': ' + value);
+            break;
+
+        case 'goal':
+            result.goalMet = value === 'met';
+            if (result.goalMet) {
+                if (step.config.if_met === 'complete') result.nextIdx = workflowSteps.length;
+                else if (step.config.if_met === 'jump') result.nextIdx = drFindStepByOrder(step.config.if_met_step);
+                result.action = step.config.if_met || 'continue';
+            } else {
+                if (step.config.if_not_met === 'complete') result.nextIdx = workflowSteps.length;
+                else if (step.config.if_not_met === 'jump') result.nextIdx = drFindStepByOrder(step.config.if_not_met_step);
+                result.action = step.config.if_not_met || 'continue';
+            }
+            drLog('goal', 'bi-bullseye', step.name + ' — ' + (result.goalMet ? _t('dr_goal_reached') : _t('dr_goal_not_reached')),
+                step.config.goal + ' → ' + result.action);
+            break;
+
+        case 'survey':
+            result.selectedChoice = value;
+            drLog('survey', 'bi-ui-checks', step.name + ' — ' + _t('dr_response') + ': "' + value + '"', '');
+            break;
+
+        case 'landing':
+            result.landingResult = value;
+            // Save a snapshot of collected data at this point
+            if (value === 'filled') {
+                result.landingFormData = Object.assign({}, drState.config.collected_data);
+            }
+            // Determine branching based on landing response
+            if (value === 'filled') {
+                var ifFilled = step.config.landing_if_filled || 'continue';
+                if (ifFilled === 'stop') result.nextIdx = workflowSteps.length;
+                else if (ifFilled === 'jump') result.nextIdx = drFindStepByOrder(step.config.landing_if_filled_step);
+                result.action = 'form compilato → ' + ifFilled;
+            } else {
+                var ifTimeout = step.config.landing_if_timeout || 'continue';
+                if (ifTimeout === 'stop') result.nextIdx = workflowSteps.length;
+                else if (ifTimeout === 'jump') result.nextIdx = drFindStepByOrder(step.config.landing_if_timeout_step);
+                result.action = (value === 'timeout' ? 'timeout' : 'non compilato') + ' → ' + ifTimeout;
+            }
+            drLog('email', 'bi-envelope-check', step.name + ' — landing: ' + result.action, '');
+            break;
+    }
+
+    // Show controls again
+    document.getElementById('drStopBtn').style.display = '';
+    drResolveStep(idx, result);
+}
+
+function drFinish() {
+    if (!drState) return;
+    drState.running = false;
+    drState.paused = false;
+    drTimerId = null;
+    var stopBtn = document.getElementById('drStopBtn');
+    if (stopBtn) stopBtn.style.display = 'none';
+    var resumeBtn = document.getElementById('drResumeBtn');
+    if (resumeBtn) resumeBtn.style.display = 'none';
+    var stepBtn = document.getElementById('drStepBtn');
+    if (stepBtn) stepBtn.style.display = 'none';
+    drLog('success', 'bi-check-circle-fill', _t('dr_completed'),
+        drState.stepStates.filter(function(s){return s==='done';}).length + ' ' + _t('dr_executed') + ', ' +
+        drState.stepStates.filter(function(s){return s==='skipped';}).length + ' ' + _t('skipped_pl'));
+    document.getElementById('drProgressBar').style.width = '100%';
+    drBuildTimeline();
+    drRenderDetail();
+}
+
+function drEvalCondition(fieldVal, operator, compareVal) {
+    var fv = String(fieldVal || '').toLowerCase();
+    var cv = String(compareVal || '').toLowerCase();
+    switch (operator) {
+        case 'equals': return fv === cv;
+        case 'not_equals': return fv !== cv;
+        case 'contains': return fv.indexOf(cv) !== -1;
+        case 'not_empty': return fv.length > 0;
+        case 'empty': return fv.length === 0;
+        case 'greater_than': return parseFloat(fieldVal) > parseFloat(compareVal);
+        case 'less_than': return parseFloat(fieldVal) < parseFloat(compareVal);
+        default: return fv === cv;
+    }
+}
+
+function drFindStepByOrder(order) {
+    var idx = workflowSteps.findIndex(function(s) { return s.order === parseInt(order); });
+    return idx >= 0 ? idx : workflowSteps.length;
+}
+
+// Render detail panel
+function drRenderDetail() {
+    var canvas = document.getElementById('drDetailCanvas');
+    if (!canvas || !drState) return;
+
+    var html = '';
+
+    // Show selected step card
+    var idx = drState.selectedIdx;
+    var step = workflowSteps[idx];
+    var result = drState.stepResults[idx];
+    var state = drState.stepStates[idx];
+    if (!step) return;
+
+    html += drRenderStepCard(step, result, state, idx, false);
+
+    // Log section
+    if (drState.log.length > 0) {
+        html += '<div class="dr-step-card">';
+        html += '<div class="dr-step-header">';
+        html += '<div class="dr-step-icon" style="background: var(--md-on-surface-variant, #4D4639)"><i class="bi bi-journal-text"></i></div>';
+        html += '<div class="dr-step-info"><h5>' + _t('dr_execution_log') + '</h5>';
+        html += '<div class="dr-step-meta"><span>' + drState.log.length + ' ' + _t('dr_events') + '</span></div></div></div>';
+        html += '<div class="dr-step-body">';
+        // Show log in reverse (newest first)
+        for (var l = drState.log.length - 1; l >= 0; l--) {
+            var entry = drState.log[l];
+            html += '<div class="dr-log-entry">';
+            html += '<span class="dr-log-time">' + entry.time + 's</span>';
+            html += '<span class="dr-log-icon" style="background:' + drLogColor(entry.iconClass) + '"><i class="bi ' + entry.iconBi + '"></i></span>';
+            html += '<div class="dr-log-text"><strong>' + entry.title + '</strong>';
+            if (entry.detail) html += '<span class="dr-log-detail">' + entry.detail + '</span>';
+            html += '</div></div>';
+        }
+        html += '</div></div>';
+    }
+
+    canvas.innerHTML = html;
+}
+
+function drRenderStepCard(step, result, state, idx, isPast) {
+    var color = DR_TYPE_COLORS[step.type] || '#666';
+    var icon = DR_TYPE_ICONS[step.type] || 'bi-gear';
+    var isWaiting = drState && drState.waitingForInput && drState.waitingIdx === idx;
+    var badgeClass, badgeText;
+    if (isWaiting) { badgeClass = 'running'; badgeText = _t('waiting_pl'); }
+    else if (state === 'done') { badgeClass = 'done'; badgeText = _t('completed'); }
+    else if (state === 'active') { badgeClass = 'running'; badgeText = _t('in_progress'); }
+    else if (state === 'skipped') { badgeClass = 'skipped'; badgeText = _t('skipped'); }
+    else { badgeClass = ''; badgeText = _t('waiting'); }
+
+    var html = '<div class="dr-step-card' + (isPast ? ' past' : '') + '">';
+    html += '<div class="dr-step-header">';
+    html += '<div class="dr-step-icon" style="background:' + color + '"><i class="bi ' + icon + '"></i></div>';
+    html += '<div class="dr-step-info"><h5>Step ' + (idx + 1) + ' — ' + step.name + '</h5>';
+    html += '<div class="dr-step-meta">';
+    if (badgeClass) html += '<span class="dr-badge ' + badgeClass + '">' + badgeText + '</span>';
+    html += '<span>' + step.type.replace(/_/g, ' ') + '</span>';
+    if (step.config.delay_hours) html += '<span><i class="bi bi-clock"></i> ' + step.config.delay_hours + 'h delay</span>';
+    html += '</div></div></div>';
+
+    html += '<div class="dr-step-body">';
+
+    if (!result) {
+        html += '<p style="color:var(--md-on-surface-variant);font-size:13px">' + _t('dr_waiting_execution') + '</p>';
+    } else {
+        switch (step.type) {
+            case 'email':
+                html += '<div class="dr-email-preview">';
+                html += '<div class="dr-email-bar">';
+                html += '<div class="row-lbl"><span class="lbl">A:</span> ' + (result.to || '') + '</div>';
+                html += '<div class="row-lbl"><span class="lbl">Ogg:</span> ' + (result.subject || '') + '</div>';
+                html += '</div>';
+                html += '<div class="dr-email-body">' + (result.body || '<em>Nessun body</em>') + '</div>';
+                html += '</div>';
+                // Interactive: landing form
+                if (isWaiting && result.waitingFor === 'landing') {
+                    html += drRenderLandingForm(result, idx);
+                } else if (result.landingResult) {
+                    html += '<div style="margin-top:10px">';
+                    html += '<div class="dr-branch-outcome taken"><i class="bi bi-card-text"></i> Landing: <strong>' + result.action + '</strong></div>';
+                    if (result.landingResult === 'filled' && result.landingFormData) {
+                        html += '<div style="margin-top:6px;font-size:11px;color:var(--md-on-surface-variant)">';
+                        html += '<strong>' + _t('dr_collected_data_label') + ':</strong> ' + Object.keys(result.landingFormData || {}).map(function(k) {
+                            return k + '=' + JSON.stringify(result.landingFormData[k]);
+                        }).join(', ');
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                }
+                break;
+
+            case 'condition':
+                html += '<div class="dr-condition-rule">';
+                html += '<span class="dr-cond-field">' + (result.fieldSource || '') + '.' + (result.field || '?') + '</span>';
+                html += '<span class="dr-cond-op">' + (result.operator || '') + '</span>';
+                html += '<span class="dr-cond-val">"' + (result.compareVal || '') + '"</span>';
+                html += '<span class="dr-cond-result">' + (result.condResult ? '&#10004;' : '&#10008;') + '</span>';
+                html += '</div>';
+                html += '<div style="font-size:12px;color:var(--md-on-surface-variant);margin-bottom:8px">' + _t('dr_current_value') + ': <strong>' + (result.fieldVal || '(' + _t('empty') + ')') + '</strong></div>';
+                html += '<div class="dr-branch-outcome ' + (result.condResult ? 'taken' : 'not-taken') + '">';
+                html += '<i class="bi bi-arrow-right-circle-fill"></i> <strong>TRUE</strong> → ' + (step.config.if_true || 'continue') + (step.config.if_true === 'jump' ? ' (step ' + step.config.if_true_step + ')' : '');
+                html += '</div>';
+                html += '<div class="dr-branch-outcome ' + (!result.condResult ? 'taken' : 'not-taken') + '">';
+                html += '<i class="bi bi-skip-forward-circle"></i> <strong>FALSE</strong> → ' + (step.config.if_false || 'continue') + (step.config.if_false === 'jump' ? ' (step ' + step.config.if_false_step + ')' : '');
+                html += '</div>';
+                break;
+
+            case 'goal_check':
+                if (isWaiting) {
+                    html += '<div style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:8px">';
+                    html += 'Goal: <strong>' + (result.goalType || '').replace(/_/g, ' ') + '</strong>';
+                    if (step.config.field_name) html += ' — campo: <code>' + step.config.field_name + '</code>';
+                    html += '</div>';
+                    html += drInteractiveBox('bi-bullseye', _t('dr_goal_question'),
+                        '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'goal\',\'met\')"><i class="bi bi-check-lg"></i> ' + _t('dr_yes_reached') + '</button>' +
+                        '<button class="btn btn-sm btn-outline-danger" onclick="drSubmitResponse(\'goal\',\'not_met\')"><i class="bi bi-x-lg"></i> ' + _t('dr_no_not_reached') + '</button>'
+                    );
+                    html += '<div style="margin-top:10px;font-size:11px;color:var(--md-on-surface-variant)">';
+                    html += '<div style="margin-bottom:4px"><i class="bi bi-arrow-right"></i> ' + _t('dr_if_reached') + ' → ' + (step.config.if_met || 'continue') + (step.config.if_met === 'jump' ? ' (step ' + step.config.if_met_step + ')' : '') + '</div>';
+                    html += '<div><i class="bi bi-arrow-right"></i> ' + _t('dr_if_not_reached') + ' → ' + (step.config.if_not_met || 'continue') + (step.config.if_not_met === 'jump' ? ' (step ' + step.config.if_not_met_step + ')' : '') + '</div>';
+                    html += '</div>';
+                } else {
+                    html += '<div class="dr-condition-rule">';
+                    html += '<span class="dr-cond-field">' + (result.goalType || '').replace(/_/g, ' ') + '</span>';
+                    html += '<span class="dr-cond-result">' + (result.goalMet ? '&#10004; ' + _t('dr_reached') : '&#10008; ' + _t('dr_not_reached')) + '</span>';
+                    html += '</div>';
+                    html += '<div class="dr-branch-outcome ' + (result.goalMet ? 'taken' : 'not-taken') + '">';
+                    html += '<i class="bi bi-arrow-right-circle-fill"></i> <strong>MET</strong> → ' + (step.config.if_met || 'continue');
+                    html += '</div>';
+                    html += '<div class="dr-branch-outcome ' + (!result.goalMet ? 'taken' : 'not-taken') + '">';
+                    html += '<i class="bi bi-skip-forward-circle"></i> <strong>NOT MET</strong> → ' + (step.config.if_not_met || 'continue');
+                    html += '</div>';
+                }
+                break;
+
+            case 'human_approval':
+                html += '<div class="dr-email-preview" style="margin-bottom:12px">';
+                html += '<div class="dr-email-bar"><div class="row-lbl"><span class="lbl">A:</span> ' + (result.approverEmail || '') + '</div></div>';
+                html += '<div class="dr-email-body"><p>' + _t('dr_approval_request') + ' <strong>' + drState.config.persona.name + '</strong></p>';
+                if (step.config.approval_message) html += '<p>' + step.config.approval_message + '</p>';
+                html += '</div></div>';
+                if (isWaiting) {
+                    html += drInteractiveBox('bi-person-check', _t('dr_simulate_approver'),
+                        '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'approval\',\'approved\')"><i class="bi bi-check-lg"></i> ' + _t('approved') + '</button>' +
+                        '<button class="btn btn-sm btn-danger me-2" onclick="drSubmitResponse(\'approval\',\'rejected\')"><i class="bi bi-x-lg"></i> ' + _t('rejected') + '</button>' +
+                        '<button class="btn btn-sm btn-outline-warning" onclick="drSubmitResponse(\'approval\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>'
+                    );
+                    html += '<div style="margin-top:10px;font-size:11px;color:var(--md-on-surface-variant)">';
+                    html += '<div style="margin-bottom:4px"><i class="bi bi-arrow-right"></i> ' + _t('dr_if_approved') + ' → ' + (step.config.if_approved || 'continue') + (step.config.if_approved === 'jump' ? ' (step ' + step.config.if_approved_step + ')' : '') + '</div>';
+                    html += '<div><i class="bi bi-arrow-right"></i> ' + _t('dr_if_rejected') + ' → ' + (step.config.if_rejected || 'stop') + (step.config.if_rejected === 'jump' ? ' (step ' + step.config.if_rejected_step + ')' : '') + '</div>';
+                    html += '</div>';
+                } else {
+                    html += '<div class="dr-branch-outcome ' + (result.approved ? 'taken' : 'not-taken') + '">';
+                    html += '<i class="bi bi-check-circle-fill"></i> <strong>' + _t('dr_approved_label') + '</strong> → ' + (step.config.if_approved || 'continue');
+                    html += '</div>';
+                    html += '<div class="dr-branch-outcome ' + (!result.approved ? 'taken' : 'not-taken') + '">';
+                    html += '<i class="bi bi-x-circle-fill"></i> <strong>' + _t('dr_rejected_label') + '</strong> → ' + (step.config.if_rejected || 'stop');
+                    html += '</div>';
+                }
+                break;
+
+            case 'wait_until':
+                html += '<div style="text-align:center;padding:16px;background:var(--md-surface-container);border-radius:10px">';
+                html += '<i class="bi bi-hourglass-split" style="font-size:2rem;color:var(--md-primary);opacity:0.6"></i>';
+                html += '<p style="margin:8px 0 0;font-size:13px">' + (result.waitDesc || 'Attesa') + '</p>';
+                html += '<p style="font-size:11px;color:var(--md-on-surface-variant)">' + _t('dr_auto_skip') + '</p>';
+                html += '</div>';
+                break;
+
+            case 'survey':
+                html += '<div style="padding:12px;background:var(--md-surface-container);border-radius:10px">';
+                html += '<p style="font-weight:600;font-size:13px;margin-bottom:8px">' + result.question + '</p>';
+                if (isWaiting) {
+                    if (result.responseType === 'scale') {
+                        html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+                        for (var s = 1; s <= result.scaleMax; s++) {
+                            html += '<button class="btn btn-sm btn-outline-primary" onclick="drSubmitResponse(\'survey\',\'' + s + '\')" style="min-width:40px">' + s + '</button>';
+                        }
+                        html += '</div>';
+                    } else {
+                        html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+                        (result.choices || []).forEach(function(c) {
+                            html += '<button class="btn btn-sm btn-outline-primary" onclick="drSubmitResponse(\'survey\',\'' + c.replace(/'/g, "\\'") + '\')">' + c + '</button>';
+                        });
+                        html += '</div>';
+                    }
+                } else {
+                    if (result.selectedChoice) {
+                        html += '<div class="dr-branch-outcome taken"><i class="bi bi-check-circle-fill"></i> ' + _t('dr_response') + ': <strong>' + result.selectedChoice + '</strong></div>';
+                    } else {
+                        html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+                        (result.choices || []).forEach(function(c) {
+                            html += '<span class="dr-chip">' + c + '</span>';
+                        });
+                        html += '</div>';
+                    }
+                }
+                html += '</div>';
+                break;
+
+            case 'whatsapp':
+                html += '<div style="padding:12px;background:#dcf8c6;border-radius:10px">';
+                html += '<p style="font-size:12px;color:#333"><i class="bi bi-whatsapp" style="color:#25D366"></i> → ' + result.to + '</p>';
+                html += '<p style="font-size:13px">' + (result.template || '(template)') + '</p>';
+                html += '</div>';
+                break;
+
+            default:
+                html += '<p style="font-size:13px;color:var(--md-on-surface-variant)">' + step.type + ' simulato</p>';
+        }
+    }
+
+    html += '</div></div>';
+    return html;
+}
+
+// Helper: interactive action box
+function drInteractiveBox(icon, label, buttonsHtml) {
+    return '<div class="dr-interactive-box">' +
+        '<div class="dr-interactive-label"><i class="bi ' + icon + '"></i> ' + label + '</div>' +
+        '<div class="dr-interactive-actions">' + buttonsHtml + '</div>' +
+        '</div>';
+}
+
+// Load landing page fields from API
+function drLoadLandingFields(stepId, stepIdx) {
+    fetch('/api/landing-builder/' + stepId)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!drState || !drState.stepResults[stepIdx]) return;
+            var fields = [];
+            if (data && data.gjs_data && data.gjs_data.fields) {
+                fields = data.gjs_data.fields;
+            }
+            drState.stepResults[stepIdx].landingFields = fields;
+            drState.stepResults[stepIdx].landingTitle = data && data.gjs_data ? data.gjs_data.title || '' : '';
+            drState.stepResults[stepIdx].landingSubtitle = data && data.gjs_data ? data.gjs_data.subtitle || '' : '';
+            drRenderDetail();
+        })
+        .catch(function() {});
+}
+
+// Render landing mini-form HTML
+function drRenderLandingForm(result, idx) {
+    var fields = result.landingFields;
+    var html = '';
+
+    html += '<div class="dr-landing-form">';
+    // Header
+    if (result.landingTitle) {
+        html += '<div class="dr-landing-title">' + result.landingTitle + '</div>';
+    }
+    if (result.landingSubtitle) {
+        html += '<div class="dr-landing-subtitle">' + result.landingSubtitle + '</div>';
+    }
+
+    if (!fields || fields.length === 0) {
+        // No fields loaded — show simple buttons
+        html += '<p style="font-size:12px;color:var(--md-on-surface-variant);margin:12px 0">' + _t('dr_no_fields_found') + '</p>';
+        html += '<div class="dr-interactive-actions">';
+        html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-check-lg"></i> ' + _t('dr_form_filled') + '</button>';
+        html += '<button class="btn btn-sm btn-outline-secondary me-2" onclick="drSubmitResponse(\'landing\',\'empty\')"><i class="bi bi-x-lg"></i> ' + _t('not_filled') + '</button>';
+        html += '<button class="btn btn-sm btn-outline-warning" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>';
+        html += '</div>';
+        html += '</div>';
+        return html;
+    }
+
+    // Render fields
+    html += '<div class="dr-landing-fields" id="drLandingFields_' + idx + '">';
+    fields.forEach(function(f) {
+        var fw = f.width || '100%';
+        html += '<div class="dr-landing-field" style="width:' + fw + '">';
+        if (f.type !== 'hidden') {
+            html += '<label>' + (f.label || f.name) + (f.required ? ' <span style="color:var(--md-error)">*</span>' : '') + '</label>';
+        }
+
+        var existingVal = drState.config.collected_data[f.name] || '';
+
+        switch (f.type) {
+            case 'textarea':
+                html += '<textarea class="dr-input" data-field="' + f.name + '" placeholder="' + (f.placeholder || '') + '" rows="3">' + existingVal + '</textarea>';
+                break;
+            case 'select':
+                html += '<select class="dr-input" data-field="' + f.name + '">';
+                html += '<option value="">' + _t('dr_select_option') + '</option>';
+                var opts = typeof f.options === 'string' ? f.options.split(',').map(function(o){return o.trim();}) : (f.options || []);
+                opts.forEach(function(o) {
+                    var val = typeof o === 'object' ? (o.value || '') : o;
+                    var label = typeof o === 'object' ? (o.label || o.value || '') : o;
+                    html += '<option value="' + val + '"' + (existingVal === val ? ' selected' : '') + '>' + label + '</option>';
+                });
+                html += '</select>';
+                break;
+            case 'radio':
+                var ropts = typeof f.options === 'string' ? f.options.split(',').map(function(o){return o.trim();}) : (f.options || []);
+                html += '<div class="dr-radio-group">';
+                ropts.forEach(function(o, ri) {
+                    var val = typeof o === 'object' ? (o.value || '') : o;
+                    var label = typeof o === 'object' ? (o.label || o.value || '') : o;
+                    html += '<label class="dr-radio-item"><input type="radio" name="dr_radio_' + f.name + '" data-field="' + f.name + '" value="' + val + '"' + (existingVal === val ? ' checked' : '') + '> ' + label + '</label>';
+                });
+                html += '</div>';
+                break;
+            case 'checkbox':
+                var copts = typeof f.options === 'string' ? f.options.split(',').map(function(o){return o.trim();}) : (f.options || []);
+                html += '<div class="dr-radio-group">';
+                copts.forEach(function(o, ci) {
+                    var val = typeof o === 'object' ? (o.value || '') : o;
+                    var label = typeof o === 'object' ? (o.label || o.value || '') : o;
+                    html += '<label class="dr-radio-item"><input type="checkbox" data-field="' + f.name + '" value="' + val + '"> ' + label + '</label>';
+                });
+                html += '</div>';
+                break;
+            case 'hidden':
+                html += '<input type="hidden" data-field="' + f.name + '" value="' + (f.value || existingVal) + '">';
+                break;
+            case 'file':
+                html += '<div class="dr-input" style="color:var(--md-on-surface-variant);font-size:12px;cursor:default"><i class="bi bi-paperclip"></i> ' + _t('dr_file_upload_sim') + '</div>';
+                html += '<input type="hidden" data-field="' + f.name + '" value="file_simulato.pdf">';
+                break;
+            default:
+                html += '<input class="dr-input" type="' + (f.type || 'text') + '" data-field="' + f.name + '" placeholder="' + (f.placeholder || '') + '" value="' + existingVal + '">';
+        }
+        html += '</div>';
+    });
+    html += '</div>';
+
+    // Action buttons
+    html += '<div class="dr-landing-actions">';
+    html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitLandingForm(' + idx + ')"><i class="bi bi-send-fill"></i> ' + _t('dr_submit_form') + '</button>';
+    html += '<button class="btn btn-sm btn-outline-secondary me-2" onclick="drSubmitResponse(\'landing\',\'empty\')"><i class="bi bi-x-lg"></i> ' + _t('dr_does_not_fill') + '</button>';
+    html += '<button class="btn btn-sm btn-outline-warning" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>';
+    html += '</div>';
+
+    html += '</div>';
+    return html;
+}
+
+// Submit landing form — collect field values and feed into collected_data
+function drSubmitLandingForm(stepIdx) {
+    if (!drState) return;
+    var container = document.getElementById('drLandingFields_' + stepIdx);
+    if (!container) { drSubmitResponse('landing', 'filled'); return; }
+
+    var formData = {};
+    // Text/email/number/date/textarea/select/hidden inputs
+    container.querySelectorAll('input[data-field], textarea[data-field], select[data-field]').forEach(function(el) {
+        var field = el.dataset.field;
+        if (el.type === 'radio') {
+            if (el.checked) formData[field] = el.value;
+        } else if (el.type === 'checkbox') {
+            if (!formData[field]) formData[field] = [];
+            if (el.checked) formData[field].push(el.value);
+        } else {
+            formData[field] = el.value;
+        }
+    });
+
+    // Merge into collected_data (so subsequent conditions can use it)
+    Object.keys(formData).forEach(function(k) {
+        drState.config.collected_data[k] = formData[k];
+    });
+
+    // Also update the JSON editor in the panel
+    try {
+        document.getElementById('drCollectedData').value = JSON.stringify(drState.config.collected_data, null, 2);
+    } catch(e) {}
+
+    drLog('success', 'bi-card-checklist', _t('dr_landing_filled'),
+        Object.keys(formData).length + ' ' + _t('dr_fields') + ': ' + Object.keys(formData).join(', '));
+
+    drSubmitResponse('landing', 'filled');
+}
+
+function drLogColor(cls) {
+    var colors = {
+        email: '#8B6914', condition: '#7B61C2', wait: '#5C6134',
+        approval: '#9C5A2E', goal: '#386A20', whatsapp: '#25D366',
+        survey: '#0277BD', export: '#6D4C41', success: '#386A20',
+        skip: '#7F7667', error: '#B3261E'
+    };
+    return colors[cls] || '#666';
+}
