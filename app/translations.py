@@ -42,6 +42,11 @@ TRANSLATIONS = {
         'no_workflows_present': 'Nessun workflow presente',
         'create_first_workflow': 'Crea il primo workflow',
         'no_activity_yet': 'Nessuna attivita ancora',
+        'activity_log': 'Activity Log',
+        'event_type': 'Tipo evento',
+        'period': 'Periodo',
+        'timestamp': 'Timestamp',
+        'days': 'giorni',
 
         # Common
         'name': 'Nome',
@@ -372,6 +377,11 @@ TRANSLATIONS = {
         'no_workflows_present': 'No workflows present',
         'create_first_workflow': 'Create your first workflow',
         'no_activity_yet': 'No activity yet',
+        'activity_log': 'Activity Log',
+        'event_type': 'Event type',
+        'period': 'Period',
+        'timestamp': 'Timestamp',
+        'days': 'days',
 
         # Common
         'name': 'Name',

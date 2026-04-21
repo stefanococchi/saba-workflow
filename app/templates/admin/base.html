@@ -125,6 +125,12 @@
                             <i class="bi bi-plus-circle"></i> {{ t.new_workflow }}
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'admin.activity_log' %}active{% endif %}"
+                           href="{{ url_for('admin.activity_log') }}">
+                            <i class="bi bi-journal-text"></i> {{ t.activity_log }}
+                        </a>
+                    </li>
                 </ul>
                 {% endif %}
             </div>

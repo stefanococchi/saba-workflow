@@ -59,9 +59,13 @@ def login():
             session['username'] = user.username
             session['is_superuser'] = user.is_superuser
             logger.info(f"User {username} logged in")
+            from app.services.audit_service import log_user_action
+            log_user_action('LOGIN', 'Auth', user.id, f'User {username} logged in')
             return redirect(url_for('admin.dashboard'))
 
         flash('Invalid username or password', 'danger')
+        from app.services.audit_service import log_user_action
+        log_user_action('LOGIN_FAIL', 'Auth', detail=f'Failed login attempt for "{username}"')
 
     return render_template('admin/login.html')
 
@@ -69,6 +73,8 @@ def login():
 @auth_bp.route('/auth/logout')
 def logout():
     username = session.get('username', '?')
+    from app.services.audit_service import log_user_action
+    log_user_action('LOGOUT', 'Auth', detail=f'User {username} logged out')
     session.clear()
     logger.info(f"User {username} logged out")
     return redirect(url_for('auth.login'))

@@ -380,6 +380,54 @@ def executions_monitor():
                              current_workflow_id=None)
 
 
+@admin_bp.route('/activity-log')
+@superuser_required
+def activity_log():
+    """User audit log — superuser only"""
+    from app.translations import get_translations
+    from app.models import UserAuditLog
+    t = get_translations()
+    try:
+        action_filter = request.args.get('action', '')
+        entity_filter = request.args.get('entity', '')
+        user_filter = request.args.get('user', '').strip()
+        days = request.args.get('days', 30, type=int)
+
+        from datetime import timedelta
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        query = db.query(UserAuditLog).filter(UserAuditLog.timestamp >= cutoff)
+
+        if action_filter:
+            query = query.filter(UserAuditLog.action == action_filter)
+        if entity_filter:
+            query = query.filter(UserAuditLog.entity == entity_filter)
+        if user_filter:
+            query = query.filter(UserAuditLog.user_email.ilike(f'%{user_filter}%'))
+
+        logs = query.order_by(UserAuditLog.timestamp.desc()).limit(500).all()
+
+        all_actions = [r[0] for r in db.query(UserAuditLog.action).distinct().order_by(UserAuditLog.action).all()]
+        all_entities = [r[0] for r in db.query(UserAuditLog.entity).distinct().order_by(UserAuditLog.entity).all() if r[0]]
+
+        return render_template('admin/activity_log.html',
+                             logs=logs,
+                             all_actions=all_actions,
+                             all_entities=all_entities,
+                             action_filter=action_filter,
+                             entity_filter=entity_filter,
+                             user_filter=user_filter,
+                             days_filter=days,
+                             t=t)
+    except Exception as e:
+        logger.error(f"Errore activity log: {str(e)}")
+        flash(f'Errore: {str(e)}', 'danger')
+        return render_template('admin/activity_log.html',
+                             logs=[], all_actions=[], all_entities=[],
+                             action_filter='', entity_filter='',
+                             user_filter='', days_filter=30, t=t)
+
+
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
 
 MIME_TYPES = {
@@ -642,6 +690,8 @@ def user_create():
         db.add(user)
         db.commit()
 
+        from app.services.audit_service import log_user_action
+        log_user_action('CREATE', 'User', user.id, f'Created user "{username}"')
         flash(f'User "{username}" created', 'success')
         return redirect(url_for('admin.users_list'))
 
@@ -663,9 +713,12 @@ def user_delete(user_id):
         elif user.id == g.user.id:
             flash('Cannot delete yourself', 'danger')
         else:
+            uname = user.username
             db.delete(user)
             db.commit()
-            flash(f'User "{user.username}" deleted', 'success')
+            from app.services.audit_service import log_user_action
+            log_user_action('DELETE', 'User', user_id, f'Deleted user "{uname}"')
+            flash(f'User "{uname}" deleted', 'success')
         return redirect(url_for('admin.users_list'))
     except Exception as e:
         db.rollback()

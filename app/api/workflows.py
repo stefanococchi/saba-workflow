@@ -83,7 +83,9 @@ def create_workflow():
         db.commit()
 
         logger.info(f"Creato workflow {workflow.id}: {workflow.name} con {participants_added} partecipanti")
-        
+        from app.services.audit_service import log_user_action
+        log_user_action('CREATE', 'Workflow', workflow.id, f'Created workflow "{workflow.name}" with {participants_added} participants')
+
         return jsonify({
             'id': workflow.id,
             'name': workflow.name,
@@ -298,14 +300,16 @@ def update_workflow(workflow_id):
         db.commit()
 
         logger.info(f"Aggiornato workflow {workflow_id}")
-        
+        from app.services.audit_service import log_user_action
+        log_user_action('UPDATE', 'Workflow', workflow.id, f'Updated workflow "{workflow.name}"')
+
         return jsonify({
             'id': workflow.id,
             'name': workflow.name,
             'status': workflow.status.value,
             'updated_at': workflow.updated_at.isoformat()
         }), 200
-        
+
     except Exception as e:
         db.rollback()
         logger.error(f"Errore update workflow: {str(e)}")
@@ -328,10 +332,13 @@ def delete_workflow(workflow_id):
         # Elimina activity_log collegati (non hanno cascade)
         db.query(ActivityLog).filter_by(workflow_id=workflow_id).delete()
 
+        wf_name = workflow.name
         db.delete(workflow)
         db.commit()
-        
+
         logger.info(f"Eliminato workflow {workflow_id}")
+        from app.services.audit_service import log_user_action
+        log_user_action('DELETE', 'Workflow', workflow_id, f'Deleted workflow "{wf_name}"')
         
         return jsonify({'message': 'Workflow eliminato'}), 200
         

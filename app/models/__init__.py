@@ -304,3 +304,23 @@ class User(Base):
 
     def __repr__(self):
         return f'<User {self.id}: {self.username}>'
+
+
+class UserAuditLog(Base):
+    """Audit log delle azioni utente admin"""
+    __tablename__ = 'user_audit_log'
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    user_email = Column(String(255))
+    action = Column(String(50), nullable=False)
+    entity = Column(String(50))
+    entity_id = Column(Integer, nullable=True)
+    detail = Column(Text)
+    ip_address = Column(String(45))
+
+    user = relationship('User')
+
+    def __repr__(self):
+        return f'<UserAuditLog {self.id}: {self.action} {self.entity}>'

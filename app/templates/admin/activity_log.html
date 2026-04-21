@@ -1,0 +1,182 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ t.activity_log }} - Saba Workflow Admin{% endblock %}
+{% block page_title %}<i class="bi bi-journal-text"></i> {{ t.activity_log }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .al-filters {
+        display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+        background: var(--md-surface-container, #F0E6D8);
+        border-radius: 14px; padding: 16px 20px; margin-bottom: 20px;
+    }
+    .al-filter-group { display: flex; flex-direction: column; gap: 4px; }
+    .al-filter-group label {
+        font-size: 11px; color: var(--md-on-surface-variant, #4D4639);
+        text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+    }
+    .al-filter-group select, .al-filter-group input {
+        background: var(--md-surface-container-lowest, #fff);
+        border: 1px solid var(--md-outline-variant, #D1C8B8);
+        color: var(--md-on-surface, #1C1B18);
+        border-radius: 8px; padding: 7px 12px; font-size: 13px;
+        font-family: 'Inter', sans-serif; min-width: 130px;
+    }
+
+    .al-table-wrap {
+        background: var(--md-surface-container-lowest, #fff);
+        border: 1px solid var(--md-outline-variant, #D1C8B8);
+        border-radius: 14px; overflow: hidden;
+    }
+    .al-table-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 14px 20px; border-bottom: 1px solid var(--md-outline-variant, #D1C8B8);
+    }
+    .al-table-title { font-weight: 700; font-size: 15px; color: var(--md-on-surface, #1C1B18); }
+    .al-count {
+        font-size: 12px; background: var(--md-surface-container, #F0E6D8);
+        border-radius: 20px; padding: 2px 12px; color: var(--md-on-surface-variant, #4D4639);
+        margin-left: 8px;
+    }
+    .al-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .al-table th {
+        text-align: left; padding: 10px 14px;
+        font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+        color: var(--md-on-surface-variant, #4D4639);
+        border-bottom: 1px solid var(--md-outline-variant, #D1C8B8);
+        white-space: nowrap;
+    }
+    .al-table td {
+        padding: 9px 14px;
+        border-bottom: 1px solid color-mix(in srgb, var(--md-outline-variant, #D1C8B8) 50%, transparent);
+        vertical-align: middle;
+    }
+    .al-table tr:last-child td { border-bottom: none; }
+    .al-table tr:hover td { background: var(--md-surface-container, #F0E6D8); }
+
+    .al-ts {
+        font-family: 'Courier New', monospace; font-size: 11px;
+        color: var(--md-on-surface-variant, #4D4639); white-space: nowrap;
+    }
+    .al-badge {
+        display: inline-block; padding: 2px 10px; border-radius: 6px;
+        font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+        white-space: nowrap;
+    }
+    .al-badge.LOGIN      { background: rgba(75,140,75,0.12);  color: #4a8c4a; }
+    .al-badge.LOGOUT     { background: rgba(120,120,120,0.12); color: var(--md-on-surface-variant, #4D4639); }
+    .al-badge.LOGIN_FAIL { background: rgba(200,60,60,0.12);  color: #c83c3c; }
+    .al-badge.CREATE     { background: rgba(80,120,200,0.12); color: #5078c8; }
+    .al-badge.UPDATE     { background: rgba(200,160,40,0.12); color: #c8a028; }
+    .al-badge.DELETE     { background: rgba(200,60,60,0.12);  color: #c83c3c; }
+
+    .al-user { font-size: 13px; white-space: nowrap; }
+    .al-entity {
+        font-size: 11px; background: var(--md-surface-container, #F0E6D8);
+        padding: 2px 8px; border-radius: 6px; white-space: nowrap;
+    }
+    .al-detail {
+        font-size: 12px; color: var(--md-on-surface-variant, #4D4639);
+        max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .al-ip {
+        font-family: 'Courier New', monospace; font-size: 11px;
+        color: var(--md-on-surface-variant, #4D4639);
+    }
+    .al-empty {
+        text-align: center; padding: 60px 20px;
+        color: var(--md-on-surface-variant, #4D4639);
+    }
+    .al-empty i { font-size: 2.5rem; opacity: 0.3; display: block; margin-bottom: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Filters -->
+<form method="GET" action="{{ url_for('admin.activity_log') }}">
+    <div class="al-filters">
+        <div class="al-filter-group">
+            <label>{{ t.get('action', 'Azione') }}</label>
+            <select name="action">
+                <option value="">{{ t.all }}</option>
+                {% for a in all_actions %}
+                <option value="{{ a }}" {% if a == action_filter %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="al-filter-group">
+            <label>{{ t.get('entity', 'Entita') }}</label>
+            <select name="entity">
+                <option value="">{{ t.all }}</option>
+                {% for e in all_entities %}
+                <option value="{{ e }}" {% if e == entity_filter %}selected{% endif %}>{{ e }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="al-filter-group">
+            <label>{{ t.get('user', 'Utente') }}</label>
+            <input type="text" name="user" value="{{ user_filter }}" placeholder="username...">
+        </div>
+        <div class="al-filter-group">
+            <label>{{ t.period }}</label>
+            <select name="days">
+                {% for d in [7, 14, 30, 60, 90] %}
+                <option value="{{ d }}" {% if d == days_filter %}selected{% endif %}>{{ d }} {{ t.days }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-funnel"></i> {{ t.filter }}
+        </button>
+        <a href="{{ url_for('admin.activity_log') }}" class="btn btn-sm btn-outline-secondary">{{ t.reset }}</a>
+    </div>
+</form>
+
+<!-- Table -->
+<div class="al-table-wrap">
+    <div class="al-table-header">
+        <div class="al-table-title">
+            <i class="bi bi-journal-text"></i> {{ t.activity_log }}
+            <span class="al-count">{{ logs|length }} record</span>
+        </div>
+    </div>
+
+    {% if logs %}
+    <div style="overflow-x:auto;">
+        <table class="al-table">
+            <thead>
+                <tr>
+                    <th>{{ t.timestamp }}</th>
+                    <th>{{ t.get('user', 'Utente') }}</th>
+                    <th>{{ t.get('action', 'Azione') }}</th>
+                    <th>{{ t.get('entity', 'Entita') }}</th>
+                    <th>ID</th>
+                    <th>{{ t.get('detail', 'Dettaglio') }}</th>
+                    <th>IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td class="al-ts">{{ log.timestamp.strftime('%d/%m/%y %H:%M:%S') }}</td>
+                    <td class="al-user">{{ log.user_email or '—' }}</td>
+                    <td><span class="al-badge {{ log.action }}">{{ log.action }}</span></td>
+                    <td>{% if log.entity %}<span class="al-entity">{{ log.entity }}</span>{% else %}—{% endif %}</td>
+                    <td style="color:var(--md-on-surface-variant);font-size:12px;">{{ log.entity_id or '—' }}</td>
+                    <td class="al-detail" title="{{ log.detail or '' }}">{{ log.detail or '—' }}</td>
+                    <td class="al-ip">{{ log.ip_address or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="al-empty">
+        <i class="bi bi-journal-text"></i>
+        {{ t.no_activity_yet }}
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
