@@ -2520,61 +2520,117 @@ function generateReview() {
 
     // Build HTML
     var html = '';
-
-    // Overview cards
-    html += '<div class="row g-3 mb-4">';
-    html += '<div class="col-md-3"><div class="card text-center p-3"><h3>' + workflowSteps.length + '</h3><small class="text-muted">Steps</small></div></div>';
-    html += '<div class="col-md-3"><div class="card text-center p-3"><h3>' + Object.keys(stepTypes).length + '</h3><small class="text-muted">Step types</small></div></div>';
-    html += '<div class="col-md-3"><div class="card text-center p-3"><h3>' + warnings.length + '</h3><small class="text-muted">' + (warnings.length === 0 ? '<span class="text-success">No warnings</span>' : '<span class="text-warning">Warnings</span>') + '</small></div></div>';
-    html += '<div class="col-md-3"><div class="card text-center p-3"><span class="status-badge status-' + status + '">' + status + '</span><br><small class="text-muted">Status</small></div></div>';
-    html += '</div>';
-
-    // Workflow info
-    html += '<h6><i class="bi bi-info-circle"></i> Workflow Details</h6>';
-    html += '<table class="table table-sm"><tbody>';
-    html += '<tr><td class="text-muted" style="width:120px">Name</td><td><strong>' + (name || '—') + '</strong></td></tr>';
-    html += '<tr><td class="text-muted">Description</td><td>' + (description || '<em class="text-muted">—</em>') + '</td></tr>';
-    html += '</tbody></table>';
-
-    // Step type breakdown
-    html += '<h6 class="mt-3"><i class="bi bi-diagram-3"></i> Step Breakdown</h6>';
-    html += '<div class="d-flex flex-wrap gap-2 mb-3">';
     var typeIcons = { email: 'envelope', wait_until: 'calendar-check', condition: 'shuffle', goal_check: 'trophy', human_approval: 'person-check', survey: 'ui-checks', export_data: 'download', whatsapp: 'whatsapp', excel_write: 'file-earmark-spreadsheet' };
-    Object.keys(stepTypes).forEach(function(type) {
-        html += '<span class="badge bg-secondary"><i class="bi bi-' + (typeIcons[type] || 'gear') + '"></i> ' + type.replace(/_/g, ' ') + ' x' + stepTypes[type] + '</span>';
-    });
-    html += '</div>';
+    var typeColors = { email: '#795939', condition: '#5B6E3E', wait_until: '#7A6240', goal_check: '#8B6914', human_approval: '#6B4D30', survey: '#5B6E3E', whatsapp: '#25D366', excel_write: '#217346', export_data: '#795939' };
 
-    // Steps table
-    html += '<h6 class="mt-3"><i class="bi bi-list-check"></i> All Steps</h6>';
-    html += '<table class="table table-sm table-hover"><thead><tr><th>#</th><th>Name</th><th>Type</th><th>Next</th></tr></thead><tbody>';
+    // Compact header bar
+    html += '<div class="rv-header">';
+    html += '<div class="rv-header-info">';
+    html += '<span class="rv-header-name">' + (name || 'Workflow senza nome') + '</span>';
+    if (description) html += '<span class="rv-header-desc">' + description + '</span>';
+    html += '</div>';
+    html += '<div class="rv-header-stats">';
+    html += '<span class="rv-stat"><strong>' + workflowSteps.length + '</strong> step</span>';
+    if (warnings.length > 0) html += '<span class="rv-stat warn"><i class="bi bi-exclamation-triangle-fill"></i> ' + warnings.length + '</span>';
+    else html += '<span class="rv-stat ok"><i class="bi bi-check-circle-fill"></i></span>';
+    html += '<span class="rv-status-pill status-' + status + '">' + status + '</span>';
+    html += '</div></div>';
+
+    // Global warnings
+    var globalWarnings = warnings.filter(function(w) { return !w.step; });
+    if (globalWarnings.length > 0) {
+        globalWarnings.forEach(function(w) {
+            html += '<div class="rv-global-warn"><i class="bi bi-exclamation-triangle-fill"></i> ' + w.msg + '</div>';
+        });
+    }
+
+    // Steps flow
+    html += '<div class="rv-flow">';
     workflowSteps.forEach(function(step, i) {
-        var nextLabel = '';
+        var icon = typeIcons[step.type] || 'gear';
+        var color = typeColors[step.type] || '#666';
+
+        // Next step
+        var nextHtml = '';
         var nextStep = step.config.next_step || 'auto';
         var outputs = typeof _getOutputCount === 'function' ? _getOutputCount(step) : 1;
         if (outputs > 1) {
-            nextLabel = '<span class="text-muted">branching</span>';
-        } else if (nextStep === 'end') {
-            nextLabel = '<span class="badge bg-danger">END</span>';
-        } else if (nextStep === 'auto') {
-            nextLabel = i < workflowSteps.length - 1 ? 'Step ' + (i + 2) : '<span class="badge bg-danger">END</span>';
-        } else {
-            var ts = workflowSteps.find(function(s) { return s.order === parseInt(nextStep); });
-            nextLabel = ts ? ts.name : 'Step ' + nextStep;
+            nextHtml = '<span class="rv-tag branching"><i class="bi bi-shuffle"></i> branching</span>';
+        } else if (nextStep === 'end' || (nextStep === 'auto' && i === workflowSteps.length - 1)) {
+            nextHtml = '<span class="rv-tag end">END</span>';
         }
-        html += '<tr><td>' + (i + 1) + '</td><td><i class="bi bi-' + (typeIcons[step.type] || 'gear') + '"></i> ' + step.name + '</td><td><small>' + step.type.replace(/_/g, ' ') + '</small></td><td>' + nextLabel + '</td></tr>';
-    });
-    html += '</tbody></table>';
 
-    // Warnings
-    if (warnings.length > 0) {
-        html += '<h6 class="mt-3"><i class="bi bi-exclamation-triangle text-warning"></i> Warnings</h6>';
-        warnings.forEach(function(w) {
-            html += '<div class="alert alert-warning py-2" style="font-size:13px">';
-            if (w.step) html += '<strong>' + w.step.name + ':</strong> ';
-            html += w.msg + '</div>';
-        });
-    }
+        // Detail chips
+        var chips = [];
+        switch (step.type) {
+            case 'email':
+                if (step.config.subject) chips.push('<i class="bi bi-envelope"></i> ' + step.config.subject);
+                if (step.config.recipient === 'custom' && step.config.custom_to) chips.push('<i class="bi bi-at"></i> ' + step.config.custom_to);
+                if (step.config.has_landing) chips.push('<i class="bi bi-card-text"></i> Landing');
+                if (step.config.delay_hours) chips.push('<i class="bi bi-clock"></i> ' + step.config.delay_hours + 'h');
+                break;
+            case 'condition':
+                chips.push('<i class="bi bi-signpost-split"></i> ' + (step.config.field || '?') + ' ' + (step.config.operator || '') + ' "' + (step.config.value || '') + '"');
+                break;
+            case 'wait_until':
+                var wd = step.config.wait_type === 'delay_hours' ? step.config.delay_hours + 'h' : (step.config.wait_type === 'date' ? (step.config.target_date || '') + ' ' + (step.config.target_time || '') : step.config.wait_type || '');
+                chips.push('<i class="bi bi-hourglass-split"></i> ' + wd);
+                break;
+            case 'goal_check':
+                chips.push('<i class="bi bi-bullseye"></i> ' + (step.config.goal || '—'));
+                break;
+            case 'human_approval':
+                chips.push('<i class="bi bi-person-check"></i> ' + (step.config.approver_email || '—'));
+                break;
+            case 'survey':
+                chips.push('<i class="bi bi-chat-text"></i> ' + (step.config.question || '—'));
+                break;
+            case 'whatsapp':
+                chips.push('<i class="bi bi-whatsapp"></i> ' + (step.config.template_name || step.config.body_text || '—'));
+                break;
+            case 'excel_write':
+                chips.push('<i class="bi bi-file-earmark-spreadsheet"></i> ' + (step.config.file_path || '—'));
+                break;
+        }
+
+        // Step warnings
+        var stepWarnings = warnings.filter(function(w) { return w.step === step; });
+
+        html += '<div class="rv-card' + (stepWarnings.length > 0 ? ' has-warn' : '') + '" onclick="editStep(' + i + ')">';
+        // Left: colored stripe
+        html += '<div class="rv-card-stripe" style="background:' + color + '"></div>';
+        html += '<div class="rv-card-content">';
+        // Row 1: number + name + type tag + edit
+        html += '<div class="rv-card-row1">';
+        html += '<span class="rv-card-idx">' + (i + 1) + '</span>';
+        html += '<span class="rv-card-icon" style="color:' + color + '"><i class="bi bi-' + icon + '"></i></span>';
+        html += '<span class="rv-card-name">' + step.name + '</span>';
+        html += '<span class="rv-card-type">' + step.type.replace(/_/g, ' ') + '</span>';
+        if (nextHtml) html += nextHtml;
+        html += '<span class="rv-card-edit"><i class="bi bi-pencil"></i></span>';
+        html += '</div>';
+        // Row 2: chips
+        if (chips.length > 0) {
+            html += '<div class="rv-card-row2">';
+            chips.forEach(function(c) { html += '<span class="rv-chip">' + c + '</span>'; });
+            html += '</div>';
+        }
+        // Row 3: warnings
+        if (stepWarnings.length > 0) {
+            html += '<div class="rv-card-row3">';
+            stepWarnings.forEach(function(w) {
+                html += '<span class="rv-chip warn"><i class="bi bi-exclamation-triangle-fill"></i> ' + w.msg + '</span>';
+            });
+            html += '</div>';
+        }
+        html += '</div></div>';
+
+        // Connector
+        if (i < workflowSteps.length - 1) {
+            html += '<div class="rv-conn"><div class="rv-conn-line"></div></div>';
+        }
+    });
+    html += '</div>';
 
     document.getElementById('reviewContent').innerHTML = html;
 }
@@ -3271,10 +3327,6 @@ document.addEventListener('click', function(e) {
 });
 
 function drGetSimConfig() {
-    var responses = {};
-    document.querySelectorAll('.dr-chip.active[data-group]').forEach(function(c) {
-        responses[c.dataset.group] = c.dataset.val;
-    });
     var collectedData = {}, sabaformData = {};
     try { collectedData = JSON.parse(document.getElementById('drCollectedData').value || '{}'); } catch(e) {}
     try { sabaformData = JSON.parse(document.getElementById('drSabaformData').value || '{}'); } catch(e) {}
@@ -3285,8 +3337,7 @@ function drGetSimConfig() {
             phone: document.getElementById('drPersonaPhone').value
         },
         collected_data: collectedData,
-        sabaform_data: sabaformData,
-        responses: responses
+        sabaform_data: sabaformData
     };
 }
 
@@ -3475,6 +3526,19 @@ function dryRunStepOne() {
     if (!drState) {
         // First click — start in stepping mode
         drRunStart(true);
+        return;
+    }
+    // If waiting for interactive input, skip the interaction and advance
+    if (drState.waitingForInput) {
+        var skipIdx = drState.waitingIdx;
+        var skipResult = drState.stepResults[skipIdx] || {};
+        skipResult.action = _t('dr_skipped_interaction');
+        drState.waitingForInput = false;
+        drState.running = true;
+        drLog('skip', 'bi-skip-forward-fill', workflowSteps[skipIdx].name + ' — ' + _t('dr_interaction_skipped'), '');
+        document.getElementById('drStepBtn').style.display = 'none';
+        document.getElementById('drStopBtn').style.display = '';
+        drResolveStep(skipIdx, skipResult);
         return;
     }
     if (drState.resumeIdx < 0 || drState.resumeIdx >= workflowSteps.length) return;
@@ -3692,10 +3756,17 @@ function drExecuteStep(idx) {
             drState.waitingIdx = idx;
             drBuildTimeline();
             drRenderDetail();
-            // Hide pause, show step controls are disabled while waiting
+            // Hide pause/resume, but in stepping mode show Skip button
             document.getElementById('drStopBtn').style.display = 'none';
-            document.getElementById('drStepBtn').style.display = 'none';
             document.getElementById('drResumeBtn').style.display = 'none';
+            if (drState.stepping) {
+                var stepBtn = document.getElementById('drStepBtn');
+                stepBtn.style.display = '';
+                stepBtn.className = 'btn btn-sm btn-outline-secondary';
+                stepBtn.innerHTML = '<i class="bi bi-skip-forward-fill"></i> ' + _t('dr_skip_step');
+            } else {
+                document.getElementById('drStepBtn').style.display = 'none';
+            }
             return;  // stop here — drSubmitResponse() will continue
         }
 
@@ -3863,6 +3934,17 @@ function drRenderDetail() {
     if (!canvas || !drState) return;
 
     var html = '';
+
+    // Show banner to navigate back to active interactive step
+    if (drState.waitingForInput && drState.selectedIdx !== drState.waitingIdx) {
+        var waitStep = workflowSteps[drState.waitingIdx];
+        if (waitStep) {
+            html += '<div class="dr-back-banner" onclick="drSelectNode(' + drState.waitingIdx + ')" style="cursor:pointer">';
+            html += '<i class="bi bi-arrow-left-circle-fill"></i> ';
+            html += _t('dr_go_back_to') + ' <strong>' + waitStep.name + '</strong> — ' + _t('dr_waiting_response');
+            html += '</div>';
+        }
+    }
 
     // Show selected step card
     var idx = drState.selectedIdx;

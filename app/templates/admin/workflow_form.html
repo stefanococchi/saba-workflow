@@ -692,6 +692,97 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
 .dr-step-pulse {
     animation: drPulse 1.5s ease-in-out 3;
 }
+.dr-back-banner {
+    background: var(--md-tertiary-container, #F5DDB8);
+    color: var(--md-on-tertiary-container, #2E1500);
+    border-radius: 12px; padding: 10px 16px;
+    font-size: 13px; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+    transition: background 0.2s;
+}
+.dr-back-banner:hover {
+    background: var(--md-tertiary, #8B6914);
+    color: var(--md-on-tertiary, #fff);
+}
+/* ── Review section ── */
+.rv-header {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--md-surface-container, #F0E6D8);
+    border-radius: 14px; padding: 16px 20px; margin-bottom: 20px;
+}
+.rv-header-info { display: flex; flex-direction: column; gap: 2px; }
+.rv-header-name { font-size: 16px; font-weight: 700; color: var(--md-on-surface, #1C1B18); }
+.rv-header-desc { font-size: 12px; color: var(--md-on-surface-variant, #4D4639); }
+.rv-header-stats { display: flex; align-items: center; gap: 12px; }
+.rv-stat { font-size: 13px; color: var(--md-on-surface-variant, #4D4639); }
+.rv-stat.warn { color: var(--md-error, #BA1A1A); }
+.rv-stat.ok { color: var(--md-primary, #5B6E3E); }
+.rv-status-pill {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 3px 10px; border-radius: 20px;
+    background: var(--md-surface-container-high, #E8DFD0); color: var(--md-on-surface-variant, #4D4639);
+}
+.rv-global-warn {
+    background: var(--md-error-container, #FFDAD6); color: var(--md-on-error-container, #410002);
+    border-radius: 10px; padding: 10px 16px; font-size: 13px; margin-bottom: 12px;
+}
+/* Flow */
+.rv-flow { display: flex; flex-direction: column; align-items: stretch; }
+.rv-card {
+    display: flex; border-radius: 12px; overflow: hidden; cursor: pointer;
+    background: var(--md-surface-container-lowest, #fff);
+    border: 1px solid var(--md-outline-variant, #D1C8B8);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.rv-card:hover {
+    border-color: var(--md-primary, #795939);
+    box-shadow: 0 2px 8px rgba(121, 89, 57, 0.10);
+}
+.rv-card.has-warn { border-color: var(--md-error, #BA1A1A); border-style: dashed; }
+.rv-card-stripe { width: 5px; flex-shrink: 0; }
+.rv-card-content { flex: 1; padding: 12px 16px; min-width: 0; }
+.rv-card-row1 { display: flex; align-items: center; gap: 8px; }
+.rv-card-idx {
+    font-size: 11px; font-weight: 700; color: var(--md-on-surface-variant, #4D4639);
+    background: var(--md-surface-container, #F0E6D8);
+    min-width: 22px; height: 22px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.rv-card-icon { font-size: 16px; flex-shrink: 0; line-height: 1; }
+.rv-card-name {
+    font-weight: 600; font-size: 14px; color: var(--md-on-surface, #1C1B18);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-card-type {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+    color: var(--md-on-surface-variant, #4D4639); opacity: 0.7;
+    white-space: nowrap; margin-right: auto;
+}
+.rv-tag {
+    font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 6px; white-space: nowrap;
+}
+.rv-tag.branching { background: var(--md-tertiary-container, #F5DDB8); color: var(--md-on-tertiary-container, #2E1500); }
+.rv-tag.end { background: var(--md-error-container, #FFDAD6); color: var(--md-on-error-container, #410002); }
+.rv-card-edit {
+    color: var(--md-on-surface-variant, #4D4639); opacity: 0;
+    font-size: 14px; transition: opacity 0.15s; flex-shrink: 0; padding: 0 2px;
+}
+.rv-card:hover .rv-card-edit { opacity: 0.6; }
+.rv-card-row2 { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rv-chip {
+    font-size: 11px; padding: 3px 10px; border-radius: 8px;
+    background: var(--md-surface-container, #F0E6D8);
+    color: var(--md-on-surface-variant, #4D4639);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px;
+}
+.rv-chip i { font-size: 10px; margin-right: 3px; }
+.rv-chip.warn {
+    background: var(--md-error-container, #FFDAD6);
+    color: var(--md-on-error-container, #410002);
+}
+.rv-card-row3 { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rv-conn { display: flex; justify-content: center; padding: 0; height: 14px; }
+.rv-conn-line { width: 2px; height: 100%; background: var(--md-outline-variant, #D1C8B8); }
 .dr-empty-state {
     text-align: center; padding: 60px 20px;
     color: var(--md-on-surface-variant, #4D4639);
@@ -1235,14 +1326,7 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
 
         <!-- Tab: Review (existing) -->
         <div class="review-tab-content" data-tab="review">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-check-circle"></i> {{ t.review_save }}</h5>
-                </div>
-                <div class="card-body">
-                    <div id="reviewContent"></div>
-                </div>
-            </div>
+            <div id="reviewContent"></div>
         </div>
 
         <!-- Tab: Dry Run -->
@@ -1348,38 +1432,7 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
                         </div>
                     </div>
 
-                    <!-- Risposte simulate -->
-                    <div class="dr-panel-card">
-                        <div class="dr-panel-header" onclick="toggleDrPanel(this)">
-                            <h6><i class="bi bi-toggles"></i> {{ t.simulated_responses }}</h6>
-                            <i class="bi bi-chevron-down dr-collapse-icon"></i>
-                        </div>
-                        <div class="dr-panel-body">
-                            <div class="dr-field">
-                                <label>{{ t.landing_form }}</label>
-                                <div class="dr-chip-group">
-                                    <span class="dr-chip active" data-group="landing" data-val="filled">{{ t.filled }}</span>
-                                    <span class="dr-chip" data-group="landing" data-val="empty">{{ t.not_filled }}</span>
-                                    <span class="dr-chip" data-group="landing" data-val="timeout">{{ t.timeout }}</span>
-                                </div>
-                            </div>
-                            <div class="dr-field">
-                                <label>{{ t.approval }}</label>
-                                <div class="dr-chip-group">
-                                    <span class="dr-chip active" data-group="approval" data-val="approved">{{ t.approved }}</span>
-                                    <span class="dr-chip" data-group="approval" data-val="rejected">{{ t.rejected }}</span>
-                                    <span class="dr-chip" data-group="approval" data-val="timeout">{{ t.no_response }}</span>
-                                </div>
-                            </div>
-                            <div class="dr-field">
-                                <label>{{ t.email_open }}</label>
-                                <div class="dr-chip-group">
-                                    <span class="dr-chip active" data-group="email_open" data-val="opened">{{ t.opened }}</span>
-                                    <span class="dr-chip" data-group="email_open" data-val="not_opened">{{ t.not_opened }}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+
 
                     <!-- Validazione -->
                     <div class="dr-panel-card">
@@ -1455,7 +1508,6 @@ window._drT = {
     skipped_pl: {{ t.skipped_pl | tojson }},
     test_persona: {{ t.test_persona | tojson }},
     simulated_data: {{ t.simulated_data | tojson }},
-    simulated_responses: {{ t.simulated_responses | tojson }},
     validation: {{ t.validation | tojson }},
     landing_form: {{ t.landing_form | tojson }},
     filled: {{ t.filled | tojson }},
@@ -1549,8 +1601,8 @@ window._drT = {
     waiting: {{ t.get('pending', 'Pending') | tojson }},
     skipped: {{ t.dr_skipped | tojson }}
 };</script>
-<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=4.1.0"></script>
-<script src="{{ url_for('static', filename='js/workflow-canvas-2d.js') }}?v=1.0.0"></script>
+<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=4.2.0"></script>
+<script src="{{ url_for('static', filename='js/workflow-canvas-2d.js') }}?v=1.1.0"></script>
 {% if mode == 'edit' and workflow and workflow.steps %}
 <script>
 window._currentWorkflowId = {{ workflow.id }};

@@ -344,6 +344,12 @@ function _applyDrawflowStyles() {
             border: 2px solid var(--node-border, #555);
             cursor: pointer; transition: transform 0.15s;
         }
+        .df-theme-btn:hover { transform: scale(1.15); }
+        .df-theme-btn.active { border-color: #8B6914; box-shadow: 0 0 0 2px rgba(139,105,20,0.4); }
+        .df-theme-sep {
+            width: 1px; height: 20px; background: var(--node-border, #444);
+            align-self: center;
+        }
         .df-color-pick {
             display: flex;
             align-items: center;
@@ -618,12 +624,18 @@ function _addZoomControls() {
     wrap.style.position = 'relative';
     wrap.appendChild(zc);
 
-    // Color pickers for canvas and palette
+    // Theme presets + color pickers
     var ts = document.createElement('div');
     ts.className = 'df-theme-switcher';
     var savedCanvasBg = localStorage.getItem('df_canvas_bg') || '';
     var savedPaletteBg = localStorage.getItem('df_palette_bg') || '';
+    var curTheme = localStorage.getItem('wf_canvas_theme') || 'dark';
     ts.innerHTML = '' +
+        '<div class="df-theme-btn' + (curTheme==='dark'?' active':'') + '" style="background:#1a1a1a" onclick="_dfSetTheme(\'dark\',this)" title="Dark"></div>' +
+        '<div class="df-theme-btn' + (curTheme==='white'?' active':'') + '" style="background:#fff;border-color:#ddd" onclick="_dfSetTheme(\'white\',this)" title="White"></div>' +
+        '<div class="df-theme-btn' + (curTheme==='cream'?' active':'') + '" style="background:#f5f0e8;border-color:#d5cfc3" onclick="_dfSetTheme(\'cream\',this)" title="Cream"></div>' +
+        '<div class="df-theme-btn' + (curTheme==='warm-dark'?' active':'') + '" style="background:#2d2a25" onclick="_dfSetTheme(\'warm-dark\',this)" title="Warm Dark"></div>' +
+        '<div class="df-theme-sep"></div>' +
         '<label class="df-color-pick" title="Canvas background">' +
             '<i class="bi bi-palette"></i>' +
             '<input type="color" value="' + (savedCanvasBg || '#1a1a1a') + '" onchange="_dfSetCanvasColor(this.value)">' +
@@ -652,6 +664,24 @@ function _dfSetCanvasColor(color) {
         drawflow.style.backgroundSize = '20px 20px';
     }
     localStorage.setItem('df_canvas_bg', color);
+}
+
+function _dfSetTheme(theme, btn) {
+    // Update body class for CSS variable scoping
+    document.body.classList.remove('canvas-dark', 'canvas-white', 'canvas-cream', 'canvas-warm-dark');
+    document.body.classList.add('canvas-' + theme);
+    localStorage.setItem('wf_canvas_theme', theme);
+    // Also update the linear canvas theme if available
+    if (typeof setCanvasTheme === 'function') setCanvasTheme(theme, null);
+    // Clear custom canvas bg so theme takes effect
+    var canvas = document.getElementById('drawflowCanvas');
+    if (canvas) canvas.style.background = '';
+    localStorage.removeItem('df_canvas_bg');
+    // Update active button
+    document.querySelectorAll('.df-theme-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+    // Re-render drawflow nodes to pick up new CSS vars
+    if (typeof _dfRenderAllNodes === 'function') _dfRenderAllNodes();
 }
 
 function _dfSetPaletteColor(color) {

@@ -325,6 +325,11 @@ TRANSLATIONS = {
         'dr_if_rejected': 'Se rifiutato',
         'dr_if_reached': 'Se raggiunto',
         'dr_if_not_reached': 'Se non raggiunto',
+        'dr_skip_step': 'Salta',
+        'dr_skipped_interaction': 'interazione saltata',
+        'dr_interaction_skipped': 'interazione saltata dall\'utente',
+        'dr_go_back_to': 'Torna a',
+        'dr_waiting_response': 'in attesa di risposta',
     },
     'en': {
         # Navbar & Sidebar
@@ -650,6 +655,11 @@ TRANSLATIONS = {
         'dr_if_rejected': 'If rejected',
         'dr_if_reached': 'If reached',
         'dr_if_not_reached': 'If not reached',
+        'dr_skip_step': 'Skip',
+        'dr_skipped_interaction': 'interaction skipped',
+        'dr_interaction_skipped': 'interaction skipped by user',
+        'dr_go_back_to': 'Go back to',
+        'dr_waiting_response': 'waiting for response',
     }
 }
 
