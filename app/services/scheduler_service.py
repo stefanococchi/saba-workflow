@@ -1135,7 +1135,25 @@ class SchedulerService:
                 return False
 
             file_id = file_resp.json()['id']
-            workbook_base = f"{drive_base}/items/{file_id}/workbook/worksheets('{sheet_name}')"
+            wb_base = f"{drive_base}/items/{file_id}/workbook"
+
+            # Resolve actual sheet name (configured name may differ from real name, e.g. Sheet1 vs Foglio1)
+            sheets_resp = http_requests.get(f"{wb_base}/worksheets", headers=headers, timeout=15)
+            if sheets_resp.status_code == 200:
+                sheets = sheets_resp.json().get('value', [])
+                # Try to match configured name first, otherwise use first sheet
+                real_sheet = None
+                for sh in sheets:
+                    if sh['name'].lower() == sheet_name.lower():
+                        real_sheet = sh['name']
+                        break
+                if not real_sheet and sheets:
+                    real_sheet = sheets[0]['name']
+                    logger.info(f"Excel write: sheet '{sheet_name}' not found, using '{real_sheet}'")
+                if real_sheet:
+                    sheet_name = real_sheet
+
+            workbook_base = f"{wb_base}/worksheets('{sheet_name}')"
 
             # Try table first
             add_url = f"{workbook_base}/tables/@/rows/add"
