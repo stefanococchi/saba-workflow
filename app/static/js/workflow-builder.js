@@ -1861,8 +1861,11 @@ function initEmailEditor() {
             placeholder: 'Scrivi il testo della tua email qui...',
             dialogsInBody: true,
             disableDragAndDrop: true,
+            fontNames: ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Courier New'],
+            fontNamesIgnoreCheck: ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Courier New'],
             toolbar: [
                 ['style', ['style']],
+                ['fontname', ['fontname', 'fontsize']],
                 ['font', ['bold', 'italic', 'underline', 'strikethrough', 'clear']],
                 ['color', ['color']],
                 ['para', ['ul', 'ol', 'paragraph']],
@@ -1872,15 +1875,44 @@ function initEmailEditor() {
             ],
             styleTags: ['p', 'h1', 'h2', 'h3', 'h4'],
             callbacks: {
-                onFocus: function() { lastFocusedIsSubject = false; }
+                onFocus: function() { lastFocusedIsSubject = false; },
+                onKeyup: function() { _showCurrentFont(); },
+                onMouseup: function() { _showCurrentFont(); }
             }
         });
+
+        // Font indicator below toolbar
+        var editorWrap = $editor.next('.note-editor');
+        if (editorWrap.length) {
+            editorWrap.find('.note-toolbar').after(
+                '<div id="fontIndicator" style="background:#f5f0e8;padding:3px 10px;font-size:11px;color:#795548;border-bottom:1px solid #e0d6c8;">' +
+                'Font: <span id="fontIndicatorName">—</span> | Size: <span id="fontIndicatorSize">—</span></div>'
+            );
+        }
     }
     // Track subject focus
     const subjectField = document.getElementById('editEmailSubject');
     if (subjectField) {
         subjectField.addEventListener('focus', function() { lastFocusedIsSubject = true; });
     }
+}
+
+function _showCurrentFont() {
+    try {
+        var sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return;
+        var node = sel.anchorNode;
+        if (!node) return;
+        var el = node.nodeType === 3 ? node.parentElement : node;
+        if (!el) return;
+        var computed = window.getComputedStyle(el);
+        var fontName = computed.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
+        var fontSize = computed.fontSize;
+        var nameEl = document.getElementById('fontIndicatorName');
+        var sizeEl = document.getElementById('fontIndicatorSize');
+        if (nameEl) nameEl.textContent = fontName;
+        if (sizeEl) sizeEl.textContent = fontSize;
+    } catch(e) {}
 }
 
 function destroyEmailEditor() {

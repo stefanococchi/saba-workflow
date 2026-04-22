@@ -253,16 +253,6 @@ class EmailService:
             # Renderizza body
             body_html = EmailService.render_template(step.body_template, context)
 
-            # Normalize font: strip all inline font-family from inner tags,
-            # then wrap in a div with consistent font so everything matches
-            import re
-            body_html = re.sub(r'font-family\s*:[^;\"\']+;?\s*', '', body_html)
-            body_html = (
-                '<div style="font-family: Arial, Helvetica, sans-serif;">'
-                + body_html
-                + '</div>'
-            )
-
             # Se c'è landing_url ma non è nel template, aggiungilo in fondo
             if landing_url and '{{ landing_url }}' not in (step.body_template or '') and '{{landing_url}}' not in (step.body_template or '') and landing_url not in body_html:
                 body_html += (
