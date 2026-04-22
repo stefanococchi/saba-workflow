@@ -307,7 +307,7 @@ class SchedulerService:
                     SchedulerService._schedule_next_step(participant, step)
                 else:
                     execution.status = ExecutionStatus.FAILED
-                    execution.error_message = "Execution failed"
+                    execution.error_message = execution.error_message or f"{step.type.value} step failed"
                 
                 _db().commit()
                 
@@ -1029,13 +1029,45 @@ class SchedulerService:
             columns = config.get('columns', [])
             storage = config.get('storage', 'onedrive')
 
-            if not file_path or not columns:
-                logger.error("Excel write step: file_path or columns not configured")
+            if not file_path:
+                execution.error_message = "file_path not configured"
+                logger.error(f"Excel write step: {execution.error_message}")
                 return False
 
+            # Auto-generate columns from collected_data if none configured
+            if not columns:
+                cd = participant.collected_data or {}
+                columns = [{'header': k, 'source': 'collected_data', 'field': k} for k in cd.keys()]
+                if not columns:
+                    execution.error_message = "no columns configured and no collected_data"
+                    logger.error(f"Excel write step: {execution.error_message}")
+                    return False
+                logger.info(f"Excel write: auto-generated {len(columns)} columns from collected_data")
+
             # Build row values from participant data
+            collected = participant.collected_data or {}
+            sabaform = participant.sabaform_data or {}
+
+            # Helper: find value in a dict with case-insensitive/fuzzy fallback
+            def _lookup(data, field):
+                # Exact match
+                if field in data:
+                    return data[field]
+                # Case-insensitive match
+                field_lower = field.lower().replace(' ', '_').replace("'", '')
+                for k, v in data.items():
+                    if k.lower().replace(' ', '_').replace("'", '') == field_lower:
+                        return v
+                return None
+
+            # If ALL columns are collected_data and none match, use positional mapping
+            all_collected = all(c.get('source', 'participant') == 'collected_data' for c in columns)
+            collected_values = list(collected.values()) if collected else []
+            # Check if any configured field actually matches a collected_data key
+            any_match = any(_lookup(collected, c.get('field', '')) is not None for c in columns if c.get('source') == 'collected_data')
+
             row_values = []
-            for col in columns:
+            for i, col in enumerate(columns):
                 field = col.get('field', '')
                 source = col.get('source', 'participant')
                 val = ''
@@ -1048,9 +1080,15 @@ class SchedulerService:
                         if hasattr(val, 'value'):
                             val = val.value
                 elif source == 'collected_data':
-                    val = (participant.collected_data or {}).get(field, '')
+                    found = _lookup(collected, field)
+                    if found is not None:
+                        val = found
+                    elif all_collected and not any_match and i < len(collected_values):
+                        # Positional fallback: map columns to collected_data values in order
+                        val = collected_values[i]
                 elif source == 'sabaform_data':
-                    val = (participant.sabaform_data or {}).get(field, '')
+                    found = _lookup(sabaform, field)
+                    val = found if found is not None else ''
                 row_values.append(str(val or ''))
 
             # === LOCAL FILE ===
@@ -1073,12 +1111,14 @@ class SchedulerService:
                 # SharePoint: resolve site then use its drive
                 sp_site = config.get('sharepoint_site', '').strip().strip('/')
                 if not sp_site:
-                    logger.error("Excel write: SharePoint site not configured")
+                    execution.error_message = "SharePoint site not configured"
+                    logger.error(f"Excel write: {execution.error_message}")
                     return False
                 site_url = f"https://graph.microsoft.com/v1.0/sites/{sp_site}"
                 site_resp = http_requests.get(site_url, headers=headers, timeout=15)
                 if site_resp.status_code != 200:
-                    logger.error(f"Excel write: SharePoint site not found — {site_resp.text}")
+                    execution.error_message = f"SharePoint site not found: {site_resp.text[:200]}"
+                    logger.error(f"Excel write: {execution.error_message}")
                     return False
                 site_id = site_resp.json()['id']
                 drive_base = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive"
@@ -1090,7 +1130,8 @@ class SchedulerService:
             file_url = f"{drive_base}/root:/{clean_path}"
             file_resp = http_requests.get(file_url, headers=headers, timeout=15)
             if file_resp.status_code != 200:
-                logger.error(f"Excel write: file not found at {file_path} — {file_resp.text}")
+                execution.error_message = f"File not found at {file_path}: {file_resp.text[:200]}"
+                logger.error(f"Excel write: {execution.error_message}")
                 return False
 
             file_id = file_resp.json()['id']
@@ -1110,7 +1151,8 @@ class SchedulerService:
             range_url = f"{workbook_base}/usedRange"
             range_resp = http_requests.get(range_url, headers=headers, timeout=15)
             if range_resp.status_code != 200:
-                logger.error(f"Excel write: cannot read used range — {range_resp.text}")
+                execution.error_message = f"Cannot read used range: {range_resp.text[:200]}"
+                logger.error(f"Excel write: {execution.error_message}")
                 return False
 
             next_row = range_resp.json().get('rowCount', 1) + 1
@@ -1125,11 +1167,13 @@ class SchedulerService:
                 execution.result_data = {'file': file_path, 'storage': storage, 'range': cell_range}
                 return True
 
-            logger.error(f"Excel write failed: {patch_resp.status_code} — {patch_resp.text}")
+            execution.error_message = f"Graph API error {patch_resp.status_code}: {patch_resp.text[:200]}"
+            logger.error(f"Excel write failed: {execution.error_message}")
             return False
 
         except Exception as e:
-            logger.error(f"✗ Excel write error: {str(e)}")
+            execution.error_message = f"Excel write error: {str(e)}"
+            logger.error(f"✗ {execution.error_message}")
             return False
 
     @staticmethod

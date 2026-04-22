@@ -140,14 +140,8 @@ def submit_landing_data(token):
         
         # Cancella follow-up schedulati (ha risposto)
         SchedulerService.cancel_scheduled_executions(participant.id)
-        
-        # Marca completato
-        participant.status = ParticipantStatus.COMPLETED
-        participant.completed_at = datetime.utcnow()
-        
-        db.commit()
 
-        logger.info(f"Partecipante {participant.id} completato workflow")
+        db.commit()
 
         # Log attività
         log_activity(
@@ -157,13 +151,29 @@ def submit_landing_data(token):
             participant_id=participant.id,
             details={'collected_data': existing}
         )
-        log_activity(
-            workflow_id=participant.workflow_id,
-            event_type='status_changed',
-            description=f'{participant.full_name or participant.email} → completato',
-            participant_id=participant.id,
-            details={'old_status': 'in_progress', 'new_status': 'completed'}
-        )
+
+        # Trova lo step landing corrente per avanzare al prossimo
+        current_step = None
+        for s in sorted(participant.workflow.steps, key=lambda x: x.order):
+            if s.landing_html or s.landing_gjs_data or s.landing_page_config:
+                current_step = s
+                break
+        if not current_step:
+            current_step = participant.current_step
+
+        if current_step:
+            # Usa _handle_landing_branch per rispettare landing_if_filled/jump/stop
+            config = current_step.skip_conditions or {}
+            if_filled = config.get('landing_if_filled', 'continue')
+            if_filled_step = config.get('landing_if_filled_step', 0)
+            SchedulerService._handle_landing_branch(participant, current_step, if_filled, if_filled_step)
+            logger.info(f"Partecipante {participant.id} completato landing, branch: {if_filled}")
+        else:
+            # Nessuno step trovato — marca completato come fallback
+            participant.status = ParticipantStatus.COMPLETED
+            participant.completed_at = datetime.utcnow()
+            db.commit()
+            logger.info(f"Partecipante {participant.id} completato workflow (nessuno step successivo)")
 
         return jsonify({
             'success': True,

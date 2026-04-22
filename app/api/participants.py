@@ -431,6 +431,12 @@ def rollback_participant(participant_id):
                     Execution.step_id.in_(step_ids)
                 ).delete(synchronize_session='fetch')
 
+            # Rigenera token (il vecchio potrebbe essere scaduto)
+            participant.token = TokenService.generate_token(
+                participant.id, participant.workflow_id,
+                expires_hours=participant.workflow.token_expiration_hours
+            )
+
             # Aggiorna partecipante
             participant.status = ParticipantStatus.IN_PROGRESS
             participant.current_step_id = target_step.id
