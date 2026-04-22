@@ -1137,6 +1137,17 @@ class SchedulerService:
             file_id = file_resp.json()['id']
             wb_base = f"{drive_base}/items/{file_id}/workbook"
 
+            # Create workbook session to get edit access
+            session_url = f"{wb_base}/createSession"
+            session_resp = http_requests.post(session_url, headers=headers,
+                                              json={"persistChanges": True}, timeout=15)
+            if session_resp.status_code in (200, 201):
+                session_id = session_resp.json().get('id')
+                headers["workbook-session-id"] = session_id
+                logger.info(f"Excel write: workbook session created")
+            else:
+                logger.warning(f"Excel write: session creation failed ({session_resp.status_code}), proceeding without session")
+
             # Resolve actual sheet name (configured name may differ from real name, e.g. Sheet1 vs Foglio1)
             sheets_resp = http_requests.get(f"{wb_base}/worksheets", headers=headers, timeout=15)
             if sheets_resp.status_code == 200:
@@ -1193,6 +1204,13 @@ class SchedulerService:
             execution.error_message = f"Excel write error: {str(e)}"
             logger.error(f"✗ {execution.error_message}")
             return False
+        finally:
+            # Close workbook session
+            if headers.get('workbook-session-id'):
+                try:
+                    http_requests.post(f"{wb_base}/closeSession", headers=headers, timeout=10)
+                except Exception:
+                    pass
 
     @staticmethod
     def _excel_write_local(file_path, sheet_name, row_values, columns, execution):
