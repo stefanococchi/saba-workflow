@@ -192,6 +192,13 @@ class EmailService:
             str: template renderizzato
         """
         try:
+            import re
+            # Strip wrapping <span> tags around Jinja2 variables so they inherit parent font
+            template_string = re.sub(
+                r'<span[^>]*>((\{\{.*?\}\}))</span>',
+                r'\1',
+                template_string
+            )
             template = Template(template_string)
             return template.render(**context)
         except Exception as e:

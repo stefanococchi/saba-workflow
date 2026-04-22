@@ -1905,7 +1905,8 @@ function insertVariable(variable) {
     } else {
         const $editor = $('#editEmailBody');
         if ($editor.length && $.fn.summernote) {
-            $editor.summernote('editor.insertText', tag);
+            // pasteHTML to inherit surrounding font style (insertText wraps in its own span)
+            $editor.summernote('editor.pasteHTML', tag);
         }
     }
 }
