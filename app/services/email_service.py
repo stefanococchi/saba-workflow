@@ -193,12 +193,22 @@ class EmailService:
         """
         try:
             import re
-            # Strip wrapping <span> tags around Jinja2 variables so they inherit parent font
-            template_string = re.sub(
-                r'<span[^>]*>((\{\{.*?\}\}))</span>',
-                r'\1',
-                template_string
-            )
+            # 1. Remove HTML tags INSIDE Jinja2 variables (e.g. {{ participant.<b>first</b>_name }})
+            def _clean_var(m):
+                inner = re.sub(r'<[^>]+>', '', m.group(0))
+                return inner
+            template_string = re.sub(r'\{\{.*?\}\}', _clean_var, template_string, flags=re.DOTALL)
+
+            # 2. Remove wrapping tags around variables (e.g. <span style="...">{{ var }}</span>)
+            #    Handles <span>, <font>, <b>, <i>, <u> and nested combinations
+            for _ in range(3):  # multiple passes for nested wrappers
+                template_string = re.sub(
+                    r'<(span|font|b|i|u)\b[^>]*>(\s*\{\{.*?\}\}\s*)</\1>',
+                    r'\2',
+                    template_string,
+                    flags=re.DOTALL
+                )
+
             template = Template(template_string)
             return template.render(**context)
         except Exception as e:
