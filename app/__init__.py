@@ -65,7 +65,10 @@ def create_app(config_object=None):
     # Protect admin routes with login (must be before register_blueprint)
     @admin_bp.before_request
     def require_login():
-        from flask import session, redirect, url_for, g
+        from flask import session, redirect, url_for, g, request
+        # Allow public access to uploaded images (logos on landing pages)
+        if request.endpoint == 'admin.serve_image':
+            return
         if not session.get('user_id'):
             return redirect(url_for('auth.login'))
         g.user = get_current_user()
