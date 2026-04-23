@@ -180,6 +180,29 @@ class EmailService:
             return False
 
     @staticmethod
+    def _autolink_urls(html):
+        """
+        Converte URL nudi (https://...) in <a href="...">...</a>,
+        saltando quelli già dentro tag <a> o attributi href/src.
+        """
+        # Split HTML in parti: tag e testo
+        # Processa solo il testo fuori dai tag
+        parts = re.split(r'(<a\b[^>]*>.*?</a>|<[^>]+>)', html, flags=re.DOTALL | re.IGNORECASE)
+        result = []
+        for part in parts:
+            # Se è un tag HTML o un link <a>...</a>, lascia invariato
+            if part and (part.startswith('<')):
+                result.append(part)
+            else:
+                # Testo libero: converti URL nudi in link
+                result.append(re.sub(
+                    r'(https?://[^\s<>"\']+)',
+                    r'<a href="\1" style="color:#795548; text-decoration:underline;">\1</a>',
+                    part
+                ))
+        return ''.join(result)
+
+    @staticmethod
     def render_template(template_string, context):
         """
         Renderizza template Jinja2
@@ -252,6 +275,9 @@ class EmailService:
 
             # Renderizza body
             body_html = EmailService.render_template(step.body_template, context)
+
+            # Auto-link: converti URL nudi in hyperlink cliccabili
+            body_html = EmailService._autolink_urls(body_html)
 
             # Se c'è landing_url ma non è nel template, aggiungilo in fondo
             if landing_url and '{{ landing_url }}' not in (step.body_template or '') and '{{landing_url}}' not in (step.body_template or '') and landing_url not in body_html:
