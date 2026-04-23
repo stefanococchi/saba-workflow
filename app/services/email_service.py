@@ -266,11 +266,14 @@ class EmailService:
             # Renderizza subject
             subject = EmailService.render_template(step.subject, context)
 
-            # Invia
+            # Invia (usa mittente per-workflow se configurato)
+            workflow = participant.workflow
             return EmailService.send_email(
                 to_email=to_override or participant.email,
                 subject=subject,
                 body_html=body_html,
+                from_email=workflow.mail_from_email or None,
+                from_name=workflow.mail_from_name or None,
                 file_attachments=attachments
             )
 

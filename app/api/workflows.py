@@ -30,6 +30,8 @@ def create_workflow():
             token_expiration_hours=data.get('token_expiration_hours'),
             sabaform_event_id=data.get('sabaform_event_id'),
             sabaform_event_name=data.get('sabaform_event_name'),
+            mail_from_email=data.get('mail_from_email'),
+            mail_from_name=data.get('mail_from_name'),
         )
         
         db.add(workflow)
@@ -195,6 +197,10 @@ def update_workflow(workflow_id):
             workflow.sabaform_event_id = data['sabaform_event_id']
         if 'sabaform_event_name' in data:
             workflow.sabaform_event_name = data['sabaform_event_name']
+        if 'mail_from_email' in data:
+            workflow.mail_from_email = data['mail_from_email'] or None
+        if 'mail_from_name' in data:
+            workflow.mail_from_name = data['mail_from_name'] or None
 
         # Aggiorna steps se presenti (elimina vecchi, ricrea)
         if 'steps' in data:

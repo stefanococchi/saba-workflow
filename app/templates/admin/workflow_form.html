@@ -1155,6 +1155,24 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
                            placeholder="Default globale se vuoto" min="1">
                     <div class="form-text">{{ t.landing_expiry_help }}</div>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label">
+                        <i class="bi bi-envelope-at"></i> Casella di posta mittente
+                    </label>
+                    <div class="row g-2">
+                        <div class="col-7">
+                            <input type="email" class="form-control" id="mailFromEmail"
+                                   value="{% if workflow and workflow.mail_from_email %}{{ workflow.mail_from_email }}{% endif %}"
+                                   placeholder="Email mittente (default globale se vuoto)">
+                        </div>
+                        <div class="col-5">
+                            <input type="text" class="form-control" id="mailFromName"
+                                   value="{% if workflow and workflow.mail_from_name %}{{ workflow.mail_from_name }}{% endif %}"
+                                   placeholder="Nome mittente">
+                        </div>
+                    </div>
+                    <div class="form-text">Se vuoto, usa la casella di posta globale configurata nel sistema.</div>
+                </div>
             </div>
         </div>
         

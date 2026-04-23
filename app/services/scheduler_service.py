@@ -545,11 +545,14 @@ class SchedulerService:
 
             # Send to all approvers
             sent_count = 0
+            wf = participant.workflow
             for email in approver_emails:
                 ok = EmailService.send_email(
                     to_email=email,
                     subject=subject,
-                    body_html=body_html
+                    body_html=body_html,
+                    from_email=wf.mail_from_email or None,
+                    from_name=wf.mail_from_name or None
                 )
                 if ok:
                     sent_count += 1
@@ -622,10 +625,13 @@ class SchedulerService:
 
             subject = EmailService.render_template(step.subject or '', context)
 
+            wf = participant.workflow
             success = EmailService.send_email(
                 to_email=participant.email,
                 subject=subject,
-                body_html=body_html
+                body_html=body_html,
+                from_email=wf.mail_from_email or None,
+                from_name=wf.mail_from_name or None
             )
 
             return success

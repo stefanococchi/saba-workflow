@@ -66,6 +66,10 @@ class Workflow(Base):
     # Scadenza token landing page (ore), default da config globale
     token_expiration_hours = Column(Integer, nullable=True)
 
+    # Casella di posta mittente (override globale, per-workflow)
+    mail_from_email = Column(String(300), nullable=True)
+    mail_from_name = Column(String(300), nullable=True)
+
     # Collegamento evento Saba Form (read-only, sync unidirezionale)
     sabaform_event_id = Column(Integer, nullable=True)
     sabaform_event_name = Column(String(300), nullable=True)

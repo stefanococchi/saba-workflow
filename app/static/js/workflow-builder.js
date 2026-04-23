@@ -2677,6 +2677,8 @@ function saveWorkflow() {
         token_expiration_hours: parseInt(document.getElementById('tokenExpiration').value) || null,
         sabaform_event_id: selectedSabaformEventId || null,
         sabaform_event_name: selectedSabaformEventName || null,
+        mail_from_email: document.getElementById('mailFromEmail').value.trim() || null,
+        mail_from_name: document.getElementById('mailFromName').value.trim() || null,
         participants: importedParticipants,
         steps: workflowSteps.map(step => {
             const stepData = {
