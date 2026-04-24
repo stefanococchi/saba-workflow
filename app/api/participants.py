@@ -527,3 +527,61 @@ def delete_execution(execution_id):
         db.rollback()
         logger.error(f"Errore eliminazione esecuzione: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/executions/purge', methods=['DELETE'])
+def purge_executions():
+    """Elimina tutte le esecuzioni e activity log, opzionalmente filtrate per workflow"""
+    try:
+        workflow_id = request.args.get('workflow_id', type=int)
+
+        # Elimina esecuzioni
+        if workflow_id:
+            participant_ids = [p.id for p in db.query(Participant.id).filter(Participant.workflow_id == workflow_id).all()]
+            exec_count = db.query(Execution).filter(Execution.participant_id.in_(participant_ids)).delete(synchronize_session='fetch') if participant_ids else 0
+        else:
+            exec_count = db.query(Execution).delete(synchronize_session='fetch')
+
+        # Elimina activity log
+        act_query = db.query(ActivityLog)
+        if workflow_id:
+            act_query = act_query.filter(ActivityLog.workflow_id == workflow_id)
+        act_count = act_query.delete(synchronize_session='fetch')
+
+        db.commit()
+        return jsonify({
+            'message': f'Eliminati {exec_count} esecuzioni e {act_count} activity log',
+            'executions_deleted': exec_count,
+            'activities_deleted': act_count
+        }), 200
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore purge esecuzioni: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/collected-data/purge', methods=['DELETE'])
+def purge_collected_data():
+    """Svuota collected_data da tutti i partecipanti, opzionalmente filtrati per workflow"""
+    try:
+        workflow_id = request.args.get('workflow_id', type=int)
+
+        query = db.query(Participant).filter(Participant.collected_data.isnot(None))
+        if workflow_id:
+            query = query.filter(Participant.workflow_id == workflow_id)
+
+        participants = query.all()
+        count = 0
+        for p in participants:
+            p.collected_data = None
+            count += 1
+
+        db.commit()
+        return jsonify({
+            'message': f'Dati raccolti svuotati per {count} partecipanti',
+            'participants_cleared': count
+        }), 200
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore purge collected data: {str(e)}")
+        return jsonify({'error': str(e)}), 500

@@ -81,6 +81,9 @@
                 <button class="btn btn-primary btn-sm" onclick="exportCSV()">
                     <i class="bi bi-download"></i> {{ t.export_csv }}
                 </button>
+                <button class="btn btn-outline-danger btn-sm" onclick="showPurgeModal()">
+                    <i class="bi bi-trash3"></i> {{ t.purge_all }}
+                </button>
                 <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
                     <i class="bi bi-arrow-clockwise"></i>
                 </button>
@@ -178,6 +181,32 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cancel }}</button>
                 <button type="button" class="btn btn-primary" onclick="saveParticipant()">
                     <i class="bi bi-check-lg"></i> {{ t.save }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Purge -->
+<div class="modal fade" id="purgeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> {{ t.purge_executions_title }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger mb-3">
+                    <i class="bi bi-exclamation-triangle"></i> <span id="purgeMessage">{{ t.purge_executions_confirm }}</span>
+                </div>
+                <p id="purgeWorkflowNote" class="text-muted mb-0" style="display:none">
+                    <i class="bi bi-info-circle"></i> {{ t.purge_executions_workflow }}
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cancel }}</button>
+                <button type="button" class="btn btn-danger" onclick="doPurge()">
+                    <i class="bi bi-trash3"></i> {{ t.purge_all }}
                 </button>
             </div>
         </div>
@@ -616,6 +645,44 @@ function doRollback(stepOrder) {
     .then(function(data) {
         bootstrap.Modal.getInstance(document.getElementById('rollbackModal')).hide();
         alert(data.message);
+        location.reload();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
+}
+
+// =============================================
+// PURGE
+// =============================================
+function showPurgeModal() {
+    var wfSel = document.getElementById('filterWorkflow');
+    var wfId = wfSel ? wfSel.value : '';
+    var note = document.getElementById('purgeWorkflowNote');
+    if (wfId) {
+        note.style.display = 'block';
+    } else {
+        note.style.display = 'none';
+    }
+    new bootstrap.Modal(document.getElementById('purgeModal')).show();
+}
+
+function doPurge() {
+    var url = '/api/executions/purge';
+    // Map workflow names to IDs
+    var wfMap = {};
+    {% for workflow in workflows %}
+    wfMap[{{ workflow.name | tojson }}] = {{ workflow.id }};
+    {% endfor %}
+    var wfName = document.getElementById('filterWorkflow').value;
+    if (wfName && wfMap[wfName]) url += '?workflow_id=' + wfMap[wfName];
+
+    fetch(url, { method: 'DELETE' })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Errore'); });
+        return r.json();
+    })
+    .then(function(data) {
+        bootstrap.Modal.getInstance(document.getElementById('purgeModal')).hide();
+        alert(T.purge_success + ': ' + data.message);
         location.reload();
     })
     .catch(function(e) { alert('Errore: ' + e.message); });

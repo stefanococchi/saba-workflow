@@ -138,6 +138,9 @@
                 <button class="btn btn-primary btn-sm" onclick="exportCSV()">
                     <i class="bi bi-download"></i> {{ t.export_csv }}
                 </button>
+                <button class="btn btn-outline-danger btn-sm" onclick="showPurgeModal()">
+                    <i class="bi bi-trash3"></i> {{ t.purge_all }}
+                </button>
             </div>
         </div>
 
@@ -206,6 +209,32 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cancel }}</button>
                 <button type="button" class="btn btn-primary" onclick="saveParticipant()">
                     <i class="bi bi-check-lg"></i> {{ t.save }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Purge -->
+<div class="modal fade" id="purgeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> {{ t.purge_collected_title }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger mb-3">
+                    <i class="bi bi-exclamation-triangle"></i> {{ t.purge_collected_confirm }}
+                </div>
+                <p id="purgeWorkflowNote" class="text-muted mb-0" style="display:none">
+                    <i class="bi bi-info-circle"></i> {{ t.purge_collected_workflow }}
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cancel }}</button>
+                <button type="button" class="btn btn-danger" onclick="doPurge()">
+                    <i class="bi bi-trash3"></i> {{ t.purge_all }}
                 </button>
             </div>
         </div>
@@ -667,6 +696,34 @@ function deleteParticipant(id) {
     .then(function() {
         ALL_DATA = ALL_DATA.filter(function(x) { return x.id !== id; });
         applyFilters();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
+}
+
+// =============================================
+// PURGE
+// =============================================
+function showPurgeModal() {
+    var wfId = document.getElementById('filterWorkflow').value;
+    var note = document.getElementById('purgeWorkflowNote');
+    note.style.display = wfId ? 'block' : 'none';
+    new bootstrap.Modal(document.getElementById('purgeModal')).show();
+}
+
+function doPurge() {
+    var wfId = document.getElementById('filterWorkflow').value;
+    var url = '/api/collected-data/purge';
+    if (wfId) url += '?workflow_id=' + wfId;
+
+    fetch(url, { method: 'DELETE' })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Errore'); });
+        return r.json();
+    })
+    .then(function(data) {
+        bootstrap.Modal.getInstance(document.getElementById('purgeModal')).hide();
+        alert(T.purge_success + ': ' + data.message);
+        location.reload();
     })
     .catch(function(e) { alert('Errore: ' + e.message); });
 }
