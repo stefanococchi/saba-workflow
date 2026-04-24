@@ -201,14 +201,14 @@ class SchedulerService:
     def _execute_step(execution_id):
         """
         Execute a step (called by scheduler)
-        
+
         Args:
             execution_id: Execution ID
         """
-        from app import create_app
-        
-        # Need app context for DB operations
-        app = create_app()
+        from app import get_app
+
+        # Need app context for DB operations (riusa l'app esistente, non ricrea)
+        app = get_app()
         
         with app.app_context():
             try:
@@ -329,8 +329,8 @@ class SchedulerService:
         if_timeout_step = config.get('landing_if_timeout_step', 0)
 
         def _check_landing(participant_id, step_id, timeout_iso, cfg):
-            from app import create_app
-            app = create_app()
+            from app import get_app
+            app = get_app()
             with app.app_context():
                 try:
                     p = _db().get(Participant, participant_id)

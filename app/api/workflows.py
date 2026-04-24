@@ -204,61 +204,97 @@ def update_workflow(workflow_id):
 
         # Aggiorna steps se presenti (elimina vecchi, ricrea)
         if 'steps' in data:
-            # Salva dati landing page dai vecchi step (indicizzati per order)
-            old_landing_data = {}
-            for old_step in workflow.steps:
-                if old_step.landing_html or old_step.landing_css or old_step.landing_gjs_data:
-                    old_landing_data[old_step.order] = {
-                        'landing_html': old_step.landing_html,
-                        'landing_css': old_step.landing_css,
-                        'landing_gjs_data': old_step.landing_gjs_data,
-                    }
+            # PROTEZIONE: se il workflow è attivo, non ricreare gli step
+            # (cancellazione step = cancellazione execution in cascade)
+            has_active_executions = db.query(Execution).filter(
+                Execution.step_id.in_([s.id for s in workflow.steps]),
+                Execution.status.in_(['scheduled', 'sent'])
+            ).first() is not None
 
-            # Scollega partecipanti dai vecchi step
-            old_step_ids = [s.id for s in workflow.steps]
-            if old_step_ids:
-                db.query(Participant).filter(
-                    Participant.current_step_id.in_(old_step_ids)
-                ).update({Participant.current_step_id: None}, synchronize_session='fetch')
+            if has_active_executions:
+                # Aggiorna step esistenti in-place senza eliminare
+                old_steps_by_order = {s.order: s for s in workflow.steps}
+                for step_data in data['steps']:
+                    order = step_data.get('order', 1)
+                    existing_step = old_steps_by_order.get(order)
+                    if existing_step:
+                        existing_step.name = step_data.get('name', existing_step.name)
+                        existing_step.type = step_data.get('type', existing_step.type.value if hasattr(existing_step.type, 'value') else existing_step.type)
+                        existing_step.subject = step_data.get('subject', existing_step.subject)
+                        existing_step.body_template = step_data.get('body_template', existing_step.body_template)
+                        existing_step.delay_hours = step_data.get('delay_hours', existing_step.delay_hours)
+                        existing_step.skip_conditions = step_data.get('skip_conditions', existing_step.skip_conditions)
+                        existing_step.landing_page_config = step_data.get('landing_page_config', existing_step.landing_page_config)
+                    else:
+                        step = WorkflowStep(
+                            workflow_id=workflow.id,
+                            order=order,
+                            name=step_data.get('name', f"Step {order}"),
+                            type=step_data.get('type', 'email'),
+                            subject=step_data.get('subject', ''),
+                            body_template=step_data.get('body_template', ''),
+                            delay_hours=step_data.get('delay_hours', 0),
+                            skip_conditions=step_data.get('skip_conditions'),
+                            landing_page_config=step_data.get('landing_page_config')
+                        )
+                        db.add(step)
+            else:
+                # Nessuna execution attiva: ricrea normalmente
+                # Salva dati landing page dai vecchi step (indicizzati per order)
+                old_landing_data = {}
+                for old_step in workflow.steps:
+                    if old_step.landing_html or old_step.landing_css or old_step.landing_gjs_data:
+                        old_landing_data[old_step.order] = {
+                            'landing_html': old_step.landing_html,
+                            'landing_css': old_step.landing_css,
+                            'landing_gjs_data': old_step.landing_gjs_data,
+                        }
 
-            # Rimuovi step esistenti
-            for old_step in list(workflow.steps):
-                db.delete(old_step)
-            db.flush()
+                # Scollega partecipanti dai vecchi step
+                old_step_ids = [s.id for s in workflow.steps]
+                if old_step_ids:
+                    db.query(Participant).filter(
+                        Participant.current_step_id.in_(old_step_ids)
+                    ).update({Participant.current_step_id: None}, synchronize_session='fetch')
 
-            for step_data in data['steps']:
-                order = step_data.get('order', 1)
-                step = WorkflowStep(
-                    workflow_id=workflow.id,
-                    order=order,
-                    name=step_data.get('name', f"Step {order}"),
-                    type=step_data.get('type', 'email'),
-                    template_name=step_data.get('template_name'),
-                    subject=step_data.get('subject', ''),
-                    body_template=step_data.get('body_template', ''),
-                    delay_hours=step_data.get('delay_hours', 0),
-                    skip_conditions=step_data.get('skip_conditions'),
-                    landing_page_config=step_data.get('landing_page_config')
-                )
-                # Ripristina landing page dallo step con lo stesso order
-                landing = old_landing_data.get(order)
-                if landing:
-                    step.landing_html = landing['landing_html']
-                    step.landing_css = landing['landing_css']
-                    step.landing_gjs_data = landing['landing_gjs_data']
+                # Rimuovi step esistenti
+                for old_step in list(workflow.steps):
+                    db.delete(old_step)
+                db.flush()
 
-                # Apply landing template if selected
-                skip = step_data.get('skip_conditions') or {}
-                tpl_id = skip.get('landing_template_id')
-                if tpl_id:
-                    from app.models import LandingTemplate
-                    tpl = db.get(LandingTemplate, tpl_id)
-                    if tpl:
-                        step.landing_html = tpl.landing_html
-                        step.landing_css = tpl.landing_css
-                        step.landing_gjs_data = tpl.landing_gjs_data
+                for step_data in data['steps']:
+                    order = step_data.get('order', 1)
+                    step = WorkflowStep(
+                        workflow_id=workflow.id,
+                        order=order,
+                        name=step_data.get('name', f"Step {order}"),
+                        type=step_data.get('type', 'email'),
+                        template_name=step_data.get('template_name'),
+                        subject=step_data.get('subject', ''),
+                        body_template=step_data.get('body_template', ''),
+                        delay_hours=step_data.get('delay_hours', 0),
+                        skip_conditions=step_data.get('skip_conditions'),
+                        landing_page_config=step_data.get('landing_page_config')
+                    )
+                    # Ripristina landing page dallo step con lo stesso order
+                    landing = old_landing_data.get(order)
+                    if landing:
+                        step.landing_html = landing['landing_html']
+                        step.landing_css = landing['landing_css']
+                        step.landing_gjs_data = landing['landing_gjs_data']
 
-                db.add(step)
+                    # Apply landing template if selected
+                    skip = step_data.get('skip_conditions') or {}
+                    tpl_id = skip.get('landing_template_id')
+                    if tpl_id:
+                        from app.models import LandingTemplate
+                        tpl = db.get(LandingTemplate, tpl_id)
+                        if tpl:
+                            step.landing_html = tpl.landing_html
+                            step.landing_css = tpl.landing_css
+                            step.landing_gjs_data = tpl.landing_gjs_data
+
+                    db.add(step)
 
         # Aggiungi nuovi partecipanti (non elimina quelli esistenti)
         participants_data = data.get('participants', [])

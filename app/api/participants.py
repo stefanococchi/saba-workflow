@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app import db_session as db
-from app.models import Workflow, Participant, ParticipantStatus, WorkflowStatus, Execution, ActivityLog
+from app.models import Workflow, Participant, ParticipantStatus, WorkflowStatus, Execution, ExecutionStatus, ActivityLog
 from app.services.activity_service import log_activity
 from app.services import TokenService, SchedulerService
 from app.services.sabaform_service import get_events, get_participants, get_event_by_id
@@ -119,6 +119,47 @@ def list_participants(workflow_id):
         
     except Exception as e:
         logger.error(f"Errore lista partecipanti: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/workflows/<int:workflow_id>/reset-unsent', methods=['POST'])
+def reset_unsent_participants(workflow_id):
+    """Reset participants that are in_progress but have no successful execution (email not sent)"""
+    try:
+        workflow = db.get(Workflow, workflow_id)
+        if not workflow:
+            return jsonify({'error': 'Workflow not found'}), 404
+
+        # Trova partecipanti in_progress senza execution SENT
+        from sqlalchemy import exists
+        in_progress = db.query(Participant).filter_by(
+            workflow_id=workflow_id,
+            status=ParticipantStatus.IN_PROGRESS
+        ).all()
+
+        reset_count = 0
+        for p in in_progress:
+            has_sent = db.query(Execution).filter_by(
+                participant_id=p.id,
+                status=ExecutionStatus.SENT
+            ).first()
+            if not has_sent:
+                p.status = ParticipantStatus.PENDING
+                p.current_step_id = None
+                reset_count += 1
+
+        db.commit()
+        logger.info(f"Reset {reset_count} unsent participants for workflow {workflow_id}")
+
+        return jsonify({
+            'workflow_id': workflow_id,
+            'reset_count': reset_count,
+            'total_in_progress': len(in_progress)
+        }), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error resetting participants: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
