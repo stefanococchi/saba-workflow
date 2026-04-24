@@ -3,6 +3,7 @@ from app import db_session as db
 from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage, Attachment, User, user_workflows
 from app.api.auth import superuser_required
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload, selectinload, subqueryload
 from datetime import datetime
 import logging
 import uuid
@@ -58,31 +59,64 @@ def dashboard():
         participant_status_data = [count for _, count in participant_status_query]
         
         # Workflows recenti (filtered by user)
-        recent_workflows = get_visible_workflows().order_by(
+        recent_workflows = get_visible_workflows().options(
+            selectinload(Workflow.steps),
+            selectinload(Workflow.participants)
+        ).order_by(
             Workflow.created_at.desc()
         ).limit(5).all()
 
         # Attività recenti (log unificato)
-        recent_activities = db.query(ActivityLog).order_by(
+        recent_activities = db.query(ActivityLog).options(
+            joinedload(ActivityLog.workflow),
+            joinedload(ActivityLog.participant)
+        ).order_by(
             ActivityLog.created_at.desc()
         ).limit(10).all()
 
-        # Engagement — visible workflows with participants
-        all_workflows = get_visible_workflows().all()
-        engagement_workflows = [wf for wf in all_workflows if len(wf.participants) > 0]
+        # Engagement — participants with last event (optimized: 3 queries instead of N*2)
+        engagement_workflows = get_visible_workflows().options(
+            selectinload(Workflow.participants)
+        ).filter(Workflow.participants.any()).all()
 
-        # Build participant list with last event info
+        # Batch-fetch last activity and last execution per participant via subqueries
+        participant_ids = [p.id for wf in engagement_workflows for p in wf.participants]
+
+        last_activities = {}
+        last_executions = {}
+        if participant_ids:
+            # Latest ActivityLog per participant
+            latest_act_sub = db.query(
+                ActivityLog.participant_id,
+                func.max(ActivityLog.id).label('max_id')
+            ).filter(
+                ActivityLog.participant_id.in_(participant_ids)
+            ).group_by(ActivityLog.participant_id).subquery()
+
+            for a in db.query(ActivityLog).join(
+                latest_act_sub, ActivityLog.id == latest_act_sub.c.max_id
+            ).all():
+                last_activities[a.participant_id] = a
+
+            # Latest Execution per participant
+            latest_exec_sub = db.query(
+                Execution.participant_id,
+                func.max(Execution.id).label('max_id')
+            ).filter(
+                Execution.participant_id.in_(participant_ids)
+            ).group_by(Execution.participant_id).subquery()
+
+            for ex in db.query(Execution).join(
+                latest_exec_sub, Execution.id == latest_exec_sub.c.max_id
+            ).all():
+                last_executions[ex.participant_id] = ex
+
         engagement_participants = []
         for wf in engagement_workflows:
             for p in wf.participants:
-                last_activity = db.query(ActivityLog).filter_by(
-                    participant_id=p.id
-                ).order_by(ActivityLog.created_at.desc()).first()
-                last_execution = db.query(Execution).filter_by(
-                    participant_id=p.id
-                ).order_by(Execution.created_at.desc()).first()
+                last_activity = last_activities.get(p.id)
+                last_execution = last_executions.get(p.id)
 
-                # Pick most recent event
                 last_event = None
                 last_event_time = None
                 if last_activity and last_execution:
@@ -216,11 +250,14 @@ def participants_list():
     try:
         workflow_id = request.args.get('workflow_id', type=int)
         
-        query = db.query(Participant)
-        
+        query = db.query(Participant).options(
+            joinedload(Participant.workflow),
+            joinedload(Participant.current_step)
+        )
+
         if workflow_id:
             query = query.filter_by(workflow_id=workflow_id)
-        
+
         participants = query.order_by(Participant.enrolled_at.desc()).all()
         
         workflows = db.query(Workflow).all()
@@ -269,7 +306,9 @@ def collected_data():
     try:
         workflow_id = request.args.get('workflow_id', type=int)
 
-        query = db.query(Participant).filter(
+        query = db.query(Participant).options(
+            joinedload(Participant.workflow)
+        ).filter(
             Participant.collected_data.isnot(None)
         )
         if workflow_id:
@@ -310,15 +349,22 @@ def executions_monitor():
     try:
         workflow_id = request.args.get('workflow_id', type=int)
         
-        query = db.query(Execution).join(Participant)
-        
+        query = db.query(Execution).join(Participant).options(
+            joinedload(Execution.participant).joinedload(Participant.workflow),
+            joinedload(Execution.step)
+        )
+
         if workflow_id:
             query = query.filter(Participant.workflow_id == workflow_id)
-        
+
         executions = query.order_by(Execution.scheduled_at.desc()).all()
 
         # Activity Log
-        activity_query = db.query(ActivityLog)
+        activity_query = db.query(ActivityLog).options(
+            joinedload(ActivityLog.workflow),
+            joinedload(ActivityLog.participant),
+            joinedload(ActivityLog.step)
+        )
         if workflow_id:
             activity_query = activity_query.filter(ActivityLog.workflow_id == workflow_id)
         activities = activity_query.order_by(ActivityLog.created_at.desc()).all()
@@ -561,7 +607,9 @@ def participant_timeline(participant_id):
         events = []
 
         # Execution records
-        executions = db.query(Execution).filter_by(participant_id=participant_id).all()
+        executions = db.query(Execution).options(
+            joinedload(Execution.step)
+        ).filter_by(participant_id=participant_id).all()
         for ex in executions:
             step_name = ex.step.name if ex.step else '?'
             step_type = ex.step.type.value if ex.step else '?'

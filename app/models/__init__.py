@@ -94,8 +94,8 @@ class WorkflowStep(Base):
     __tablename__ = 'workflow_steps'
     
     id = Column(Integer, primary_key=True)
-    workflow_id = Column(Integer, ForeignKey('workflows.id'), nullable=False)
-    
+    workflow_id = Column(Integer, ForeignKey('workflows.id'), nullable=False, index=True)
+
     order = Column(Integer, nullable=False)  # Ordine esecuzione
     name = Column(String(200), nullable=False)
     type = Column(SQLEnum(StepType), default=StepType.EMAIL, nullable=False)
@@ -135,8 +135,8 @@ class Participant(Base):
     __tablename__ = 'participants'
     
     id = Column(Integer, primary_key=True)
-    workflow_id = Column(Integer, ForeignKey('workflows.id'), nullable=False)
-    
+    workflow_id = Column(Integer, ForeignKey('workflows.id'), nullable=False, index=True)
+
     # Dati partecipante
     email = Column(String(255), nullable=True)
     first_name = Column(String(100))
@@ -149,7 +149,7 @@ class Participant(Base):
         return ' '.join(p for p in parts if p).strip() or None
     
     # Stato
-    status = Column(SQLEnum(ParticipantStatus), default=ParticipantStatus.PENDING, nullable=False)
+    status = Column(SQLEnum(ParticipantStatus), default=ParticipantStatus.PENDING, nullable=False, index=True)
     current_step_id = Column(Integer, ForeignKey('workflow_steps.id'))
     
     # Token univoco per landing page
@@ -180,14 +180,14 @@ class Execution(Base):
     __tablename__ = 'executions'
     
     id = Column(Integer, primary_key=True)
-    participant_id = Column(Integer, ForeignKey('participants.id'), nullable=False)
-    step_id = Column(Integer, ForeignKey('workflow_steps.id'), nullable=False)
+    participant_id = Column(Integer, ForeignKey('participants.id'), nullable=False, index=True)
+    step_id = Column(Integer, ForeignKey('workflow_steps.id'), nullable=False, index=True)
     
     # Stato
-    status = Column(SQLEnum(ExecutionStatus), default=ExecutionStatus.SCHEDULED, nullable=False)
-    
+    status = Column(SQLEnum(ExecutionStatus), default=ExecutionStatus.SCHEDULED, nullable=False, index=True)
+
     # Timing
-    scheduled_at = Column(DateTime, nullable=False)
+    scheduled_at = Column(DateTime, nullable=False, index=True)
     sent_at = Column(DateTime)
     completed_at = Column(DateTime)
     
@@ -214,15 +214,15 @@ class ActivityLog(Base):
     __tablename__ = 'activity_log'
 
     id = Column(Integer, primary_key=True)
-    workflow_id = Column(Integer, ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False)
-    participant_id = Column(Integer, ForeignKey('participants.id', ondelete='CASCADE'), nullable=True)
+    workflow_id = Column(Integer, ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False, index=True)
+    participant_id = Column(Integer, ForeignKey('participants.id', ondelete='CASCADE'), nullable=True, index=True)
     step_id = Column(Integer, ForeignKey('workflow_steps.id', ondelete='CASCADE'), nullable=True)
 
     event_type = Column(String(50), nullable=False)
     description = Column(Text)
     details = Column(JSON)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     workflow = relationship('Workflow')
     participant = relationship('Participant')
