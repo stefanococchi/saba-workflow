@@ -155,25 +155,38 @@ class EmailService:
             if all_attachments:
                 message["message"]["attachments"] = all_attachments
 
-            # Invio tramite Graph API
-            response = requests.post(
-                f"https://graph.microsoft.com/v1.0/users/{from_email}/sendMail",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json"
-                },
-                json=message,
-                timeout=30
-            )
-
-            if response.status_code == 202:
-                logger.info(f"Email inviata a {to_email}: {subject} ({len(inline_attachments)} immagini inline)")
-                return True
-            else:
-                logger.error(
-                    f"Errore Graph API ({response.status_code}): {response.text}"
+            # Invio tramite Graph API con retry su errori transitori
+            max_retries = 3
+            for attempt in range(max_retries):
+                response = requests.post(
+                    f"https://graph.microsoft.com/v1.0/users/{from_email}/sendMail",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json"
+                    },
+                    json=message,
+                    timeout=30
                 )
-                return False
+
+                if response.status_code == 202:
+                    logger.info(f"Email inviata a {to_email}: {subject} ({len(inline_attachments)} immagini inline)")
+                    return True
+                elif response.status_code == 429 or response.status_code >= 500:
+                    retry_after = int(response.headers.get('Retry-After', 2 ** (attempt + 1)))
+                    logger.warning(
+                        f"Graph API {response.status_code} per {to_email}, retry {attempt+1}/{max_retries} tra {retry_after}s"
+                    )
+                    if attempt < max_retries - 1:
+                        import time
+                        time.sleep(retry_after)
+                    else:
+                        logger.error(f"Errore Graph API dopo {max_retries} tentativi ({response.status_code}): {response.text}")
+                        return False
+                else:
+                    logger.error(
+                        f"Errore Graph API ({response.status_code}): {response.text}"
+                    )
+                    return False
 
         except Exception as e:
             logger.error(f"Errore invio email a {to_email}: {str(e)}")

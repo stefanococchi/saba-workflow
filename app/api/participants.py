@@ -147,15 +147,21 @@ def start_workflow(workflow_id):
             return jsonify({'error': 'No pending participants'}), 400
         
         scheduled_count = 0
-        
-        for participant in participants:
-            # Schedule first step
+
+        # Scagliona gli invii: 2 secondi tra ogni partecipante
+        # per evitare throttling Microsoft Graph API
+        STAGGER_SECONDS = 2
+        base_delay = first_step.delay_hours
+
+        for i, participant in enumerate(participants):
+            # Aggiunge delay progressivo: partecipante 0 = 0s, 1 = 2s, 2 = 4s, ...
+            stagger_hours = (i * STAGGER_SECONDS) / 3600
             SchedulerService.schedule_step(
                 participant,
                 first_step,
-                delay_hours=first_step.delay_hours
+                delay_hours=base_delay + stagger_hours
             )
-            
+
             participant.status = ParticipantStatus.IN_PROGRESS
             participant.current_step_id = first_step.id
             scheduled_count += 1

@@ -3,13 +3,17 @@ from flask_cors import CORS
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
 from apscheduler.schedulers.background import BackgroundScheduler
+from concurrent.futures import ThreadPoolExecutor
 
 # Base per models
 Base = declarative_base()
 
 # Sessione DB
 db_session = None
-scheduler = BackgroundScheduler()
+# Limita a 5 thread concorrenti per evitare sovraccarico su Graph API e DB
+scheduler = BackgroundScheduler(executors={
+    'default': ThreadPoolExecutor(max_workers=5)
+})
 
 
 def init_db(app):
@@ -18,7 +22,11 @@ def init_db(app):
     
     engine = create_engine(
         app.config['SQLALCHEMY_DATABASE_URI'],
-        echo=app.config['SQLALCHEMY_ECHO']
+        echo=app.config['SQLALCHEMY_ECHO'],
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=300
     )
     
     db_session = scoped_session(
