@@ -111,7 +111,7 @@
         <div class="filter-bar">
             <div>
                 <label class="form-label" style="font-size:12px;margin-bottom:4px">{{ t.workflow }}</label>
-                <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="applyFilters()">
+                <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="if(this.value){location.href='/admin/collected-data?workflow_id='+this.value}else{location.href='/admin/collected-data'}">
                     <option value="">{{ t.all }}</option>
                     {% for workflow in workflows %}
                     <option value="{{ workflow.id }}" {% if current_workflow_id == workflow.id %}selected{% endif %}>
@@ -252,16 +252,16 @@ var ALL_DATA = [
     {% for p in participants %}
     {
         id: {{ p.id }},
-        first_name: {{ p.first_name | default('', true) | tojson }},
-        last_name: {{ p.last_name | default('', true) | tojson }},
-        email: {{ p.email | default('', true) | tojson }},
-        phone: {{ p.phone | default('', true) | tojson }},
-        workflow: {{ p.workflow.name | tojson }},
+        first_name: {{ p.first_name | tojson }},
+        last_name: {{ p.last_name | tojson }},
+        email: {{ p.email | tojson }},
+        phone: {{ p.phone | tojson }},
+        workflow: {{ p.workflow_name | tojson }},
         workflow_id: {{ p.workflow_id }},
-        status: {{ p.status.value | tojson }},
+        status: {{ p.status | tojson }},
         completed_at: {{ p.completed_at|localtime | tojson if p.completed_at else 'null' }},
-        collected_data: {{ p.collected_data | tojson if p.collected_data else '{}' }},
-        sabaform_data: {{ p.sabaform_data | tojson if p.sabaform_data else '{}' }}
+        collected_data: {{ p.collected_data | tojson }},
+        sabaform_data: {{ p.sabaform_data | tojson }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
@@ -365,11 +365,10 @@ function updateOpVis(idx) { var v = document.getElementById('qval' + idx); if (v
 // FILTERING & SORTING
 // =============================================
 function applyFilters() {
-    var workflowId = document.getElementById('filterWorkflow').value;
     var search = document.getElementById('filterSearch').value.toLowerCase().trim();
     var rows = ALL_DATA.slice();
 
-    if (workflowId) rows = rows.filter(function(p) { return String(p.workflow_id) === workflowId; });
+    // Workflow filter is now server-side (reload on change)
 
     if (search) {
         rows = rows.filter(function(p) {

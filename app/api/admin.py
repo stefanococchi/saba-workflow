@@ -249,7 +249,18 @@ def participants_list():
     """Lista partecipanti"""
     try:
         workflow_id = request.args.get('workflow_id', type=int)
-        
+        LIMIT = 500
+
+        workflows = db.query(Workflow).all()
+
+        # Default to most recently updated active workflow
+        if not workflow_id and workflows:
+            active = [w for w in workflows if w.status.value == 'active']
+            if active:
+                workflow_id = max(active, key=lambda w: w.updated_at or w.created_at).id
+            else:
+                workflow_id = max(workflows, key=lambda w: w.updated_at or w.created_at).id
+
         query = db.query(Participant).options(
             joinedload(Participant.workflow),
             joinedload(Participant.current_step)
@@ -258,15 +269,13 @@ def participants_list():
         if workflow_id:
             query = query.filter_by(workflow_id=workflow_id)
 
-        participants = query.order_by(Participant.enrolled_at.desc()).all()
-        
-        workflows = db.query(Workflow).all()
-        
+        participants = query.order_by(Participant.enrolled_at.desc()).limit(LIMIT).all()
+
         return render_template('admin/participants_list.html',
                              participants=participants,
                              workflows=workflows,
                              current_workflow_id=workflow_id)
-    
+
     except Exception as e:
         logger.error(f"Errore lista partecipanti: {str(e)}")
         flash(f'Errore: {str(e)}', 'danger')
@@ -305,26 +314,57 @@ def collected_data():
     """Vista dati raccolti da tutti i partecipanti"""
     try:
         workflow_id = request.args.get('workflow_id', type=int)
+        LIMIT = 500
 
-        query = db.query(Participant).options(
-            joinedload(Participant.workflow)
+        workflows = db.query(Workflow).all()
+
+        # Default to most recently updated active workflow
+        if not workflow_id and workflows:
+            active = [w for w in workflows if w.status.value == 'active']
+            if active:
+                workflow_id = max(active, key=lambda w: w.updated_at or w.created_at).id
+            else:
+                workflow_id = max(workflows, key=lambda w: w.updated_at or w.created_at).id
+
+        # Lightweight query: only needed columns, no joinedload
+        query = db.query(
+            Participant.id, Participant.first_name, Participant.last_name,
+            Participant.email, Participant.phone, Participant.workflow_id,
+            Participant.status, Participant.completed_at, Participant.collected_data,
+            Participant.sabaform_data
         ).filter(
             Participant.collected_data.isnot(None)
         )
         if workflow_id:
             query = query.filter(Participant.workflow_id == workflow_id)
 
-        participants = query.order_by(
+        rows = query.order_by(
             Participant.completed_at.is_(None).asc(),
             Participant.completed_at.desc()
-        ).all()
-        workflows = db.query(Workflow).all()
+        ).limit(LIMIT).all()
 
-        # Raccogli tutti i field names unici
+        # Build name map for workflows
+        wf_names = {w.id: w.name for w in workflows}
+
+        # Build participant dicts and collect fields in one pass
         all_fields = set()
-        for p in participants:
-            if p.collected_data and isinstance(p.collected_data, dict):
-                all_fields.update(p.collected_data.keys())
+        participants = []
+        for pid, fn, ln, email, phone, wf_id, status, completed_at, cd, sf in rows:
+            if cd and isinstance(cd, dict):
+                all_fields.update(cd.keys())
+            participants.append({
+                'id': pid,
+                'first_name': fn or '',
+                'last_name': ln or '',
+                'email': email or '',
+                'phone': phone or '',
+                'workflow_id': wf_id,
+                'workflow_name': wf_names.get(wf_id, ''),
+                'status': status.value,
+                'completed_at': completed_at,
+                'collected_data': cd or {},
+                'sabaform_data': sf or {},
+            })
         all_fields = sorted(all_fields)
 
         return render_template('admin/collected_data.html',

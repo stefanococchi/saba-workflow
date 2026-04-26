@@ -617,12 +617,8 @@ def purge_collected_data():
         if workflow_id:
             query = query.filter(Participant.workflow_id == workflow_id)
 
-        participants = query.all()
-        count = 0
-        for p in participants:
-            p.collected_data = None
-            count += 1
-
+        # Bulk update in SQL — no need to load all objects into memory
+        count = query.update({Participant.collected_data: None}, synchronize_session=False)
         db.commit()
         return jsonify({
             'message': f'Dati raccolti svuotati per {count} partecipanti',
