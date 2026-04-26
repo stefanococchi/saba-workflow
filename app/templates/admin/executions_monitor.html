@@ -215,6 +215,11 @@
                 <tbody id="tableBody"></tbody>
             </table>
         </div>
+        <div id="loadMoreWrap" class="text-center py-3" style="display:none">
+            <button class="btn btn-outline-primary btn-sm" onclick="loadMore()">
+                <i class="bi bi-arrow-down-circle"></i> <span id="loadMoreLabel"></span>
+            </button>
+        </div>
         <div id="emptyState" class="empty-state" style="display:none">
             <i class="bi bi-activity"></i>
             <h4>{{ t.no_activity_yet }}</h4>
@@ -343,6 +348,8 @@ var sortCol = null;
 var sortDir = 'desc';
 var queryConditions = [];
 var viewMode = 'grouped'; // 'grouped' or 'flat'
+var PAGE_SIZE = 50;
+var _visibleCount = PAGE_SIZE;
 
 // INIT is at the bottom of this script
 
@@ -488,8 +495,26 @@ var _filteredRows = [];
 
 function renderTable(rows) {
     _filteredRows = rows;
+    _visibleCount = PAGE_SIZE;
     if (viewMode === 'grouped') renderGrouped(rows);
     else renderFlat(rows);
+    _updateLoadMore();
+}
+
+function _updateLoadMore() {
+    var wrap = document.getElementById('loadMoreWrap');
+    var total = _filteredRows.length;
+    if (_visibleCount >= total) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var remaining = total - _visibleCount;
+    document.getElementById('loadMoreLabel').textContent = (T.load_more || 'Carica altri') + ' (' + remaining + ')';
+}
+
+function loadMore() {
+    _visibleCount += PAGE_SIZE;
+    if (viewMode === 'grouped') renderGrouped(_filteredRows);
+    else renderFlat(_filteredRows);
+    _updateLoadMore();
 }
 
 function renderTableHead(cols) {
@@ -533,7 +558,8 @@ function renderFlat(rows) {
     empty.style.display = 'none';
     var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
     renderTableHead(cols);
-    tbody.innerHTML = rows.map(function(r, idx) {
+    var visible = rows.slice(0, _visibleCount);
+    tbody.innerHTML = visible.map(function(r, idx) {
         return '<tr>' + buildRowCells(r, cols) + '<td>' + buildActions(r, idx) + '</td></tr>';
     }).join('');
 }
@@ -563,8 +589,9 @@ function renderGrouped(rows) {
     gcEl.style.display = 'inline';
     gcEl.textContent = groupOrder.length + ' ' + (T.participants || 'partecipanti');
 
-    // Render grouped participants
-    groupOrder.forEach(function(pid) {
+    // Render grouped participants (paginated)
+    var visibleGroups = groupOrder.slice(0, _visibleCount);
+    visibleGroups.forEach(function(pid) {
         var events = groups[pid];
         var latest = events[0]; // already sorted by time desc
         var gid = 'g' + pid;

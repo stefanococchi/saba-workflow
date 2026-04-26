@@ -175,6 +175,11 @@
                 <tbody id="tableBody"></tbody>
             </table>
         </div>
+        <div id="loadMoreWrap" class="text-center py-3" style="display:none">
+            <button class="btn btn-outline-primary btn-sm" onclick="loadMore()">
+                <i class="bi bi-arrow-down-circle"></i> <span id="loadMoreLabel"></span>
+            </button>
+        </div>
         <div id="emptyState" class="empty-state" style="display:none">
             <i class="bi bi-database"></i>
             <h4>{{ t.no_data_collected }}</h4>
@@ -294,6 +299,9 @@ var visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(f
 var sortCol = null;
 var sortDir = 'asc';
 var queryConditions = [];
+var PAGE_SIZE = 50;
+var _visibleCount = PAGE_SIZE;
+var _filteredRows = [];
 
 // =============================================
 // INIT
@@ -432,6 +440,14 @@ function getFieldValue(p, key) {
 // RENDERING
 // =============================================
 function renderTable(rows) {
+    _filteredRows = rows;
+    _visibleCount = PAGE_SIZE;
+    _doRender();
+    _updateLoadMore();
+}
+
+function _doRender() {
+    var rows = _filteredRows;
     var thead = document.getElementById('tableHead');
     var tbody = document.getElementById('tableBody');
     var empty = document.getElementById('emptyState');
@@ -450,7 +466,8 @@ function renderTable(rows) {
         return '<th class="' + (sorted ? 'sorted' : '') + '" onclick="sortBy(\'' + c.key + '\')">' + c.label + ' <i class="bi ' + icon + ' sort-icon"></i></th>';
     }).join('') + '<th>' + T.actions + '</th>';
 
-    tbody.innerHTML = rows.map(function(p) {
+    var visible = rows.slice(0, _visibleCount);
+    tbody.innerHTML = visible.map(function(p) {
         var cells = cols.map(function(c) {
             var val = getFieldValue(p, c.key);
             if (c.key === 'status') return '<td><span class="status-badge status-' + val + '">' + val + '</span></td>';
@@ -466,6 +483,21 @@ function renderTable(rows) {
             '</div></td>';
         return '<tr>' + cells + actions + '</tr>';
     }).join('');
+}
+
+function _updateLoadMore() {
+    var wrap = document.getElementById('loadMoreWrap');
+    var total = _filteredRows.length;
+    if (_visibleCount >= total) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var remaining = total - _visibleCount;
+    document.getElementById('loadMoreLabel').textContent = (T.load_more || 'Carica altri') + ' (' + remaining + ')';
+}
+
+function loadMore() {
+    _visibleCount += PAGE_SIZE;
+    _doRender();
+    _updateLoadMore();
 }
 
 function sortBy(key) {

@@ -141,7 +141,7 @@
             <!-- Workflow filter -->
             <div>
                 <label class="form-label" style="font-size:12px;margin-bottom:4px">{{ t.workflow }}</label>
-                <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="applyFilters()">
+                <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="if(this.value){location.href='/admin/participants?workflow_id='+this.value}else{location.href='/admin/participants'}">
                     <option value="">{{ t.all }}</option>
                     {% for workflow in workflows %}
                     <option value="{{ workflow.id }}" {% if current_workflow_id == workflow.id %}selected{% endif %}>
@@ -216,6 +216,11 @@
                 <thead><tr id="tableHead"></tr></thead>
                 <tbody id="tableBody"></tbody>
             </table>
+        </div>
+        <div id="loadMoreWrap" class="text-center py-3" style="display:none">
+            <button class="btn btn-outline-primary btn-sm" onclick="loadMore()">
+                <i class="bi bi-arrow-down-circle"></i> <span id="loadMoreLabel"></span>
+            </button>
         </div>
         <div id="emptyState" class="empty-state" style="display:none">
             <i class="bi bi-people"></i>
@@ -404,6 +409,9 @@ var visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(f
 var currentStatus = 'all';
 var sortCol = null;
 var sortDir = 'asc';
+var PAGE_SIZE = 50;
+var _visibleCount = PAGE_SIZE;
+var _filteredRows = [];
 var queryConditions = [];
 
 // =============================================
@@ -509,14 +517,10 @@ function filterByStatus(status) {
 }
 
 function applyFilters() {
-    var workflowId = document.getElementById('filterWorkflow').value;
     var search = document.getElementById('filterSearch').value.toLowerCase().trim();
     var rows = ALL_PARTICIPANTS;
 
-    // Workflow filter
-    if (workflowId) {
-        rows = rows.filter(function(p) { return String(p.workflow_id) === workflowId; });
-    }
+    // Workflow filter is now server-side (reload on change)
 
     // Status filter
     if (currentStatus !== 'all') {
@@ -593,6 +597,14 @@ function getFieldValue(p, key) {
 // RENDERING
 // =============================================
 function renderTable(rows) {
+    _filteredRows = rows;
+    _visibleCount = PAGE_SIZE;
+    _doRender();
+    _updateLoadMore();
+}
+
+function _doRender() {
+    var rows = _filteredRows;
     var thead = document.getElementById('tableHead');
     var tbody = document.getElementById('tableBody');
     var empty = document.getElementById('emptyState');
@@ -617,8 +629,9 @@ function renderTable(rows) {
                c.label + ' <i class="bi ' + icon + ' sort-icon"></i></th>';
     }).join('') + '<th>' + T.actions + '</th>';
 
-    // Body
-    tbody.innerHTML = rows.map(function(p) {
+    // Body (paginated)
+    var visible = rows.slice(0, _visibleCount);
+    tbody.innerHTML = visible.map(function(p) {
         var cells = cols.map(function(c) {
             var val = getFieldValue(p, c.key);
             if (c.key === 'id') return '<td><strong>#' + val + '</strong></td>';
@@ -646,6 +659,21 @@ function renderTable(rows) {
 
         return '<tr>' + cells + actions + '</tr>';
     }).join('');
+}
+
+function _updateLoadMore() {
+    var wrap = document.getElementById('loadMoreWrap');
+    var total = _filteredRows.length;
+    if (_visibleCount >= total) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var remaining = total - _visibleCount;
+    document.getElementById('loadMoreLabel').textContent = (T.load_more || 'Carica altri') + ' (' + remaining + ')';
+}
+
+function loadMore() {
+    _visibleCount += PAGE_SIZE;
+    _doRender();
+    _updateLoadMore();
 }
 
 function sortBy(key) {

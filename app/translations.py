@@ -209,6 +209,7 @@ TRANSLATIONS = {
         'exited': 'Usciti',
         'current_in_status': 'Nello stato',
         'current_position': 'Posizione attuale',
+        'load_more': 'Carica altri',
 
         # Users
         'new_user': 'Nuovo Utente',
@@ -558,6 +559,7 @@ TRANSLATIONS = {
         'exited': 'Exited',
         'current_in_status': 'In status',
         'current_position': 'Current position',
+        'load_more': 'Load more',
 
         # Users
         'new_user': 'New User',
