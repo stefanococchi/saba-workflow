@@ -412,76 +412,118 @@ def executions_monitor():
 
         workflows = db.query(Workflow).all()
 
-        # Step-based flow data: for each workflow, count participants per step sub-state
-        # Sub-states come from Execution status + ActivityLog events
+        # Step-based flow data — BATCH QUERIES (avoid N+1)
         flow_data = {}
         target_workflows = [w for w in workflows if w.id == workflow_id] if workflow_id else workflows
+        target_wf_ids = [w.id for w in target_workflows]
+        if not target_wf_ids:
+            target_wf_ids = [0]  # no-op filter
+
+        # Batch 1: participant counts per workflow+status (1 query)
+        participant_counts = {}
+        for wf_id, status, cnt in db.query(
+            Participant.workflow_id, Participant.status, func.count(Participant.id)
+        ).filter(Participant.workflow_id.in_(target_wf_ids)).group_by(
+            Participant.workflow_id, Participant.status
+        ).all():
+            participant_counts.setdefault(wf_id, {})[status.value] = cnt
+
+        # Batch 2: execution counts per step+status (1 query)
+        all_step_ids = []
+        step_map = {}  # step_id → step object
+        wf_steps = {}  # wf_id → [step, ...]
         for wf in target_workflows:
-            if not wf.steps:
+            sorted_steps = sorted(wf.steps, key=lambda s: s.order)
+            wf_steps[wf.id] = sorted_steps
+            for s in sorted_steps:
+                all_step_ids.append(s.id)
+                step_map[s.id] = s
+
+        exec_batch = {}  # step_id → {status: count}
+        if all_step_ids:
+            for step_id, status, cnt in db.query(
+                Execution.step_id, Execution.status, func.count(Execution.id)
+            ).filter(Execution.step_id.in_(all_step_ids)).group_by(
+                Execution.step_id, Execution.status
+            ).all():
+                exec_batch.setdefault(step_id, {})[status.value] = cnt
+
+        # Batch 3: activity counts per step+event (distinct participants) (1 query)
+        activity_by_step = {}  # step_id → {event_type: count}
+        if all_step_ids:
+            for step_id, evt, cnt in db.query(
+                ActivityLog.step_id, ActivityLog.event_type,
+                func.count(func.distinct(ActivityLog.participant_id))
+            ).filter(
+                ActivityLog.step_id.in_(all_step_ids),
+                ActivityLog.participant_id.isnot(None),
+                ActivityLog.event_type.in_(['landing_opened', 'form_submitted', 'survey_submitted'])
+            ).group_by(ActivityLog.step_id, ActivityLog.event_type).all():
+                activity_by_step.setdefault(step_id, {})[evt] = cnt
+
+        # Batch 4: fallback activity counts per workflow (no step_id, legacy) (1 query)
+        activity_by_wf_legacy = {}  # wf_id → {event_type: count}
+        for wf_id, evt, cnt in db.query(
+            ActivityLog.workflow_id, ActivityLog.event_type,
+            func.count(func.distinct(ActivityLog.participant_id))
+        ).filter(
+            ActivityLog.workflow_id.in_(target_wf_ids),
+            ActivityLog.participant_id.isnot(None),
+            ActivityLog.step_id.is_(None),
+            ActivityLog.event_type.in_(['landing_opened', 'form_submitted', 'survey_submitted'])
+        ).group_by(ActivityLog.workflow_id, ActivityLog.event_type).all():
+            activity_by_wf_legacy.setdefault(wf_id, {})[evt] = cnt
+
+        # Batch 5: current_step counts per workflow+step (1 query)
+        current_at_batch = {}  # (wf_id, step_id) → count
+        for wf_id, step_id, cnt in db.query(
+            Participant.workflow_id, Participant.current_step_id, func.count(Participant.id)
+        ).filter(
+            Participant.workflow_id.in_(target_wf_ids),
+            Participant.current_step_id.isnot(None)
+        ).group_by(Participant.workflow_id, Participant.current_step_id).all():
+            current_at_batch[(wf_id, step_id)] = cnt
+
+        # Build flow_data from batched results (no more queries in loops)
+        for wf in target_workflows:
+            wf_pcounts = participant_counts.get(wf.id, {})
+            total = sum(wf_pcounts.values())
+            if total == 0:
                 continue
-            total_participants = db.query(func.count(Participant.id)).filter(
-                Participant.workflow_id == wf.id
-            ).scalar() or 0
-            if total_participants == 0:
-                continue
+
+            steps = wf_steps.get(wf.id, [])
+            # Pre-compute first landing/survey step for fallback logic
+            first_landing_id = next((s.id for s in steps if s.landing_html or s.landing_gjs_data or s.landing_page_config), None)
+            first_survey_id = next((s.id for s in steps if s.type.value == 'survey'), None)
 
             steps_flow = []
-            for step in sorted(wf.steps, key=lambda s: s.order):
-                # Count executions per status for this step
-                exec_counts = db.query(
-                    Execution.status, func.count(Execution.id)
-                ).filter(Execution.step_id == step.id).group_by(Execution.status).all()
-                exec_map = {s.value: c for s, c in exec_counts}
-
-                # Determine which activity events are relevant for this step type
-                relevant_events = []
+            for step in steps:
+                exec_map = exec_batch.get(step.id, {})
                 has_landing = bool(step.landing_html or step.landing_gjs_data or step.landing_page_config)
-                if has_landing:
-                    relevant_events.extend(['landing_opened', 'form_submitted'])
-                if step.type.value == 'survey':
-                    relevant_events.append('survey_submitted')
 
-                activity_map = {}
-                if relevant_events:
-                    # First try: events linked to this specific step
-                    activity_counts = db.query(
-                        ActivityLog.event_type, func.count(func.distinct(ActivityLog.participant_id))
-                    ).filter(
-                        ActivityLog.step_id == step.id,
-                        ActivityLog.workflow_id == wf.id,
-                        ActivityLog.participant_id.isnot(None),
-                        ActivityLog.event_type.in_(relevant_events)
-                    ).group_by(ActivityLog.event_type).all()
-                    activity_map = {et: c for et, c in activity_counts}
+                # Activity map: step-specific first, then legacy fallback
+                activity_map = activity_by_step.get(step.id, {})
+                if not activity_map:
+                    is_first_landing = has_landing and first_landing_id == step.id
+                    is_first_survey = step.type.value == 'survey' and first_survey_id == step.id
+                    if is_first_landing or is_first_survey:
+                        relevant = []
+                        if is_first_landing:
+                            relevant.extend(['landing_opened', 'form_submitted'])
+                        if is_first_survey:
+                            relevant.append('survey_submitted')
+                        legacy = activity_by_wf_legacy.get(wf.id, {})
+                        activity_map = {k: v for k, v in legacy.items() if k in relevant}
 
-                    # Fallback: count events WITHOUT step_id (legacy data before fix)
-                    # Only apply to the first landing/survey step to avoid duplicating counts
-                    first_landing = next((s for s in sorted(wf.steps, key=lambda x: x.order) if s.landing_html or s.landing_gjs_data or s.landing_page_config), None)
-                    first_survey = next((s for s in sorted(wf.steps, key=lambda x: x.order) if s.type.value == 'survey'), None)
-                    is_first = (has_landing and first_landing and first_landing.id == step.id) or \
-                               (step.type.value == 'survey' and first_survey and first_survey.id == step.id)
-                    if not activity_map and is_first:
-                        activity_counts_wf = db.query(
-                            ActivityLog.event_type, func.count(func.distinct(ActivityLog.participant_id))
-                        ).filter(
-                            ActivityLog.workflow_id == wf.id,
-                            ActivityLog.participant_id.isnot(None),
-                            ActivityLog.step_id.is_(None),
-                            ActivityLog.event_type.in_(relevant_events)
-                        ).group_by(ActivityLog.event_type).all()
-                        activity_map = {et: c for et, c in activity_counts_wf}
-
-                # Build sub-states for this step
+                # Build substates
                 substates = []
                 sent = exec_map.get('sent', 0) + exec_map.get('delivered', 0)
+                scheduled = exec_map.get('scheduled', 0)
                 opened = exec_map.get('opened', 0)
                 clicked = exec_map.get('clicked', 0)
                 completed = exec_map.get('completed', 0)
                 failed = exec_map.get('failed', 0)
-                scheduled = exec_map.get('scheduled', 0)
                 skipped = exec_map.get('skipped', 0)
-
-                # Total who entered this step (exclude skipped — they didn't actually enter)
                 total_entered = sum(exec_map.values()) - skipped
 
                 if scheduled:
@@ -492,26 +534,16 @@ def executions_monitor():
                     substates.append({'key': 'opened', 'label': 'Email Opened', 'count': opened, 'icon': 'bi-envelope-open', 'color': '#00bcd4'})
                 if clicked:
                     substates.append({'key': 'clicked', 'label': 'Link Clicked', 'count': clicked, 'icon': 'bi-cursor', 'color': '#9c27b0'})
-                landing = activity_map.get('landing_opened', 0)
-                if landing:
-                    substates.append({'key': 'landing_opened', 'label': 'Landing Opened', 'count': landing, 'icon': 'bi-box-arrow-up-right', 'color': '#ff9800'})
-                form = activity_map.get('form_submitted', 0)
-                if form:
-                    substates.append({'key': 'form_submitted', 'label': 'Form Submitted', 'count': form, 'icon': 'bi-check2-square', 'color': '#4caf50'})
-                survey = activity_map.get('survey_submitted', 0)
-                if survey:
-                    substates.append({'key': 'survey_submitted', 'label': 'Survey Submitted', 'count': survey, 'icon': 'bi-ui-checks', 'color': '#00bcd4'})
+                if activity_map.get('landing_opened', 0):
+                    substates.append({'key': 'landing_opened', 'label': 'Landing Opened', 'count': activity_map['landing_opened'], 'icon': 'bi-box-arrow-up-right', 'color': '#ff9800'})
+                if activity_map.get('form_submitted', 0):
+                    substates.append({'key': 'form_submitted', 'label': 'Form Submitted', 'count': activity_map['form_submitted'], 'icon': 'bi-check2-square', 'color': '#4caf50'})
+                if activity_map.get('survey_submitted', 0):
+                    substates.append({'key': 'survey_submitted', 'label': 'Survey Submitted', 'count': activity_map['survey_submitted'], 'icon': 'bi-ui-checks', 'color': '#00bcd4'})
                 if completed:
                     substates.append({'key': 'completed', 'label': 'Completed', 'count': completed, 'icon': 'bi-check-all', 'color': '#4caf50'})
                 if failed:
                     substates.append({'key': 'failed', 'label': 'Failed', 'count': failed, 'icon': 'bi-x-circle', 'color': '#f44336'})
-                # skipped is internal logic, not shown in flow
-
-                # Count participants currently at this step
-                current_at = db.query(func.count(Participant.id)).filter(
-                    Participant.workflow_id == wf.id,
-                    Participant.current_step_id == step.id
-                ).scalar() or 0
 
                 steps_flow.append({
                     'id': step.id,
@@ -519,22 +551,15 @@ def executions_monitor():
                     'name': step.name,
                     'type': step.type.value,
                     'entered': total_entered,
-                    'current_at': current_at,
+                    'current_at': current_at_batch.get((wf.id, step.id), 0),
                     'substates': substates,
                 })
 
-            # Count participants by macro-status
-            status_counts = {}
-            for s_val, s_count in db.query(
-                Participant.status, func.count(Participant.id)
-            ).filter(Participant.workflow_id == wf.id).group_by(Participant.status).all():
-                status_counts[s_val.value] = s_count
-
             flow_data[wf.id] = {
                 'name': wf.name,
-                'total': total_participants,
+                'total': total,
                 'steps': steps_flow,
-                'status_counts': status_counts,
+                'status_counts': wf_pcounts,
             }
 
         return render_template('admin/executions_monitor.html',

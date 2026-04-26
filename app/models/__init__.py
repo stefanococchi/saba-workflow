@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, LargeBinary, Boolean, Table, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, LargeBinary, Boolean, Table, Index, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import Base
@@ -133,7 +133,11 @@ class WorkflowStep(Base):
 class Participant(Base):
     """Partecipante al workflow"""
     __tablename__ = 'participants'
-    
+    __table_args__ = (
+        Index('ix_participants_wf_status', 'workflow_id', 'status'),
+        Index('ix_participants_wf_step', 'workflow_id', 'current_step_id'),
+    )
+
     id = Column(Integer, primary_key=True)
     workflow_id = Column(Integer, ForeignKey('workflows.id'), nullable=False, index=True)
 
@@ -178,11 +182,15 @@ class Participant(Base):
 class Execution(Base):
     """Esecuzione di uno step per un partecipante"""
     __tablename__ = 'executions'
-    
+    __table_args__ = (
+        Index('ix_executions_step_status', 'step_id', 'status'),
+        Index('ix_executions_participant_status', 'participant_id', 'status'),
+    )
+
     id = Column(Integer, primary_key=True)
     participant_id = Column(Integer, ForeignKey('participants.id'), nullable=False, index=True)
     step_id = Column(Integer, ForeignKey('workflow_steps.id'), nullable=False, index=True)
-    
+
     # Stato
     status = Column(SQLEnum(ExecutionStatus), default=ExecutionStatus.SCHEDULED, nullable=False, index=True)
 
@@ -212,11 +220,16 @@ class Execution(Base):
 class ActivityLog(Base):
     """Log di tutte le attività del workflow"""
     __tablename__ = 'activity_log'
+    __table_args__ = (
+        Index('ix_activity_wf_event', 'workflow_id', 'event_type'),
+        Index('ix_activity_step_event', 'step_id', 'event_type'),
+        Index('ix_activity_participant_created', 'participant_id', 'created_at'),
+    )
 
     id = Column(Integer, primary_key=True)
     workflow_id = Column(Integer, ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False, index=True)
     participant_id = Column(Integer, ForeignKey('participants.id', ondelete='CASCADE'), nullable=True, index=True)
-    step_id = Column(Integer, ForeignKey('workflow_steps.id', ondelete='CASCADE'), nullable=True)
+    step_id = Column(Integer, ForeignKey('workflow_steps.id', ondelete='CASCADE'), nullable=True, index=True)
 
     event_type = Column(String(50), nullable=False)
     description = Column(Text)

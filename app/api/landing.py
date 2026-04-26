@@ -35,13 +35,11 @@ def show_landing_page(token):
             return render_template('landing/already_completed.html',
                                  participant=participant)
 
-        # Ottieni step con landing page configurata
-        # Priorità: primo step con landing_html/gjs_data nel workflow
-        current_step = None
-        for s in sorted(participant.workflow.steps, key=lambda x: x.order):
-            if s.landing_html or s.landing_gjs_data:
-                current_step = s
-                break
+        # Ottieni step con landing page configurata (query diretta, non loop)
+        current_step = db.query(WorkflowStep).filter(
+            WorkflowStep.workflow_id == participant.workflow_id,
+            (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None))
+        ).order_by(WorkflowStep.order).first()
 
         # Fallback: step dal token o current_step del partecipante
         if not current_step and payload.get('step_id'):
@@ -150,12 +148,11 @@ def submit_landing_data(token):
 
         db.commit()
 
-        # Trova lo step landing corrente per avanzare al prossimo
-        current_step = None
-        for s in sorted(participant.workflow.steps, key=lambda x: x.order):
-            if s.landing_html or s.landing_gjs_data or s.landing_page_config:
-                current_step = s
-                break
+        # Trova lo step landing corrente per avanzare al prossimo (query diretta)
+        current_step = db.query(WorkflowStep).filter(
+            WorkflowStep.workflow_id == participant.workflow_id,
+            (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None)) | (WorkflowStep.landing_page_config.isnot(None))
+        ).order_by(WorkflowStep.order).first()
         if not current_step:
             current_step = participant.current_step
 
