@@ -111,10 +111,10 @@
         <div class="filter-bar">
             <div>
                 <label class="form-label" style="font-size:12px;margin-bottom:4px">{{ t.workflow }}</label>
-                <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="applyFilters()">
+                <select class="form-select form-select-sm" id="filterWorkflow" style="min-width:200px" onchange="changeWorkflow(this.value)">
                     <option value="">{{ t.all }}</option>
                     {% for workflow in workflows %}
-                    <option value="{{ workflow.name }}" {% if current_workflow_id == workflow.id %}selected{% endif %}>
+                    <option value="{{ workflow.id }}" data-name="{{ workflow.name }}" {% if current_workflow_id == workflow.id %}selected{% endif %}>
                         {{ workflow.name }}
                     </option>
                     {% endfor %}
@@ -393,12 +393,20 @@ function filterByType(type) {
     applyFilters();
 }
 
+function changeWorkflow(wfId) {
+    // Server-side reload for workflow change (loads only that workflow's data)
+    if (wfId) {
+        window.location.href = '/admin/executions?workflow_id=' + wfId;
+    } else {
+        window.location.href = '/admin/executions';
+    }
+}
+
 function applyFilters() {
-    var workflowVal = document.getElementById('filterWorkflow').value;
     var search = document.getElementById('filterSearch').value.toLowerCase().trim();
     var rows = ALL_TIMELINE.slice();
 
-    if (workflowVal) rows = rows.filter(function(r) { return r.workflow === workflowVal; });
+    // Workflow filter is now server-side, no client filtering needed
     if (currentType !== 'all') rows = rows.filter(function(r) { return r.event_type === currentType; });
     if (search) {
         rows = rows.filter(function(r) {
@@ -436,7 +444,7 @@ function applyFilters() {
     }
 
     renderTable(rows);
-    renderFlowCharts(workflowVal);
+    renderFlowCharts();
 }
 
 // =============================================
@@ -863,13 +871,8 @@ function showPurgeModal() {
 
 function doPurge() {
     var url = '/api/executions/purge';
-    // Map workflow names to IDs
-    var wfMap = {};
-    {% for workflow in workflows %}
-    wfMap[{{ workflow.name | tojson }}] = {{ workflow.id }};
-    {% endfor %}
-    var wfName = document.getElementById('filterWorkflow').value;
-    if (wfName && wfMap[wfName]) url += '?workflow_id=' + wfMap[wfName];
+    var wfId = document.getElementById('filterWorkflow').value;
+    if (wfId) url += '?workflow_id=' + wfId;
 
     fetch(url, { method: 'DELETE' })
     .then(function(r) {
@@ -896,7 +899,7 @@ var STEP_TYPE_ICONS = {
     whatsapp: 'bi-whatsapp'
 };
 
-function renderFlowCharts(filterName) {
+function renderFlowCharts() {
     var container = document.getElementById('flowChartsContainer');
     if (!container || !Object.keys(FLOW_DATA).length) return;
 
@@ -904,7 +907,6 @@ function renderFlowCharts(filterName) {
     for (var wfId in FLOW_DATA) {
         var wf = FLOW_DATA[wfId];
         if (wf.total === 0) continue;
-        if (filterName && wf.name !== filterName) continue;
 
         html += '<div class="flow-wf">';
         html += '<div class="d-flex align-items-center gap-2 mb-2"><strong style="font-size:14px">' + esc(wf.name) + '</strong><span class="counter-badge">' + wf.total + ' ' + (T.participants || 'partecipanti') + '</span></div>';
@@ -949,10 +951,10 @@ function renderFlowCharts(filterName) {
     if (card) card.style.display = html ? '' : 'none';
 
     // Render current position view
-    renderFlowCurrent(filterName);
+    renderFlowCurrent();
 }
 
-function renderFlowCurrent(filterName) {
+function renderFlowCurrent() {
     var container = document.getElementById('flowCurrentContainer');
     if (!container || !Object.keys(FLOW_DATA).length) return;
 
@@ -963,7 +965,6 @@ function renderFlowCurrent(filterName) {
     for (var wfId in FLOW_DATA) {
         var wf = FLOW_DATA[wfId];
         if (wf.total === 0) continue;
-        if (filterName && wf.name !== filterName) continue;
 
         // Flatten all substates across steps into a funnel
         var funnel = [];
@@ -1019,15 +1020,8 @@ function renderFlowCurrent(filterName) {
 // =============================================
 function exportStatusFlow() {
     var url = '/admin/api/status-flow/export';
-    var wfName = document.getElementById('filterWorkflow').value;
-    if (wfName) {
-        // Map name to ID
-        var wfMap = {};
-        {% for workflow in workflows %}
-        wfMap[{{ workflow.name | tojson }}] = {{ workflow.id }};
-        {% endfor %}
-        if (wfMap[wfName]) url += '?workflow_id=' + wfMap[wfName];
-    }
+    var wfId = document.getElementById('filterWorkflow').value;
+    if (wfId) url += '?workflow_id=' + wfId;
     window.location.href = url;
 }
 
@@ -1103,10 +1097,8 @@ function showStepParticipants(stepId, substate, stepName, substateLabel) {
 // INIT
 // =============================================
 buildColumnChips();
-var _initWorkflow = document.getElementById('filterWorkflow').value;
-renderTable(ALL_TIMELINE);
 updateCounts();
-renderFlowCharts(_initWorkflow || undefined);
+applyFilters();
 
 // Auto-refresh ogni 5 minuti (si ferma se l'utente interagisce)
 var _autoRefresh = setTimeout(function() { location.reload(); }, 300000);

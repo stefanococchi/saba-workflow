@@ -348,69 +348,102 @@ def executions_monitor():
     """Monitor esecuzioni"""
     try:
         workflow_id = request.args.get('workflow_id', type=int)
-        
-        query = db.query(Execution).join(Participant).options(
-            joinedload(Execution.participant).joinedload(Participant.workflow),
-            joinedload(Execution.step)
+        TIMELINE_LIMIT = 500
+
+        # Load workflows with steps in one query
+        workflows = db.query(Workflow).options(selectinload(Workflow.steps)).all()
+
+        # Default to most recently updated workflow if none selected
+        if not workflow_id and workflows:
+            active = [w for w in workflows if w.status.value == 'active']
+            if active:
+                workflow_id = max(active, key=lambda w: w.updated_at or w.created_at).id
+            else:
+                workflow_id = max(workflows, key=lambda w: w.updated_at or w.created_at).id
+
+        # Build lookup maps for names (avoid joinedload on Workflow per execution)
+        wf_names = {w.id: w.name for w in workflows}
+
+        # Pre-load participant names + workflow_id in one query (avoid N+1)
+        participant_query = db.query(
+            Participant.id, Participant.first_name, Participant.last_name,
+            Participant.email, Participant.workflow_id
         )
-
         if workflow_id:
-            query = query.filter(Participant.workflow_id == workflow_id)
+            participant_query = participant_query.filter(Participant.workflow_id == workflow_id)
+        participant_rows = participant_query.all()
+        participant_map = {}
+        for pid, fn, ln, email, wid in participant_rows:
+            name = ' '.join(p for p in [fn or '', ln or ''] if p).strip() or email or '—'
+            participant_map[pid] = {'name': name, 'wf_id': wid}
 
-        executions = query.order_by(Execution.scheduled_at.desc()).all()
+        # Pre-load step names in one query
+        step_query = db.query(WorkflowStep.id, WorkflowStep.name, WorkflowStep.type)
+        if workflow_id:
+            step_query = step_query.filter(WorkflowStep.workflow_id == workflow_id)
+        step_rows = step_query.all()
+        step_map = {sid: {'name': sname, 'type': stype.value} for sid, sname, stype in step_rows}
 
-        # Activity Log
-        activity_query = db.query(ActivityLog).options(
-            joinedload(ActivityLog.workflow),
-            joinedload(ActivityLog.participant),
-            joinedload(ActivityLog.step)
+        # Executions — load only needed columns, no joinedload
+        exec_query = db.query(
+            Execution.id, Execution.participant_id, Execution.step_id,
+            Execution.status, Execution.scheduled_at, Execution.sent_at,
+            Execution.error_message, Execution.result_data
+        )
+        if workflow_id:
+            exec_query = exec_query.join(Participant).filter(Participant.workflow_id == workflow_id)
+        executions = exec_query.order_by(Execution.scheduled_at.desc()).limit(TIMELINE_LIMIT).all()
+
+        # Activity Log — load only needed columns, no joinedload
+        activity_query = db.query(
+            ActivityLog.id, ActivityLog.participant_id, ActivityLog.step_id,
+            ActivityLog.workflow_id, ActivityLog.event_type, ActivityLog.description,
+            ActivityLog.details, ActivityLog.created_at
         )
         if workflow_id:
             activity_query = activity_query.filter(ActivityLog.workflow_id == workflow_id)
-        activities = activity_query.order_by(ActivityLog.created_at.desc()).all()
+        activities = activity_query.order_by(ActivityLog.created_at.desc()).limit(TIMELINE_LIMIT).all()
 
-        # Unifica in una timeline
+        # Build unified timeline from tuples (no ORM overhead)
         timeline = []
-        for ex in executions:
-            wf_name = ''
-            if ex.participant and ex.participant.workflow:
-                wf_name = ex.participant.workflow.name
-            # Usa sent_at se disponibile, altrimenti scheduled_at
-            display_time = ex.sent_at or ex.scheduled_at
+        for ex_id, p_id, s_id, status, sched_at, sent_at, err, details in executions:
+            p = participant_map.get(p_id, {'name': '—', 'wf_id': None})
+            s = step_map.get(s_id, {'name': '—', 'type': ''})
+            display_time = sent_at or sched_at
             timeline.append({
                 'type': 'execution',
-                'entry_id': ex.id,
-                'participant_id': ex.participant_id,
+                'entry_id': ex_id,
+                'participant_id': p_id,
                 'time': display_time,
-                'event_type': 'email_failed' if ex.status.value == 'failed' else 'email_' + ex.status.value,
-                'description': f'{ex.step.name}: {ex.status.value}' if ex.step else ex.status.value,
-                'participant_name': (ex.participant.full_name or ex.participant.email or '—') if ex.participant else '—',
-                'step_name': ex.step.name if ex.step else '—',
-                'step_type': ex.step.type.value if ex.step else '',
-                'workflow_name': wf_name,
-                'error': ex.error_message,
-                'details': ex.result_data,
+                'event_type': 'email_failed' if status.value == 'failed' else 'email_' + status.value,
+                'description': f'{s["name"]}: {status.value}',
+                'participant_name': p['name'],
+                'step_name': s['name'],
+                'step_type': s['type'],
+                'workflow_name': wf_names.get(p['wf_id'], ''),
+                'error': err,
+                'details': details,
             })
-        for a in activities:
-            wf_name = a.workflow.name if a.workflow else ''
+        for a_id, p_id, s_id, wf_id_a, evt, desc, details, created_at in activities:
+            p = participant_map.get(p_id, {'name': '—', 'wf_id': None})
+            s = step_map.get(s_id, {'name': '—', 'type': ''}) if s_id else {'name': '—', 'type': ''}
             timeline.append({
                 'type': 'activity',
-                'entry_id': a.id,
-                'participant_id': a.participant_id,
-                'time': a.created_at,
-                'event_type': a.event_type,
-                'description': a.description,
-                'participant_name': (a.participant.full_name or a.participant.email or '—') if a.participant else '—',
-                'step_name': a.step.name if a.step else '—',
-                'step_type': a.step.type.value if a.step else '',
-                'workflow_name': wf_name,
+                'entry_id': a_id,
+                'participant_id': p_id,
+                'time': created_at,
+                'event_type': evt,
+                'description': desc,
+                'participant_name': p['name'],
+                'step_name': s['name'],
+                'step_type': s['type'],
+                'workflow_name': wf_names.get(wf_id_a, ''),
                 'error': None,
-                'details': a.details,
+                'details': details,
             })
 
         timeline.sort(key=lambda x: x['time'], reverse=True)
-
-        workflows = db.query(Workflow).all()
+        timeline = timeline[:TIMELINE_LIMIT]  # cap combined list
 
         # Step-based flow data — BATCH QUERIES (avoid N+1)
         flow_data = {}
