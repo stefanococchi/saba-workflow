@@ -412,10 +412,136 @@ def executions_monitor():
 
         workflows = db.query(Workflow).all()
 
+        # Step-based flow data: for each workflow, count participants per step sub-state
+        # Sub-states come from Execution status + ActivityLog events
+        flow_data = {}
+        target_workflows = [w for w in workflows if w.id == workflow_id] if workflow_id else workflows
+        for wf in target_workflows:
+            if not wf.steps:
+                continue
+            total_participants = db.query(func.count(Participant.id)).filter(
+                Participant.workflow_id == wf.id
+            ).scalar() or 0
+            if total_participants == 0:
+                continue
+
+            steps_flow = []
+            for step in sorted(wf.steps, key=lambda s: s.order):
+                # Count executions per status for this step
+                exec_counts = db.query(
+                    Execution.status, func.count(Execution.id)
+                ).filter(Execution.step_id == step.id).group_by(Execution.status).all()
+                exec_map = {s.value: c for s, c in exec_counts}
+
+                # Determine which activity events are relevant for this step type
+                relevant_events = []
+                has_landing = bool(step.landing_html or step.landing_gjs_data or step.landing_page_config)
+                if has_landing:
+                    relevant_events.extend(['landing_opened', 'form_submitted'])
+                if step.type.value == 'survey':
+                    relevant_events.append('survey_submitted')
+
+                activity_map = {}
+                if relevant_events:
+                    # First try: events linked to this specific step
+                    activity_counts = db.query(
+                        ActivityLog.event_type, func.count(func.distinct(ActivityLog.participant_id))
+                    ).filter(
+                        ActivityLog.step_id == step.id,
+                        ActivityLog.workflow_id == wf.id,
+                        ActivityLog.participant_id.isnot(None),
+                        ActivityLog.event_type.in_(relevant_events)
+                    ).group_by(ActivityLog.event_type).all()
+                    activity_map = {et: c for et, c in activity_counts}
+
+                    # Fallback: count events WITHOUT step_id (legacy data before fix)
+                    # Only apply to the first landing/survey step to avoid duplicating counts
+                    first_landing = next((s for s in sorted(wf.steps, key=lambda x: x.order) if s.landing_html or s.landing_gjs_data or s.landing_page_config), None)
+                    first_survey = next((s for s in sorted(wf.steps, key=lambda x: x.order) if s.type.value == 'survey'), None)
+                    is_first = (has_landing and first_landing and first_landing.id == step.id) or \
+                               (step.type.value == 'survey' and first_survey and first_survey.id == step.id)
+                    if not activity_map and is_first:
+                        activity_counts_wf = db.query(
+                            ActivityLog.event_type, func.count(func.distinct(ActivityLog.participant_id))
+                        ).filter(
+                            ActivityLog.workflow_id == wf.id,
+                            ActivityLog.participant_id.isnot(None),
+                            ActivityLog.step_id.is_(None),
+                            ActivityLog.event_type.in_(relevant_events)
+                        ).group_by(ActivityLog.event_type).all()
+                        activity_map = {et: c for et, c in activity_counts_wf}
+
+                # Build sub-states for this step
+                substates = []
+                sent = exec_map.get('sent', 0) + exec_map.get('delivered', 0)
+                opened = exec_map.get('opened', 0)
+                clicked = exec_map.get('clicked', 0)
+                completed = exec_map.get('completed', 0)
+                failed = exec_map.get('failed', 0)
+                scheduled = exec_map.get('scheduled', 0)
+                skipped = exec_map.get('skipped', 0)
+
+                # Total who entered this step (exclude skipped — they didn't actually enter)
+                total_entered = sum(exec_map.values()) - skipped
+
+                if scheduled:
+                    substates.append({'key': 'scheduled', 'label': 'Scheduled', 'count': scheduled, 'icon': 'bi-clock', 'color': '#ff9800'})
+                if sent:
+                    substates.append({'key': 'sent', 'label': 'Email Sent', 'count': sent, 'icon': 'bi-envelope-check', 'color': '#2196f3'})
+                if opened:
+                    substates.append({'key': 'opened', 'label': 'Email Opened', 'count': opened, 'icon': 'bi-envelope-open', 'color': '#00bcd4'})
+                if clicked:
+                    substates.append({'key': 'clicked', 'label': 'Link Clicked', 'count': clicked, 'icon': 'bi-cursor', 'color': '#9c27b0'})
+                landing = activity_map.get('landing_opened', 0)
+                if landing:
+                    substates.append({'key': 'landing_opened', 'label': 'Landing Opened', 'count': landing, 'icon': 'bi-box-arrow-up-right', 'color': '#ff9800'})
+                form = activity_map.get('form_submitted', 0)
+                if form:
+                    substates.append({'key': 'form_submitted', 'label': 'Form Submitted', 'count': form, 'icon': 'bi-check2-square', 'color': '#4caf50'})
+                survey = activity_map.get('survey_submitted', 0)
+                if survey:
+                    substates.append({'key': 'survey_submitted', 'label': 'Survey Submitted', 'count': survey, 'icon': 'bi-ui-checks', 'color': '#00bcd4'})
+                if completed:
+                    substates.append({'key': 'completed', 'label': 'Completed', 'count': completed, 'icon': 'bi-check-all', 'color': '#4caf50'})
+                if failed:
+                    substates.append({'key': 'failed', 'label': 'Failed', 'count': failed, 'icon': 'bi-x-circle', 'color': '#f44336'})
+                # skipped is internal logic, not shown in flow
+
+                # Count participants currently at this step
+                current_at = db.query(func.count(Participant.id)).filter(
+                    Participant.workflow_id == wf.id,
+                    Participant.current_step_id == step.id
+                ).scalar() or 0
+
+                steps_flow.append({
+                    'id': step.id,
+                    'order': step.order,
+                    'name': step.name,
+                    'type': step.type.value,
+                    'entered': total_entered,
+                    'current_at': current_at,
+                    'substates': substates,
+                })
+
+            # Count participants by macro-status
+            status_counts = {}
+            for s_val, s_count in db.query(
+                Participant.status, func.count(Participant.id)
+            ).filter(Participant.workflow_id == wf.id).group_by(Participant.status).all():
+                status_counts[s_val.value] = s_count
+
+            flow_data[wf.id] = {
+                'name': wf.name,
+                'total': total_participants,
+                'steps': steps_flow,
+                'status_counts': status_counts,
+            }
+
         return render_template('admin/executions_monitor.html',
                              timeline=timeline,
                              workflows=workflows,
-                             current_workflow_id=workflow_id)
+                             current_workflow_id=workflow_id,
+                             flow_data=flow_data)
 
     except Exception as e:
         logger.error(f"Errore monitor esecuzioni: {str(e)}")
@@ -423,7 +549,8 @@ def executions_monitor():
         return render_template('admin/executions_monitor.html',
                              timeline=[],
                              workflows=[],
-                             current_workflow_id=None)
+                             current_workflow_id=None,
+                             flow_data={})
 
 
 @admin_bp.route('/activity-log')
@@ -592,6 +719,418 @@ def get_attachments_info():
         'size': a.size,
         'mime_type': a.mime_type
     } for a in attachments]), 200
+
+
+@admin_bp.route('/api/step/<int:step_id>/participants')
+def step_participants(step_id):
+    """Return participants for a given step + substate"""
+    try:
+        substate = request.args.get('substate', '')
+        step = db.get(WorkflowStep, step_id)
+        if not step:
+            return jsonify({'error': 'Step not found'}), 404
+
+        # Activity-based substates
+        ACTIVITY_SUBSTATES = {'landing_opened', 'form_submitted', 'survey_submitted'}
+        # Execution-based substates
+        EXEC_SUBSTATES = {'scheduled', 'sent', 'delivered', 'opened', 'clicked', 'completed', 'failed', 'skipped'}
+
+        participants = []
+        if substate == 'current_at':
+            # Participants whose current_step_id is this step
+            parts = db.query(Participant).filter(
+                Participant.workflow_id == step.workflow_id,
+                Participant.current_step_id == step_id
+            ).all()
+            participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
+        elif substate in ACTIVITY_SUBSTATES:
+            # Distinct participants from ActivityLog
+            rows = db.query(ActivityLog.participant_id).filter(
+                ActivityLog.workflow_id == step.workflow_id,
+                ActivityLog.event_type == substate,
+                ActivityLog.participant_id.isnot(None)
+            )
+            if substate != 'landing_opened':
+                # For non-landing events, also filter by step if available
+                rows = rows.filter(
+                    (ActivityLog.step_id == step_id) | (ActivityLog.step_id.is_(None))
+                )
+            pids = [r[0] for r in rows.distinct().all()]
+            if pids:
+                parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
+                participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
+        elif substate in EXEC_SUBSTATES:
+            # Map 'sent' to include 'delivered' too
+            statuses = [substate]
+            if substate == 'sent':
+                statuses.append('delivered')
+            pids = [r[0] for r in db.query(Execution.participant_id).filter(
+                Execution.step_id == step_id,
+                Execution.status.in_(statuses)
+            ).distinct().all()]
+            if pids:
+                parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
+                participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
+
+        return jsonify({'participants': participants, 'step': step.name, 'substate': substate}), 200
+    except Exception as e:
+        logger.error(f"Errore step participants: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/workflow/<int:wf_id>/participants')
+def workflow_participants_by_status(wf_id):
+    """Return participants for a workflow filtered by status"""
+    try:
+        status = request.args.get('status', '')
+        query = db.query(Participant).filter(Participant.workflow_id == wf_id)
+        if status:
+            query = query.filter(Participant.status == status)
+        parts = query.all()
+        participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
+        return jsonify({'participants': participants}), 200
+    except Exception as e:
+        logger.error(f"Errore workflow participants: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/status-flow/export')
+def export_status_flow():
+    """Export status flow to Excel with participant lists"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from io import BytesIO
+
+    try:
+        workflow_id = request.args.get('workflow_id', type=int)
+        target_workflows = db.query(Workflow).options(
+            selectinload(Workflow.steps)
+        ).all()
+        if workflow_id:
+            target_workflows = [w for w in target_workflows if w.id == workflow_id]
+
+        wb = Workbook()
+
+        # ── Styles ──
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='795548', end_color='795548', fill_type='solid')
+        section_font = Font(bold=True, size=11)
+        section_fill = PatternFill(start_color='EFEBE9', end_color='EFEBE9', fill_type='solid')
+        thin_border = Border(
+            bottom=Side(style='thin', color='D7CCC8')
+        )
+
+        FUNNEL_ORDER = ['scheduled', 'sent', 'opened', 'clicked', 'landing_opened', 'form_submitted', 'survey_submitted', 'completed']
+        EXEC_SUBSTATES = {'scheduled', 'sent', 'delivered', 'opened', 'clicked', 'completed', 'failed', 'skipped'}
+        ACTIVITY_SUBSTATES = {'landing_opened', 'form_submitted', 'survey_submitted'}
+        SUBSTATE_LABELS = {
+            'scheduled': 'Scheduled', 'sent': 'Email Sent', 'delivered': 'Email Sent',
+            'opened': 'Email Opened', 'clicked': 'Link Clicked',
+            'completed': 'Completed', 'failed': 'Failed',
+            'landing_opened': 'Landing Opened', 'form_submitted': 'Form Submitted',
+            'survey_submitted': 'Survey Submitted',
+        }
+
+        def _get_participants_for_substate(step, substate, wf):
+            """Return list of (name, email, status) for a step+substate"""
+            if substate in ACTIVITY_SUBSTATES:
+                rows = db.query(ActivityLog.participant_id).filter(
+                    ActivityLog.workflow_id == wf.id,
+                    ActivityLog.event_type == substate,
+                    ActivityLog.participant_id.isnot(None)
+                )
+                if substate != 'landing_opened':
+                    rows = rows.filter(
+                        (ActivityLog.step_id == step.id) | (ActivityLog.step_id.is_(None))
+                    )
+                pids = [r[0] for r in rows.distinct().all()]
+            elif substate in EXEC_SUBSTATES:
+                statuses = [substate]
+                if substate == 'sent':
+                    statuses.append('delivered')
+                pids = [r[0] for r in db.query(Execution.participant_id).filter(
+                    Execution.step_id == step.id,
+                    Execution.status.in_(statuses)
+                ).distinct().all()]
+            else:
+                return []
+            if not pids:
+                return []
+            parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
+            return [(p.full_name or p.email or f'#{p.id}', p.email or '', p.status.value) for p in parts]
+
+        def _apply_header(ws, headers):
+            for col, h in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=h)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal='center')
+
+        # ═══════════════════════════════════════
+        # SHEET 1: Flusso Eventi (all substates with participants)
+        # ═══════════════════════════════════════
+        ws1 = wb.active
+        ws1.title = 'Flusso Eventi'
+        _apply_header(ws1, ['Workflow', 'Step', 'Ordine', 'Tipo Step', 'Entrati', 'Sottostato', 'Conteggio', 'Partecipante', 'Email', 'Stato'])
+
+        row = 2
+        for wf in target_workflows:
+            if not wf.steps:
+                continue
+            for step in sorted(wf.steps, key=lambda s: s.order):
+                # Get execution counts
+                exec_counts = db.query(
+                    Execution.status, func.count(Execution.id)
+                ).filter(Execution.step_id == step.id).group_by(Execution.status).all()
+                exec_map = {s.value: c for s, c in exec_counts}
+                total_entered = sum(exec_map.values()) - exec_map.get('skipped', 0)
+
+                # Get activity counts
+                has_landing = bool(step.landing_html or step.landing_gjs_data or step.landing_page_config)
+                relevant_events = []
+                if has_landing:
+                    relevant_events.extend(['landing_opened', 'form_submitted'])
+                if step.type.value == 'survey':
+                    relevant_events.append('survey_submitted')
+
+                # Build substates list
+                substates = []
+                sent = exec_map.get('sent', 0) + exec_map.get('delivered', 0)
+                if exec_map.get('scheduled', 0):
+                    substates.append(('scheduled', exec_map['scheduled']))
+                if sent:
+                    substates.append(('sent', sent))
+                if exec_map.get('opened', 0):
+                    substates.append(('opened', exec_map['opened']))
+                if exec_map.get('clicked', 0):
+                    substates.append(('clicked', exec_map['clicked']))
+
+                for evt in relevant_events:
+                    cnt = db.query(func.count(func.distinct(ActivityLog.participant_id))).filter(
+                        ActivityLog.workflow_id == wf.id,
+                        ActivityLog.event_type == evt,
+                        ActivityLog.participant_id.isnot(None),
+                        (ActivityLog.step_id == step.id) | (ActivityLog.step_id.is_(None))
+                    ).scalar() or 0
+                    if cnt:
+                        substates.append((evt, cnt))
+
+                if exec_map.get('completed', 0):
+                    substates.append(('completed', exec_map['completed']))
+                if exec_map.get('failed', 0):
+                    substates.append(('failed', exec_map['failed']))
+
+                if not substates:
+                    continue
+
+                # Section header row
+                ws1.cell(row=row, column=1, value=wf.name).font = section_font
+                ws1.cell(row=row, column=1).fill = section_fill
+                ws1.cell(row=row, column=2, value=step.name).font = section_font
+                ws1.cell(row=row, column=2).fill = section_fill
+                ws1.cell(row=row, column=3, value=step.order).fill = section_fill
+                ws1.cell(row=row, column=4, value=step.type.value).fill = section_fill
+                ws1.cell(row=row, column=5, value=total_entered).fill = section_fill
+                for c in range(6, 11):
+                    ws1.cell(row=row, column=c).fill = section_fill
+                row += 1
+
+                for ss_key, ss_count in substates:
+                    label = SUBSTATE_LABELS.get(ss_key, ss_key)
+                    participants = _get_participants_for_substate(step, ss_key, wf)
+
+                    if not participants:
+                        ws1.cell(row=row, column=6, value=label)
+                        ws1.cell(row=row, column=7, value=ss_count)
+                        for c in range(1, 11):
+                            ws1.cell(row=row, column=c).border = thin_border
+                        row += 1
+                    else:
+                        for i, (name, email, status) in enumerate(participants):
+                            if i == 0:
+                                ws1.cell(row=row, column=6, value=label)
+                                ws1.cell(row=row, column=7, value=ss_count)
+                            ws1.cell(row=row, column=8, value=name)
+                            ws1.cell(row=row, column=9, value=email)
+                            ws1.cell(row=row, column=10, value=status)
+                            for c in range(1, 11):
+                                ws1.cell(row=row, column=c).border = thin_border
+                            row += 1
+
+                row += 1  # blank row between steps
+
+        # Auto-width columns
+        for col in ws1.columns:
+            max_len = 0
+            for cell in col:
+                if cell.value:
+                    max_len = max(max_len, len(str(cell.value)))
+            ws1.column_dimensions[col[0].column_letter].width = min(max_len + 3, 40)
+
+        # ═══════════════════════════════════════
+        # SHEET 2: Nello Stato (funnel with participants)
+        # ═══════════════════════════════════════
+        ws2 = wb.create_sheet('Nello Stato')
+        _apply_header(ws2, ['Workflow', 'Sottostato', 'Entrati', 'Nello Stato', 'Partecipante', 'Email', 'Stato'])
+
+        row = 2
+        for wf in target_workflows:
+            if not wf.steps:
+                continue
+
+            # Build funnel: collect all substates across steps
+            funnel = []
+            for step in sorted(wf.steps, key=lambda s: s.order):
+                exec_counts = db.query(
+                    Execution.status, func.count(Execution.id)
+                ).filter(Execution.step_id == step.id).group_by(Execution.status).all()
+                exec_map = {s.value: c for s, c in exec_counts}
+
+                has_landing = bool(step.landing_html or step.landing_gjs_data or step.landing_page_config)
+                relevant_events = []
+                if has_landing:
+                    relevant_events.extend(['landing_opened', 'form_submitted'])
+                if step.type.value == 'survey':
+                    relevant_events.append('survey_submitted')
+
+                sent = exec_map.get('sent', 0) + exec_map.get('delivered', 0)
+                if exec_map.get('scheduled', 0):
+                    funnel.append({'key': 'scheduled', 'count': exec_map['scheduled'], 'step': step})
+                if sent:
+                    funnel.append({'key': 'sent', 'count': sent, 'step': step})
+                if exec_map.get('opened', 0):
+                    funnel.append({'key': 'opened', 'count': exec_map['opened'], 'step': step})
+                if exec_map.get('clicked', 0):
+                    funnel.append({'key': 'clicked', 'count': exec_map['clicked'], 'step': step})
+
+                for evt in relevant_events:
+                    cnt = db.query(func.count(func.distinct(ActivityLog.participant_id))).filter(
+                        ActivityLog.workflow_id == wf.id,
+                        ActivityLog.event_type == evt,
+                        ActivityLog.participant_id.isnot(None),
+                        (ActivityLog.step_id == step.id) | (ActivityLog.step_id.is_(None))
+                    ).scalar() or 0
+                    if cnt:
+                        funnel.append({'key': evt, 'count': cnt, 'step': step})
+
+                if exec_map.get('completed', 0):
+                    funnel.append({'key': 'completed', 'count': exec_map['completed'], 'step': step})
+
+            # Sort by funnel order
+            funnel.sort(key=lambda f: FUNNEL_ORDER.index(f['key']) if f['key'] in FUNNEL_ORDER else 99)
+
+            if not funnel:
+                continue
+
+            # Compute "nello stato"
+            for i in range(len(funnel)):
+                next_count = funnel[i + 1]['count'] if i < len(funnel) - 1 else 0
+                funnel[i]['in_state'] = max(0, funnel[i]['count'] - next_count)
+
+            # Get participants "in state" = participants in this substate but NOT in the next
+            for i, f in enumerate(funnel):
+                all_pids = set()
+                next_pids = set()
+
+                # PIDs for this substate
+                if f['key'] in ACTIVITY_SUBSTATES:
+                    rows = db.query(ActivityLog.participant_id).filter(
+                        ActivityLog.workflow_id == wf.id,
+                        ActivityLog.event_type == f['key'],
+                        ActivityLog.participant_id.isnot(None)
+                    ).distinct().all()
+                    all_pids = {r[0] for r in rows}
+                elif f['key'] in EXEC_SUBSTATES:
+                    statuses = [f['key']]
+                    if f['key'] == 'sent':
+                        statuses.append('delivered')
+                    rows = db.query(Execution.participant_id).filter(
+                        Execution.step_id == f['step'].id,
+                        Execution.status.in_(statuses)
+                    ).distinct().all()
+                    all_pids = {r[0] for r in rows}
+
+                # PIDs for next substate (to subtract)
+                if i < len(funnel) - 1:
+                    nf = funnel[i + 1]
+                    if nf['key'] in ACTIVITY_SUBSTATES:
+                        rows = db.query(ActivityLog.participant_id).filter(
+                            ActivityLog.workflow_id == wf.id,
+                            ActivityLog.event_type == nf['key'],
+                            ActivityLog.participant_id.isnot(None)
+                        ).distinct().all()
+                        next_pids = {r[0] for r in rows}
+                    elif nf['key'] in EXEC_SUBSTATES:
+                        statuses = [nf['key']]
+                        if nf['key'] == 'sent':
+                            statuses.append('delivered')
+                        rows = db.query(Execution.participant_id).filter(
+                            Execution.step_id == nf['step'].id,
+                            Execution.status.in_(statuses)
+                        ).distinct().all()
+                        next_pids = {r[0] for r in rows}
+
+                in_state_pids = all_pids - next_pids
+                if in_state_pids:
+                    parts = db.query(Participant).filter(Participant.id.in_(in_state_pids)).all()
+                    f['participants'] = [(p.full_name or p.email or f'#{p.id}', p.email or '', p.status.value) for p in parts]
+                else:
+                    f['participants'] = []
+
+            # Write funnel rows
+            ws2.cell(row=row, column=1, value=wf.name).font = section_font
+            ws2.cell(row=row, column=1).fill = section_fill
+            for c in range(2, 8):
+                ws2.cell(row=row, column=c).fill = section_fill
+            row += 1
+
+            for f in funnel:
+                label = SUBSTATE_LABELS.get(f['key'], f['key'])
+                if not f['participants']:
+                    ws2.cell(row=row, column=2, value=label)
+                    ws2.cell(row=row, column=3, value=f['count'])
+                    ws2.cell(row=row, column=4, value=f['in_state'])
+                    for c in range(1, 8):
+                        ws2.cell(row=row, column=c).border = thin_border
+                    row += 1
+                else:
+                    for i, (name, email, status) in enumerate(f['participants']):
+                        if i == 0:
+                            ws2.cell(row=row, column=2, value=label)
+                            ws2.cell(row=row, column=3, value=f['count'])
+                            ws2.cell(row=row, column=4, value=f['in_state'])
+                        ws2.cell(row=row, column=5, value=name)
+                        ws2.cell(row=row, column=6, value=email)
+                        ws2.cell(row=row, column=7, value=status)
+                        for c in range(1, 8):
+                            ws2.cell(row=row, column=c).border = thin_border
+                        row += 1
+
+            row += 1  # blank row between workflows
+
+        # Auto-width columns
+        for col in ws2.columns:
+            max_len = 0
+            for cell in col:
+                if cell.value:
+                    max_len = max(max_len, len(str(cell.value)))
+            ws2.column_dimensions[col[0].column_letter].width = min(max_len + 3, 40)
+
+        # Write to buffer
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        filename = f'status_flow_{datetime.utcnow().strftime("%Y-%m-%d")}.xlsx'
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
+
+    except Exception as e:
+        logger.error(f"Errore export status flow: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @admin_bp.route('/api/participant/<int:participant_id>/timeline')

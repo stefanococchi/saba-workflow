@@ -203,6 +203,12 @@ TRANSLATIONS = {
         'simulation': 'Simulazione',
         'survey_submitted': 'Survey',
         'landing_opened': 'Landing Aperta',
+        'events_label': 'eventi',
+        'status_flow': 'Flusso Stati',
+        'entered': 'Entrati',
+        'exited': 'Usciti',
+        'current_in_status': 'Nello stato',
+        'current_position': 'Posizione attuale',
 
         # Users
         'new_user': 'Nuovo Utente',
@@ -546,6 +552,12 @@ TRANSLATIONS = {
         'simulation': 'Simulation',
         'survey_submitted': 'Survey',
         'landing_opened': 'Landing Opened',
+        'events_label': 'events',
+        'status_flow': 'Status Flow',
+        'entered': 'Entered',
+        'exited': 'Exited',
+        'current_in_status': 'In status',
+        'current_position': 'Current position',
 
         # Users
         'new_user': 'New User',

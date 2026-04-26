@@ -1,10 +1,10 @@
 from flask import Blueprint, request, jsonify, render_template, render_template_string
 from markupsafe import Markup
 from app import db_session as db
-from app.models import Participant, WorkflowStep, ParticipantStatus, StepType
+from app.models import Participant, WorkflowStep, ParticipantStatus, StepType, ActivityLog
 from app.services import TokenService, SchedulerService
 from app.services.activity_service import log_activity
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,19 +30,11 @@ def show_landing_page(token):
             return render_template('landing/error.html',
                                  error='Partecipante non trovato'), 404
         
-        # Log landing page opened
-        log_activity(
-            workflow_id=participant.workflow_id,
-            event_type='landing_opened',
-            description=f'{participant.full_name or participant.email} opened landing page',
-            participant_id=participant.id,
-        )
-
         # Verifica se già completato
         if participant.status == ParticipantStatus.COMPLETED:
             return render_template('landing/already_completed.html',
                                  participant=participant)
-        
+
         # Ottieni step con landing page configurata
         # Priorità: primo step con landing_html/gjs_data nel workflow
         current_step = None
@@ -59,6 +51,21 @@ def show_landing_page(token):
 
         logger.info(f"Landing page: participant={participant.id}, step={current_step.id if current_step else None}, "
                      f"has_html={bool(current_step.landing_html) if current_step else False}")
+
+        # Log landing page opened (deduplicate: max once per 30 min per participant)
+        recent_open = db.query(ActivityLog).filter(
+            ActivityLog.participant_id == participant.id,
+            ActivityLog.event_type == 'landing_opened',
+            ActivityLog.created_at >= datetime.utcnow() - timedelta(minutes=30)
+        ).first()
+        if not recent_open:
+            log_activity(
+                workflow_id=participant.workflow_id,
+                event_type='landing_opened',
+                description=f'{participant.full_name or participant.email} opened landing page',
+                participant_id=participant.id,
+                step_id=current_step.id if current_step else None,
+            )
 
         landing_config = current_step.landing_page_config if current_step else {}
 
@@ -143,15 +150,6 @@ def submit_landing_data(token):
 
         db.commit()
 
-        # Log attività
-        log_activity(
-            workflow_id=participant.workflow_id,
-            event_type='form_submitted',
-            description=f'{participant.full_name or participant.email} ha compilato il form',
-            participant_id=participant.id,
-            details={'collected_data': existing}
-        )
-
         # Trova lo step landing corrente per avanzare al prossimo
         current_step = None
         for s in sorted(participant.workflow.steps, key=lambda x: x.order):
@@ -160,6 +158,16 @@ def submit_landing_data(token):
                 break
         if not current_step:
             current_step = participant.current_step
+
+        # Log attività (con step_id)
+        log_activity(
+            workflow_id=participant.workflow_id,
+            event_type='form_submitted',
+            description=f'{participant.full_name or participant.email} ha compilato il form',
+            participant_id=participant.id,
+            step_id=current_step.id if current_step else None,
+            details={'collected_data': existing}
+        )
 
         if current_step:
             # Usa _handle_landing_branch per rispettare landing_if_filled/jump/stop

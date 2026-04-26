@@ -46,6 +46,61 @@
     .ptable td { padding: 10px 12px; border-bottom: 1px solid var(--md-surface-container-high); vertical-align: middle; }
     .ptable tr:hover td { background: var(--md-surface-container-low); }
     .counter-badge { background: var(--md-primary); color: var(--md-on-primary); border-radius: var(--md-shape-full); padding: 2px 10px; font-size: 12px; font-weight: 600; }
+
+    /* Grouped view */
+    .group-row { cursor: pointer; }
+    .group-row:hover td { background: var(--md-surface-container) !important; }
+    .group-row td { background: var(--md-surface-container-lowest); font-weight: 500; }
+    .group-toggle { transition: transform 0.2s; display: inline-block; }
+    .group-toggle.open { transform: rotate(90deg); }
+    .child-row td { padding-left: 28px !important; font-size: 12px; background: var(--md-surface-container-low); }
+    .child-row td:first-child { padding-left: 36px !important; }
+    .child-row { display: none; }
+    .child-row.visible { display: table-row; }
+    .event-count {
+        background: var(--md-tertiary-container); color: var(--md-on-tertiary-container);
+        border-radius: var(--md-shape-full); padding: 2px 10px; font-size: 11px; font-weight: 600;
+        white-space: nowrap;
+    }
+    .view-toggle .btn.active { background: var(--md-primary); color: var(--md-on-primary); border-color: var(--md-primary); }
+
+    /* Status flow */
+    .flow-wf { margin-bottom: 20px; }
+    .flow-wf:last-child { margin-bottom: 0; }
+    .flow-step { margin-bottom: 10px; }
+    .flow-step-header {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+        font-size: 13px; font-weight: 600; color: var(--md-on-surface);
+    }
+    .flow-step-header .step-order {
+        background: var(--md-primary); color: var(--md-on-primary);
+        border-radius: 50%; width: 22px; height: 22px; display: inline-flex;
+        align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0;
+    }
+    .flow-step-header .step-entered {
+        font-size: 11px; font-weight: 400; color: var(--md-on-surface-variant); margin-left: auto;
+    }
+    .flow-substates { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 30px; }
+    .flow-substate {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 12px; padding: 3px 10px; border-radius: var(--md-shape-full);
+        background: var(--md-surface-container); color: var(--md-on-surface);
+        cursor: pointer; transition: all 0.15s;
+    }
+    .flow-substate:hover { filter: brightness(0.92); transform: translateY(-1px); }
+    .flow-substate i { font-size: 11px; }
+    .flow-substate .fs-count { font-weight: 700; }
+    .flow-connector { border-left: 2px solid var(--md-outline-variant); height: 8px; margin-left: 40px; }
+
+    /* Current position view */
+    .flow-section-label { font-size: 12px; font-weight: 600; color: var(--md-on-surface-variant); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--md-outline-variant); }
+    .flow-current-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; }
+    .flow-current-label { min-width: 140px; display: flex; align-items: center; gap: 6px; font-weight: 500; }
+    .flow-current-track { flex: 1; height: 20px; background: var(--md-surface-container); border-radius: var(--md-shape-sm); overflow: hidden; cursor: pointer; position: relative; }
+    .flow-current-track:hover { filter: brightness(0.92); }
+    .flow-current-fill { height: 100%; border-radius: var(--md-shape-sm); transition: width 0.3s; min-width: 2px; position: relative; }
+    .flow-current-count { min-width: 70px; font-weight: 700; font-size: 13px; text-align: right; white-space: nowrap; }
+    .flow-status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 </style>
 {% endblock %}
 
@@ -72,6 +127,14 @@
                        placeholder="{{ t.participant }}, step, {{ t.description }}..." oninput="applyFilters()">
             </div>
             <div class="d-flex align-items-end gap-2">
+                <div class="view-toggle btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary active" id="btnGrouped" onclick="setViewMode('grouped')" title="Raggruppa per partecipante">
+                        <i class="bi bi-list-nested"></i>
+                    </button>
+                    <button class="btn btn-outline-primary" id="btnFlat" onclick="setViewMode('flat')" title="Vista piatta">
+                        <i class="bi bi-list-ul"></i>
+                    </button>
+                </div>
                 <button class="btn btn-outline-primary btn-sm" onclick="toggleColumns()">
                     <i class="bi bi-layout-three-columns"></i> {{ t.columns }}
                 </button>
@@ -119,10 +182,31 @@
     </div>
 </div>
 
+<!-- Status Flow -->
+{% if flow_data %}
+<div class="card mb-3" id="flowChartCard">
+    <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <h6 class="mb-0"><i class="bi bi-bar-chart-steps"></i> {{ t.status_flow }}</h6>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-primary" onclick="exportStatusFlow()">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Export Excel
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('flowChartCard').style.display='none'" title="Nascondi">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    </div>
+    <div class="card-body py-3">
+        <div id="flowChartsContainer"></div>
+        <div id="flowCurrentContainer" style="margin-top:16px"></div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Results -->
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center py-2">
-        <h6 class="mb-0"><i class="bi bi-journal-text"></i> Timeline <span id="resultCount" class="counter-badge ms-2">0</span></h6>
+        <h6 class="mb-0"><i class="bi bi-journal-text"></i> Timeline <span id="resultCount" class="counter-badge ms-2">0</span> <span id="groupCount" class="counter-badge ms-1" style="background:var(--md-tertiary);color:var(--md-on-tertiary);display:none">0</span></h6>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive" style="max-height: 75vh; overflow-y: auto;">
@@ -258,6 +342,7 @@ var currentType = 'all';
 var sortCol = null;
 var sortDir = 'desc';
 var queryConditions = [];
+var viewMode = 'grouped'; // 'grouped' or 'flat'
 
 // INIT is at the bottom of this script
 
@@ -351,6 +436,7 @@ function applyFilters() {
     }
 
     renderTable(rows);
+    renderFlowCharts(workflowVal);
 }
 
 // =============================================
@@ -378,49 +464,159 @@ var EVENT_BADGES = {
 var STEP_ICONS = { email: 'bi-envelope', wait_until: 'bi-calendar-check', goal_check: 'bi-trophy', export_data: 'bi-download', condition: 'bi-shuffle' };
 
 // =============================================
+// VIEW MODE
+// =============================================
+function setViewMode(mode) {
+    viewMode = mode;
+    document.getElementById('btnGrouped').classList.toggle('active', mode === 'grouped');
+    document.getElementById('btnFlat').classList.toggle('active', mode === 'flat');
+    applyFilters();
+}
+
+// =============================================
 // RENDERING
 // =============================================
 var _filteredRows = [];
 
 function renderTable(rows) {
     _filteredRows = rows;
+    if (viewMode === 'grouped') renderGrouped(rows);
+    else renderFlat(rows);
+}
+
+function renderTableHead(cols) {
     var thead = document.getElementById('tableHead');
-    var tbody = document.getElementById('tableBody');
-    var empty = document.getElementById('emptyState');
-    document.getElementById('resultCount').textContent = rows.length;
-
-    if (rows.length === 0) { thead.innerHTML = ''; tbody.innerHTML = ''; empty.style.display = 'block'; return; }
-    empty.style.display = 'none';
-
-    var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
-
     thead.innerHTML = cols.map(function(c) {
         var sorted = sortCol === c.key;
         var icon = sorted ? (sortDir === 'asc' ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-down';
         return '<th class="'+(sorted?'sorted':'')+'" onclick="sortBy(\''+c.key+'\')">'+c.label+' <i class="bi '+icon+' sort-icon"></i></th>';
     }).join('') + '<th>' + T.actions + '</th>';
+}
 
+function buildRowCells(r, cols) {
+    return cols.map(function(c) {
+        var val = r[c.key] || '';
+        if (c.key === 'event_type') return '<td>' + (EVENT_BADGES[val] || '<span class="badge bg-secondary">'+esc(val)+'</span>') + '</td>';
+        if (c.key === 'step') {
+            var si = STEP_ICONS[r.step_type] || '';
+            return '<td><small>' + (si ? '<i class="bi '+si+'"></i> ' : '') + esc(val) + '</small></td>';
+        }
+        return '<td><small>' + esc(val || '—') + '</small></td>';
+    }).join('');
+}
+
+function buildActions(r, idx) {
+    var actions = '<div class="btn-group btn-group-sm">';
+    if (r.error) actions += '<button class="btn btn-outline-danger" onclick="showError('+idx+')" title="Errore"><i class="bi bi-exclamation-triangle"></i></button>';
+    else if (r.details) actions += '<button class="btn btn-outline-info" onclick="showDetails('+idx+')" title="Dettagli"><i class="bi bi-info-circle"></i></button>';
+    if (r.participant_id) actions += '<button class="btn btn-outline-warning" onclick="rollbackParticipant('+r.participant_id+')" title="Retrocedi"><i class="bi bi-arrow-counterclockwise"></i></button>';
+    if (r.participant_id) actions += '<button class="btn btn-outline-primary" onclick="editParticipant('+r.participant_id+')" title="Modifica partecipante"><i class="bi bi-pencil"></i></button>';
+    actions += '<button class="btn btn-outline-danger" onclick="deleteEntry('+idx+')" title="Elimina"><i class="bi bi-trash"></i></button>';
+    actions += '</div>';
+    return actions;
+}
+
+function renderFlat(rows) {
+    var tbody = document.getElementById('tableBody');
+    var empty = document.getElementById('emptyState');
+    document.getElementById('resultCount').textContent = rows.length;
+    document.getElementById('groupCount').style.display = 'none';
+    if (rows.length === 0) { document.getElementById('tableHead').innerHTML = ''; tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
+    renderTableHead(cols);
     tbody.innerHTML = rows.map(function(r, idx) {
-        var cells = cols.map(function(c) {
-            var val = r[c.key] || '';
-            if (c.key === 'event_type') return '<td>' + (EVENT_BADGES[val] || '<span class="badge bg-secondary">'+esc(val)+'</span>') + '</td>';
+        return '<tr>' + buildRowCells(r, cols) + '<td>' + buildActions(r, idx) + '</td></tr>';
+    }).join('');
+}
+
+function renderGrouped(rows) {
+    var tbody = document.getElementById('tableBody');
+    var empty = document.getElementById('emptyState');
+    document.getElementById('resultCount').textContent = rows.length;
+    if (rows.length === 0) { document.getElementById('tableHead').innerHTML = ''; tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
+    renderTableHead(cols);
+
+    // Group by participant_id (null = ungrouped)
+    var groups = {};
+    var ungrouped = [];
+    var groupOrder = [];
+    rows.forEach(function(r) {
+        if (!r.participant_id) { ungrouped.push(r); return; }
+        var key = r.participant_id;
+        if (!groups[key]) { groups[key] = []; groupOrder.push(key); }
+        groups[key].push(r);
+    });
+
+    var html = '';
+    var gcEl = document.getElementById('groupCount');
+    gcEl.style.display = 'inline';
+    gcEl.textContent = groupOrder.length + ' ' + (T.participants || 'partecipanti');
+
+    // Render grouped participants
+    groupOrder.forEach(function(pid) {
+        var events = groups[pid];
+        var latest = events[0]; // already sorted by time desc
+        var gid = 'g' + pid;
+
+        // Summary row
+        var summaryCells = cols.map(function(c) {
+            if (c.key === 'time_local') return '<td><small><i class="bi bi-chevron-right group-toggle" id="tog_'+gid+'"></i> ' + esc(latest.time_local) + '</small></td>';
+            if (c.key === 'event_type') return '<td>' + (EVENT_BADGES[latest.event_type] || '<span class="badge bg-secondary">'+esc(latest.event_type)+'</span>') + ' <span class="event-count">' + events.length + ' ' + (T.events_label || 'eventi') + '</span></td>';
+            if (c.key === 'participant') return '<td><strong>' + esc(latest.participant) + '</strong></td>';
             if (c.key === 'step') {
-                var si = STEP_ICONS[r.step_type] || '';
-                return '<td><small>' + (si ? '<i class="bi '+si+'"></i> ' : '') + esc(val) + '</small></td>';
+                var si = STEP_ICONS[latest.step_type] || '';
+                return '<td><small>' + (si ? '<i class="bi '+si+'"></i> ' : '') + esc(latest.step || '—') + '</small></td>';
             }
-            return '<td><small>' + esc(val || '—') + '</small></td>';
+            if (c.key === 'description') return '<td><small>' + esc(latest.description || '—') + '</small></td>';
+            return '<td><small>' + esc(latest[c.key] || '—') + '</small></td>';
         }).join('');
 
-        var actions = '<div class="btn-group btn-group-sm">';
-        if (r.error) actions += '<button class="btn btn-outline-danger" onclick="showError('+idx+')" title="Errore"><i class="bi bi-exclamation-triangle"></i></button>';
-        else if (r.details) actions += '<button class="btn btn-outline-info" onclick="showDetails('+idx+')" title="Dettagli"><i class="bi bi-info-circle"></i></button>';
-        if (r.participant_id) actions += '<button class="btn btn-outline-warning" onclick="rollbackParticipant('+r.participant_id+')" title="Retrocedi"><i class="bi bi-arrow-counterclockwise"></i></button>';
-        if (r.participant_id) actions += '<button class="btn btn-outline-primary" onclick="editParticipant('+r.participant_id+')" title="Modifica partecipante"><i class="bi bi-pencil"></i></button>';
-        actions += '<button class="btn btn-outline-danger" onclick="deleteEntry('+idx+')" title="Elimina"><i class="bi bi-trash"></i></button>';
-        actions += '</div>';
+        // Group actions: rollback + edit on the participant
+        var gActions = '<div class="btn-group btn-group-sm">';
+        if (latest.participant_id) {
+            gActions += '<button class="btn btn-outline-warning" onclick="event.stopPropagation();rollbackParticipant('+latest.participant_id+')" title="Retrocedi"><i class="bi bi-arrow-counterclockwise"></i></button>';
+            gActions += '<button class="btn btn-outline-primary" onclick="event.stopPropagation();editParticipant('+latest.participant_id+')" title="Modifica"><i class="bi bi-pencil"></i></button>';
+        }
+        gActions += '</div>';
 
-        return '<tr>' + cells + '<td>' + actions + '</td></tr>';
-    }).join('');
+        html += '<tr class="group-row" onclick="toggleGroup(\''+gid+'\')">' + summaryCells + '<td>' + gActions + '</td></tr>';
+
+        // Child rows (hidden by default)
+        events.forEach(function(r) {
+            var globalIdx = _filteredRows.indexOf(r);
+            var childCells = cols.map(function(c) {
+                var val = r[c.key] || '';
+                if (c.key === 'time_local') return '<td><small class="text-muted">' + esc(val) + '</small></td>';
+                if (c.key === 'event_type') return '<td>' + (EVENT_BADGES[val] || '<span class="badge bg-secondary">'+esc(val)+'</span>') + '</td>';
+                if (c.key === 'participant') return '<td><small class="text-muted">' + esc(val || '—') + '</small></td>';
+                if (c.key === 'step') {
+                    var si = STEP_ICONS[r.step_type] || '';
+                    return '<td><small>' + (si ? '<i class="bi '+si+'"></i> ' : '') + esc(val) + '</small></td>';
+                }
+                return '<td><small>' + esc(val || '—') + '</small></td>';
+            }).join('');
+            html += '<tr class="child-row" data-group="'+gid+'">' + childCells + '<td>' + buildActions(r, globalIdx) + '</td></tr>';
+        });
+    });
+
+    // Render ungrouped events (no participant)
+    ungrouped.forEach(function(r) {
+        var globalIdx = _filteredRows.indexOf(r);
+        html += '<tr>' + buildRowCells(r, cols) + '<td>' + buildActions(r, globalIdx) + '</td></tr>';
+    });
+
+    tbody.innerHTML = html;
+}
+
+function toggleGroup(gid) {
+    var children = document.querySelectorAll('tr[data-group="'+gid+'"]');
+    var toggle = document.getElementById('tog_' + gid);
+    var isOpen = toggle && toggle.classList.contains('open');
+    children.forEach(function(tr) { tr.classList.toggle('visible', !isOpen); });
+    if (toggle) toggle.classList.toggle('open', !isOpen);
 }
 
 function sortBy(key) {
@@ -436,7 +632,7 @@ function showError(idx) {
     var r = _filteredRows[idx]; if (!r) return;
     document.getElementById('infoModalTitle').textContent = 'Errore';
     document.getElementById('infoModalBody').innerHTML = '<div class="alert alert-danger">' + esc(r.error) + '</div>';
-    new bootstrap.Modal(document.getElementById('infoModal')).show();
+    _getInfoModal().show();
 }
 
 function showDetails(idx) {
@@ -459,7 +655,7 @@ function showDetails(idx) {
     } else {
         body.innerHTML = '<pre style="max-height:400px;overflow:auto">'+JSON.stringify(data, null, 2)+'</pre>';
     }
-    new bootstrap.Modal(document.getElementById('infoModal')).show();
+    _getInfoModal().show();
 }
 
 function exportCSV() {
@@ -689,13 +885,231 @@ function doPurge() {
 }
 
 // =============================================
+// STATUS FLOW
+// =============================================
+var FLOW_DATA = {{ flow_data | tojson }};
+
+var STEP_TYPE_ICONS = {
+    email: 'bi-envelope', wait_until: 'bi-calendar-check', goal_check: 'bi-trophy',
+    export_data: 'bi-download', condition: 'bi-shuffle', survey: 'bi-ui-checks',
+    human_approval: 'bi-person-check', excel_write: 'bi-file-earmark-spreadsheet',
+    whatsapp: 'bi-whatsapp'
+};
+
+function renderFlowCharts(filterName) {
+    var container = document.getElementById('flowChartsContainer');
+    if (!container || !Object.keys(FLOW_DATA).length) return;
+
+    var html = '';
+    for (var wfId in FLOW_DATA) {
+        var wf = FLOW_DATA[wfId];
+        if (wf.total === 0) continue;
+        if (filterName && wf.name !== filterName) continue;
+
+        html += '<div class="flow-wf">';
+        html += '<div class="d-flex align-items-center gap-2 mb-2"><strong style="font-size:14px">' + esc(wf.name) + '</strong><span class="counter-badge">' + wf.total + ' ' + (T.participants || 'partecipanti') + '</span></div>';
+
+        wf.steps.forEach(function(step, idx) {
+            var stIcon = STEP_TYPE_ICONS[step.type] || 'bi-circle';
+            html += '<div class="flow-step">';
+            html += '<div class="flow-step-header">';
+            html += '<span class="step-order">' + step.order + '</span>';
+            html += '<i class="bi ' + stIcon + '" style="color:var(--md-primary)"></i> ';
+            html += esc(step.name);
+            if (step.entered > 0) {
+                html += '<span class="step-entered">' + step.entered + ' ' + (T.entered || 'entrati') + '</span>';
+            }
+            html += '</div>';
+
+            if (step.substates.length > 0) {
+                html += '<div class="flow-substates">';
+                step.substates.forEach(function(ss) {
+                    html += '<span class="flow-substate" style="border-left: 3px solid ' + ss.color + '" onclick="showStepParticipants(' + step.id + ',\'' + ss.key + '\',\'' + esc(step.name) + '\',\'' + ss.label + '\')">';
+                    html += '<i class="bi ' + ss.icon + '" style="color:' + ss.color + '"></i> ';
+                    html += '<span class="fs-count">' + ss.count + '</span> ';
+                    html += ss.label;
+                    html += '</span>';
+                });
+                html += '</div>';
+            }
+            html += '</div>';
+
+            // Connector between steps
+            if (idx < wf.steps.length - 1) {
+                html += '<div class="flow-connector"></div>';
+            }
+        });
+
+        html += '</div>';
+    }
+    container.innerHTML = html;
+
+    // Hide/show the card
+    var card = document.getElementById('flowChartCard');
+    if (card) card.style.display = html ? '' : 'none';
+
+    // Render current position view
+    renderFlowCurrent(filterName);
+}
+
+function renderFlowCurrent(filterName) {
+    var container = document.getElementById('flowCurrentContainer');
+    if (!container || !Object.keys(FLOW_DATA).length) return;
+
+    // Funnel order: defines the natural progression of substates
+    var FUNNEL_ORDER = ['scheduled', 'sent', 'opened', 'clicked', 'landing_opened', 'form_submitted', 'survey_submitted', 'completed'];
+
+    var html = '';
+    for (var wfId in FLOW_DATA) {
+        var wf = FLOW_DATA[wfId];
+        if (wf.total === 0) continue;
+        if (filterName && wf.name !== filterName) continue;
+
+        // Flatten all substates across steps into a funnel
+        var funnel = [];
+        wf.steps.forEach(function(step) {
+            step.substates.forEach(function(ss) {
+                // Skip 'failed' from funnel — it's a dead end, not a progression
+                if (ss.key === 'failed') return;
+                funnel.push({ key: ss.key, label: ss.label, icon: ss.icon, color: ss.color, count: ss.count, stepId: step.id, stepName: step.name });
+            });
+        });
+
+        // Sort by funnel order
+        funnel.sort(function(a, b) {
+            var ia = FUNNEL_ORDER.indexOf(a.key); if (ia === -1) ia = 99;
+            var ib = FUNNEL_ORDER.indexOf(b.key); if (ib === -1) ib = 99;
+            return ia - ib;
+        });
+
+        if (funnel.length === 0) continue;
+
+        // Compute "nello stato" = this count - next count
+        for (var i = 0; i < funnel.length; i++) {
+            var nextCount = (i < funnel.length - 1) ? funnel[i + 1].count : 0;
+            funnel[i].inState = funnel[i].count - nextCount;
+            if (funnel[i].inState < 0) funnel[i].inState = 0;
+        }
+
+        var maxCount = funnel[0].count || 1;
+
+        html += '<div class="flow-wf">';
+        html += '<div class="flow-section-label"><i class="bi bi-funnel"></i> ' + (T.current_position || 'Nello stato') + ' — ' + esc(wf.name) + '</div>';
+
+        funnel.forEach(function(f) {
+            var pctEntered = (f.count / maxCount * 100);
+            var pctInState = (f.inState / maxCount * 100);
+            html += '<div class="flow-current-bar">';
+            html += '<div class="flow-current-label"><i class="bi ' + f.icon + '" style="color:' + f.color + ';font-size:13px"></i> ' + f.label + '</div>';
+            html += '<div class="flow-current-track" onclick="showStepParticipants(' + f.stepId + ',\'' + f.key + '\',\'' + esc(f.stepName) + '\',\'' + f.label + '\')">';
+            html += '<div class="flow-current-fill" style="width:' + pctEntered + '%;background:' + f.color + ';opacity:0.25;position:absolute"></div>';
+            html += '<div class="flow-current-fill" style="width:' + pctInState + '%;background:' + f.color + '"></div>';
+            html += '</div>';
+            html += '<div class="flow-current-count" style="color:' + f.color + '">' + f.inState + ' <small style="font-weight:400;color:var(--md-on-surface-variant)">/' + f.count + '</small></div>';
+            html += '</div>';
+        });
+
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+// =============================================
+// STATUS FLOW EXPORT
+// =============================================
+function exportStatusFlow() {
+    var url = '/admin/api/status-flow/export';
+    var wfName = document.getElementById('filterWorkflow').value;
+    if (wfName) {
+        // Map name to ID
+        var wfMap = {};
+        {% for workflow in workflows %}
+        wfMap[{{ workflow.name | tojson }}] = {{ workflow.id }};
+        {% endfor %}
+        if (wfMap[wfName]) url += '?workflow_id=' + wfMap[wfName];
+    }
+    window.location.href = url;
+}
+
+// =============================================
+// CURRENT POSITION DRILL-DOWN
+// =============================================
+// Safely get or create the info modal instance (prevents duplicate backdrops)
+function _getInfoModal() {
+    var el = document.getElementById('infoModal');
+    return bootstrap.Modal.getOrCreateInstance(el);
+}
+
+function _showParticipantList(title, participants) {
+    document.getElementById('infoModalTitle').innerHTML = '<i class="bi bi-people"></i> ' + title;
+    var body = document.getElementById('infoModalBody');
+    if (!participants || participants.length === 0) {
+        body.innerHTML = '<div class="text-muted text-center py-3"><i class="bi bi-inbox"></i> ' + (T.no_results || 'Nessun risultato') + '</div>';
+        return;
+    }
+    var STATUS_COLORS = { pending: '#8d6e63', in_progress: '#2196f3', completed: '#4caf50', bounced: '#f44336', unsubscribed: '#9e9e9e' };
+    var STATUS_LABELS = { pending: T.pending || 'Pending', in_progress: T.in_progress || 'In Progress', completed: T.completed || 'Completed', bounced: T.bounced || 'Bounced', unsubscribed: T.unsubscribed || 'Unsubscribed' };
+    var html = '<div class="d-flex flex-wrap gap-3 mb-2 pb-2" style="border-bottom:1px solid var(--md-outline-variant);font-size:11px">';
+    for (var sk in STATUS_COLORS) { html += '<span class="d-inline-flex align-items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:' + STATUS_COLORS[sk] + ';display:inline-block"></span> ' + STATUS_LABELS[sk] + '</span>'; }
+    html += '</div>';
+    html += '<div class="list-group list-group-flush">';
+    participants.forEach(function(p) {
+        var sc = STATUS_COLORS[p.status] || '#9e9e9e';
+        html += '<div class="list-group-item d-flex align-items-center gap-2 px-0">';
+        html += '<span style="width:8px;height:8px;border-radius:50%;background:' + sc + ';flex-shrink:0" title="' + (STATUS_LABELS[p.status] || p.status) + '"></span>';
+        html += '<div style="flex:1;min-width:0"><strong style="font-size:13px">' + esc(p.name) + '</strong>';
+        if (p.email) html += '<br><small class="text-muted">' + esc(p.email) + '</small>';
+        html += '</div>';
+        html += '<div class="btn-group btn-group-sm">';
+        html += '<button class="btn btn-outline-primary" onclick="editParticipant(' + p.id + ')" title="' + T.edit + '"><i class="bi bi-pencil"></i></button>';
+        html += '<button class="btn btn-outline-warning" onclick="rollbackParticipant(' + p.id + ')" title="Rollback"><i class="bi bi-arrow-counterclockwise"></i></button>';
+        html += '</div></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+}
+
+function _openInfoModal(title, fetchUrl) {
+    document.getElementById('infoModalTitle').innerHTML = '<i class="bi bi-people"></i> ' + title;
+    var body = document.getElementById('infoModalBody');
+    body.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> ' + T.loading + '</div>';
+    _getInfoModal().show();
+
+    fetch(fetchUrl)
+    .then(function(r) { return r.json(); })
+    .then(function(data) { _showParticipantList(title, data.participants); })
+    .catch(function(e) { body.innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; });
+}
+
+function showCurrentAtStep(stepId, stepName) {
+    _openInfoModal(esc(stepName), '/admin/api/step/' + stepId + '/participants?substate=current_at');
+}
+
+function showCurrentParticipants(wfId, status, wfName) {
+    var STATUS_LABELS = { pending: T.pending || 'Pending', in_progress: T.in_progress || 'In Progress', completed: T.completed || 'Completed', bounced: T.bounced || 'Bounced', unsubscribed: T.unsubscribed || 'Unsubscribed' };
+    var title = esc(wfName) + ' — ' + (STATUS_LABELS[status] || status);
+    _openInfoModal(title, '/admin/api/workflow/' + wfId + '/participants?status=' + encodeURIComponent(status));
+}
+
+// =============================================
+// STEP PARTICIPANTS DRILL-DOWN
+// =============================================
+function showStepParticipants(stepId, substate, stepName, substateLabel) {
+    var title = esc(stepName) + ' — ' + substateLabel;
+    _openInfoModal(title, '/admin/api/step/' + stepId + '/participants?substate=' + encodeURIComponent(substate));
+}
+
+// =============================================
 // INIT
 // =============================================
 buildColumnChips();
+var _initWorkflow = document.getElementById('filterWorkflow').value;
 renderTable(ALL_TIMELINE);
 updateCounts();
+renderFlowCharts(_initWorkflow || undefined);
 
-// Auto-refresh ogni 60 secondi
-setTimeout(function() { location.reload(); }, 60000);
+// Auto-refresh ogni 5 minuti (si ferma se l'utente interagisce)
+var _autoRefresh = setTimeout(function() { location.reload(); }, 300000);
+document.addEventListener('click', function() { clearTimeout(_autoRefresh); });
 </script>
 {% endblock %}
