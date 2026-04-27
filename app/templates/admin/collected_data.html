@@ -135,8 +135,11 @@
                 <button class="btn btn-outline-primary btn-sm" onclick="toggleQueryBuilder()">
                     <i class="bi bi-funnel"></i> {{ t.query }}
                 </button>
-                <button class="btn btn-primary btn-sm" onclick="exportCSV()">
-                    <i class="bi bi-download"></i> {{ t.export_csv }}
+                <button class="btn btn-primary btn-sm" onclick="exportXLSX()">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Export Excel
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="exportImagesPDF()">
+                    <i class="bi bi-file-earmark-pdf"></i> PDF Allegati
                 </button>
                 <button class="btn btn-outline-danger btn-sm" onclick="showPurgeModal()">
                     <i class="bi bi-trash3"></i> {{ t.purge_all }}
@@ -248,6 +251,8 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script>
 var T = {{ t|tojson }};
 // =============================================
@@ -610,23 +615,82 @@ function viewData(id) {
     new bootstrap.Modal(document.getElementById('dataModal')).show();
 }
 
-function exportCSV() {
+function exportXLSX() {
     var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
-    var rows = [cols.map(function(c) { return '"' + c.label + '"'; }).join(',')];
+    var header = cols.map(function(c) { return c.label; });
+    var data = [header];
 
     ALL_DATA.forEach(function(p) {
         var row = cols.map(function(c) {
             var val = getFieldValue(p, c.key) || '';
-            return '"' + String(val).replace(/"/g, '""') + '"';
+            if (isFileObj(val)) return val.filename || '[file]';
+            return String(val);
         });
-        rows.push(row.join(','));
+        data.push(row);
     });
 
-    var blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    var link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'dati_raccolti_' + new Date().toISOString().slice(0, 10) + '.csv';
-    link.click();
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Dati Raccolti');
+    XLSX.writeFile(wb, 'dati_raccolti_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+}
+
+async function exportImagesPDF() {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF('p', 'mm', 'a4');
+    var pageW = 210, pageH = 297, margin = 15;
+    var maxW = pageW - margin * 2, maxH = pageH - margin * 2 - 20;
+    var first = true;
+
+    // Collect all images first
+    var images = [];
+    ALL_DATA.forEach(function(p) {
+        var cd = p.collected_data || {};
+        var name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || p.email || '#' + p.id;
+        for (var key in cd) {
+            var val = cd[key];
+            if (isFileObj(val) && val.mime && val.mime.startsWith('image/'))
+                images.push({ name: name, key: key, val: val });
+        }
+    });
+
+    if (images.length === 0) { alert('Nessuna immagine trovata nei dati raccolti.'); return; }
+
+    for (var i = 0; i < images.length; i++) {
+        var item = images[i];
+        if (!first) doc.addPage();
+        first = false;
+
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        doc.text(item.name + ' — ' + item.key, margin, margin + 5);
+
+        try {
+            // Draw to canvas to apply EXIF orientation, then export
+            var canvasData = await new Promise(function(resolve) {
+                var img = new Image();
+                img.onload = function() {
+                    var c = document.createElement('canvas');
+                    c.width = img.naturalWidth;
+                    c.height = img.naturalHeight;
+                    c.getContext('2d').drawImage(img, 0, 0);
+                    resolve({ w: c.width, h: c.height, data: c.toDataURL('image/jpeg', 0.92) });
+                };
+                img.onerror = function() { resolve(null); };
+                img.src = item.val.data;
+            });
+            if (!canvasData) throw new Error('load failed');
+            var w = canvasData.w, h = canvasData.h;
+            var ratio = Math.min(maxW / w, maxH / h, 1);
+            doc.addImage(canvasData.data, 'JPEG', margin, margin + 12, w * ratio, h * ratio);
+        } catch(e) {
+            doc.setFontSize(10);
+            doc.setTextColor(200, 0, 0);
+            doc.text('Errore caricamento: ' + item.val.filename, margin, margin + 20);
+        }
+    }
+
+    doc.save('allegati_' + new Date().toISOString().slice(0, 10) + '.pdf');
 }
 
 // =============================================
