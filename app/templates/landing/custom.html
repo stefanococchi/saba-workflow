@@ -13,11 +13,14 @@
 
     <script>
     (function() {
+        var _submitting = false;
         // Intercetta tutti i form con classe saba-landing-form
         var forms = document.querySelectorAll('.saba-landing-form');
         forms.forEach(function(form) {
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
+                if (_submitting) return;
+                _submitting = true;
 
                 var submitBtn = form.querySelector('[type="submit"]');
                 var successMsg = document.querySelector('.saba-success-msg');
@@ -45,6 +48,7 @@
                                 submitBtn.disabled = false;
                                 submitBtn.textContent = 'Invia';
                             }
+                            _submitting = false;
                             return;
                         }
                         filePromises.push(new Promise(function(resolve, reject) {
@@ -87,6 +91,7 @@
                             submitBtn.disabled = false;
                             submitBtn.textContent = 'Invia';
                         }
+                        _submitting = false;
                     }
                 } catch (error) {
                     if (errorMsg) {
@@ -97,6 +102,7 @@
                         submitBtn.disabled = false;
                         submitBtn.textContent = 'Invia';
                     }
+                    _submitting = false;
                 }
             });
         });

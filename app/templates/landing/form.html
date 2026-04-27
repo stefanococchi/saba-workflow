@@ -114,8 +114,11 @@ function readFileAsBase64(file) {
     });
 }
 
+var _submitting = false;
 document.getElementById('landingForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (_submitting) return;
+    _submitting = true;
 
     const submitBtn = document.getElementById('submitBtn');
     const successMsg = document.getElementById('successMessage');
@@ -170,12 +173,14 @@ document.getElementById('landingForm').addEventListener('submit', async (e) => {
             errorMsg.style.display = 'block';
             submitBtn.disabled = false;
             submitBtn.textContent = 'Invia';
+            _submitting = false;
         }
     } catch (error) {
         errorMsg.textContent = 'Errore di connessione. Riprova.';
         errorMsg.style.display = 'block';
         submitBtn.disabled = false;
         submitBtn.textContent = 'Invia';
+        _submitting = false;
     }
 });
 </script>

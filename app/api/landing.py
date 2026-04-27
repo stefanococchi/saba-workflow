@@ -117,6 +117,10 @@ def submit_landing_data(token):
         # Verifica se già completato
         if participant.status == ParticipantStatus.COMPLETED:
             return jsonify({'error': 'Già completato'}), 400
+
+        # Verifica se form già compilato (anti double-submit)
+        if participant.collected_data and len(participant.collected_data) > 0:
+            return jsonify({'success': True, 'message': 'Dati già salvati'}), 200
         
         # Salva dati
         form_data = request.get_json()
