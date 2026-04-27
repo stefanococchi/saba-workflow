@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify
 from app import db_session as db
-from app.models import Workflow, Participant, ParticipantStatus, WorkflowStatus, Execution, ExecutionStatus, ActivityLog
+from app.models import Workflow, WorkflowStep, Participant, ParticipantStatus, WorkflowStatus, Execution, ExecutionStatus, ActivityLog
 from app.services.activity_service import log_activity
 from app.services import TokenService, SchedulerService
 from app.services.sabaform_service import get_events, get_participants, get_event_by_id
+from sqlalchemy.orm import joinedload
 from datetime import datetime
 import logging
 
@@ -627,4 +628,127 @@ def purge_collected_data():
     except Exception as e:
         db.rollback()
         logger.error(f"Errore purge collected data: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  PUBLIC API — Endpoints per MCP / Saba Hub (read-only, no auth)
+# ══════════════════════════════════════════════════════════════════════
+
+@participant_bp.route('/participants/<int:participant_id>/timeline', methods=['GET'])
+def participant_timeline(participant_id):
+    """Timeline completa di un partecipante: tutti gli eventi in ordine cronologico."""
+    try:
+        participant = db.get(Participant, participant_id)
+        if not participant:
+            return jsonify({'error': 'Partecipante non trovato'}), 404
+
+        USER_EVENTS = {'form_submitted', 'survey_submitted', 'unsubscribed', 'landing_opened', 'approval_granted', 'approval_rejected'}
+
+        events = []
+
+        # Execution records
+        executions = db.query(Execution).options(
+            joinedload(Execution.step)
+        ).filter_by(participant_id=participant_id).all()
+        for ex in executions:
+            step_name = ex.step.name if ex.step else '?'
+            step_type = ex.step.type.value if ex.step else '?'
+            ts = ex.sent_at or ex.scheduled_at or ex.created_at
+
+            events.append({
+                'timestamp': ts.isoformat() + 'Z' if ts else None,
+                'category': 'system',
+                'event_type': ex.status.value if ex.status else 'unknown',
+                'description': step_name,
+                'step_type': step_type,
+                'error': ex.error_message,
+                'details': ex.result_data
+            })
+
+        # ActivityLog records
+        activities = db.query(ActivityLog).filter_by(participant_id=participant_id).all()
+        for a in activities:
+            category = 'user' if a.event_type in USER_EVENTS else 'system'
+            events.append({
+                'timestamp': a.created_at.isoformat() + 'Z' if a.created_at else None,
+                'category': category,
+                'event_type': a.event_type,
+                'description': a.description or a.event_type,
+                'details': a.details
+            })
+
+        events.sort(key=lambda e: e['timestamp'] or '', reverse=True)
+
+        return jsonify({
+            'participant': {
+                'id': participant.id,
+                'name': f"{participant.first_name} {participant.last_name}".strip() or participant.email,
+                'email': participant.email,
+                'status': participant.status.value,
+                'enrolled_at': participant.enrolled_at.isoformat() + 'Z' if participant.enrolled_at else None,
+                'completed_at': participant.completed_at.isoformat() + 'Z' if participant.completed_at else None,
+            },
+            'events': events
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Errore timeline: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/steps/<int:step_id>/participants', methods=['GET'])
+def step_participants(step_id):
+    """Lista partecipanti di uno step, filtrabili per substate.
+
+    Substates disponibili:
+    - Activity-based: landing_opened, form_submitted, survey_submitted
+    - Execution-based: scheduled, sent, opened, clicked, completed, failed, skipped
+    - Special: current_at (partecipanti attualmente fermi su questo step)
+    """
+    try:
+        substate = request.args.get('substate', '')
+        step = db.get(WorkflowStep, step_id)
+        if not step:
+            return jsonify({'error': 'Step non trovato'}), 404
+
+        ACTIVITY_SUBSTATES = {'landing_opened', 'form_submitted', 'survey_submitted'}
+        EXEC_SUBSTATES = {'scheduled', 'sent', 'delivered', 'opened', 'clicked', 'completed', 'failed', 'skipped'}
+
+        participants = []
+        if substate == 'current_at':
+            parts = db.query(Participant).filter(
+                Participant.workflow_id == step.workflow_id,
+                Participant.current_step_id == step_id
+            ).all()
+            participants = [{'id': p.id, 'name': f"{p.first_name} {p.last_name}".strip() or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
+        elif substate in ACTIVITY_SUBSTATES:
+            rows = db.query(ActivityLog.participant_id).filter(
+                ActivityLog.workflow_id == step.workflow_id,
+                ActivityLog.event_type == substate,
+                ActivityLog.participant_id.isnot(None)
+            )
+            if substate != 'landing_opened':
+                rows = rows.filter(
+                    (ActivityLog.step_id == step_id) | (ActivityLog.step_id.is_(None))
+                )
+            pids = [r[0] for r in rows.distinct().all()]
+            if pids:
+                parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
+                participants = [{'id': p.id, 'name': f"{p.first_name} {p.last_name}".strip() or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
+        elif substate in EXEC_SUBSTATES:
+            statuses = [substate]
+            if substate == 'sent':
+                statuses.append('delivered')
+            pids = [r[0] for r in db.query(Execution.participant_id).filter(
+                Execution.step_id == step_id,
+                Execution.status.in_(statuses)
+            ).distinct().all()]
+            if pids:
+                parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
+                participants = [{'id': p.id, 'name': f"{p.first_name} {p.last_name}".strip() or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
+
+        return jsonify({'participants': participants, 'step': step.name, 'substate': substate}), 200
+    except Exception as e:
+        logger.error(f"Errore step participants: {str(e)}")
         return jsonify({'error': str(e)}), 500
