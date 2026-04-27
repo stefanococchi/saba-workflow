@@ -1,0 +1,669 @@
+bello <!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workflow Canvas - Mockup</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Inter', sans-serif;
+    background: var(--canvas-bg, #1a1a1a);
+    color: var(--canvas-text, #e0e0e0);
+    min-height: 100vh;
+    display: flex;
+    transition: background 0.3s, color 0.3s;
+}
+
+/* Theme switcher */
+.theme-switcher {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    display: flex;
+    gap: 8px;
+    background: rgba(0,0,0,0.3);
+    backdrop-filter: blur(10px);
+    padding: 8px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.theme-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+}
+.theme-btn:hover { transform: scale(1.15); }
+.theme-btn.active { border-color: #8B6914; box-shadow: 0 0 0 2px rgba(139,105,20,0.4); }
+.theme-btn .theme-label {
+    position: absolute;
+    bottom: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    white-space: nowrap;
+    color: #999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.theme-btn:hover .theme-label { opacity: 1; }
+
+/* Theme variables */
+body.theme-dark {
+    --canvas-bg: #1a1a1a; --canvas-text: #e0e0e0;
+    --palette-bg: #222; --palette-border: #333;
+    --node-bg: #2a2a2a; --node-border: #444; --node-hover-border: #8B6914;
+    --connector-color: #555; --badge-border: #1a1a1a;
+    --pill-bg: rgba(0,0,0,0.3);
+}
+body.theme-white {
+    --canvas-bg: #ffffff; --canvas-text: #333;
+    --palette-bg: #f8f8f8; --palette-border: #e0e0e0;
+    --node-bg: #ffffff; --node-border: #ddd; --node-hover-border: #8B6914;
+    --connector-color: #ccc; --badge-border: #ffffff;
+    --pill-bg: rgba(0,0,0,0.05);
+}
+body.theme-cream {
+    --canvas-bg: #f5f0e8; --canvas-text: #3d3628;
+    --palette-bg: #ebe5d9; --palette-border: #d5cfc3;
+    --node-bg: #fffdf8; --node-border: #d5cfc3; --node-hover-border: #8B6914;
+    --connector-color: #bfb8aa; --badge-border: #f5f0e8;
+    --pill-bg: rgba(0,0,0,0.05);
+}
+body.theme-warm-dark {
+    --canvas-bg: #2d2a25; --canvas-text: #ddd5c8;
+    --palette-bg: #352f28; --palette-border: #4a4238;
+    --node-bg: #3a342c; --node-border: #5a5245; --node-hover-border: #8B6914;
+    --connector-color: #6a6155; --badge-border: #2d2a25;
+    --pill-bg: rgba(0,0,0,0.2);
+}
+
+/* Sidebar palette */
+.palette {
+    width: 220px;
+    background: var(--palette-bg, #222);
+    border-right: 1px solid var(--palette-border, #333);
+    transition: background 0.3s;
+    padding: 20px 12px;
+    position: fixed;
+    height: 100vh;
+    overflow-y: auto;
+}
+.palette h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #888;
+    margin-bottom: 12px;
+}
+.palette-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: grab;
+    font-size: 13px;
+    font-weight: 500;
+    color: #ccc;
+    transition: all 0.15s;
+    margin-bottom: 4px;
+}
+.palette-item:hover {
+    background: #333;
+    color: #fff;
+}
+.palette-item i {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+}
+
+/* Canvas */
+.canvas-area {
+    flex: 1;
+    margin-left: 220px;
+    padding: 40px;
+    position: relative;
+    overflow: auto;
+}
+
+/* SVG arrows layer */
+.arrows-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Nodes container */
+.nodes-container {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding-top: 20px;
+}
+
+/* Node base */
+.node {
+    position: relative;
+    background: var(--node-bg, #2a2a2a);
+    border: 1.5px solid var(--node-border, #444);
+    border-radius: 12px;
+    transition: background 0.3s, border-color 0.3s;
+    padding: 12px 20px;
+    min-width: 220px;
+    max-width: 300px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.node:hover {
+    border-color: var(--node-hover-border, #8B6914);
+    box-shadow: 0 0 0 3px rgba(139,105,20,0.15);
+}
+.node.selected {
+    border-color: var(--node-hover-border, #8B6914);
+    box-shadow: 0 0 0 3px rgba(139,105,20,0.25);
+}
+
+/* Node icon */
+.node-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+.node-icon.email { background: #2d4a3e; color: #4ade80; }
+.node-icon.wait { background: #3d3a2a; color: #fbbf24; }
+.node-icon.condition { background: #2a2d4a; color: #818cf8; }
+.node-icon.approval { background: #4a2a3e; color: #f472b6; }
+.node-icon.survey { background: #2a4a4a; color: #22d3ee; }
+.node-icon.goal { background: #4a3a2a; color: #fb923c; }
+.node-icon.export { background: #3a2a4a; color: #a78bfa; }
+
+/* Node content */
+.node-body {
+    flex: 1;
+    min-width: 0;
+}
+.node-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--canvas-text, #e8e8e8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.node-subtitle {
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+}
+
+/* Node badge (step number) */
+.node-badge {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #8B6914;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--badge-border, #1a1a1a);
+}
+
+/* Node actions (visible on hover) */
+.node-actions {
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.node:hover .node-actions {
+    opacity: 1;
+}
+.node-action-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid #555;
+    background: #333;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.1s;
+}
+.node-action-btn:hover {
+    background: #444;
+    color: #fff;
+    border-color: #888;
+}
+.node-action-btn.delete:hover {
+    background: #4a2a2a;
+    color: #f87171;
+    border-color: #f87171;
+}
+
+/* Connector (vertical line + arrow between nodes) */
+.connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 40px;
+    position: relative;
+}
+.connector-line {
+    width: 2px;
+    flex: 1;
+    background: var(--connector-color, #555);
+}
+.connector-arrow {
+    color: var(--connector-color, #555);
+    font-size: 10px;
+    line-height: 1;
+    margin-top: -2px;
+}
+
+/* Branch container (for condition/approval) */
+.branch-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+.branch-row {
+    display: flex;
+    justify-content: center;
+    gap: 80px;
+    position: relative;
+    width: 100%;
+}
+.branch-arm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.branch-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 2px 10px;
+    border-radius: 10px;
+    margin-bottom: 6px;
+}
+.branch-label.yes { color: #4ade80; background: rgba(74,222,128,0.1); }
+.branch-label.no { color: #f87171; background: rgba(248,113,113,0.1); }
+
+/* Branch SVG lines */
+.branch-svg {
+    width: 100%;
+    height: 30px;
+    position: relative;
+}
+
+/* Merge connector */
+.merge-connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 30px;
+}
+
+/* Start/End pills */
+.flow-pill {
+    padding: 6px 20px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.flow-pill.start {
+    background: rgba(74,222,128,0.1);
+    color: #4ade80;
+    border: 1px solid rgba(74,222,128,0.3);
+}
+.flow-pill.end {
+    background: rgba(248,113,113,0.1);
+    color: #f87171;
+    border: 1px solid rgba(248,113,113,0.3);
+}
+
+/* Status dot on node */
+.node-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+}
+.node-status.active { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.5); }
+.node-status.idle { background: #555; }
+
+/* Drag handle */
+.node-drag {
+    color: #555;
+    cursor: grab;
+    font-size: 14px;
+    margin-right: -4px;
+}
+.node-drag:hover { color: #888; }
+
+/* Add button between nodes */
+.add-between {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #333;
+    border: 1.5px dashed #555;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin: -4px 0;
+    z-index: 2;
+    position: relative;
+}
+.add-between:hover {
+    background: #8B6914;
+    border-color: #8B6914;
+    color: #fff;
+    border-style: solid;
+    transform: scale(1.2);
+}
+</style>
+</head>
+<body>
+
+<!-- Palette -->
+<div class="palette">
+    <h3>Steps</h3>
+    <div class="palette-item"><i class="bi bi-envelope"></i> Email</div>
+    <div class="palette-item"><i class="bi bi-calendar-check"></i> Wait Until</div>
+    <div class="palette-item"><i class="bi bi-shuffle"></i> Condition</div>
+    <div class="palette-item"><i class="bi bi-person-check"></i> Human Approval</div>
+    <div class="palette-item"><i class="bi bi-ui-checks"></i> Survey</div>
+    <div class="palette-item"><i class="bi bi-trophy"></i> Goal Check</div>
+    <div class="palette-item"><i class="bi bi-download"></i> Export Data</div>
+</div>
+
+<!-- Canvas -->
+<div class="canvas-area">
+    <div class="nodes-container">
+
+        <!-- START -->
+        <div class="flow-pill start"><i class="bi bi-play-fill"></i> Start</div>
+
+        <div class="connector">
+            <div class="connector-line"></div>
+            <div class="connector-arrow">&#9660;</div>
+        </div>
+
+        <!-- Step 1: Email -->
+        <div class="node selected">
+            <div class="node-badge">1</div>
+            <div class="node-icon email"><i class="bi bi-envelope"></i></div>
+            <div class="node-body">
+                <div class="node-title">Welcome Email</div>
+                <div class="node-subtitle">Delay: 0h &middot; 1 allegato</div>
+            </div>
+            <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+            <div class="node-status active"></div>
+            <div class="node-actions">
+                <div class="node-action-btn"><i class="bi bi-pencil"></i></div>
+                <div class="node-action-btn delete"><i class="bi bi-trash"></i></div>
+            </div>
+        </div>
+
+        <div class="connector">
+            <div class="connector-line"></div>
+            <div class="add-between" title="Inserisci step">+</div>
+            <div class="connector-line"></div>
+            <div class="connector-arrow">&#9660;</div>
+        </div>
+
+        <!-- Step 2: Wait -->
+        <div class="node">
+            <div class="node-badge">2</div>
+            <div class="node-icon wait"><i class="bi bi-calendar-check"></i></div>
+            <div class="node-body">
+                <div class="node-title">Wait 48h</div>
+                <div class="node-subtitle">Delay hours</div>
+            </div>
+            <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+            <div class="node-status idle"></div>
+            <div class="node-actions">
+                <div class="node-action-btn"><i class="bi bi-pencil"></i></div>
+                <div class="node-action-btn delete"><i class="bi bi-trash"></i></div>
+            </div>
+        </div>
+
+        <div class="connector">
+            <div class="connector-line"></div>
+            <div class="add-between" title="Inserisci step">+</div>
+            <div class="connector-line"></div>
+            <div class="connector-arrow">&#9660;</div>
+        </div>
+
+        <!-- Step 3: Condition (branching) -->
+        <div class="node" style="border-color: #818cf8;">
+            <div class="node-badge">3</div>
+            <div class="node-icon condition"><i class="bi bi-shuffle"></i></div>
+            <div class="node-body">
+                <div class="node-title">Check Company</div>
+                <div class="node-subtitle">company equals "VIP"</div>
+            </div>
+            <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+            <div class="node-status idle"></div>
+            <div class="node-actions">
+                <div class="node-action-btn"><i class="bi bi-pencil"></i></div>
+                <div class="node-action-btn delete"><i class="bi bi-trash"></i></div>
+            </div>
+        </div>
+
+        <!-- Branch visualization -->
+        <div class="branch-container">
+            <svg width="360" height="40" viewBox="0 0 360 40" style="display:block;margin:0 auto">
+                <!-- Center line going down -->
+                <line x1="180" y1="0" x2="180" y2="10" stroke="#555" stroke-width="2"/>
+                <!-- Split left -->
+                <path d="M180,10 Q180,25 90,25 L90,40" fill="none" stroke="#4ade80" stroke-width="2"/>
+                <!-- Split right -->
+                <path d="M180,10 Q180,25 270,25 L270,40" fill="none" stroke="#f87171" stroke-width="2"/>
+            </svg>
+            <div class="branch-row">
+                <div class="branch-arm">
+                    <div class="branch-label yes">True</div>
+                    <div class="node" style="min-width: 180px; border-color: rgba(74,222,128,0.4);">
+                        <div class="node-badge" style="background:#16a34a">4</div>
+                        <div class="node-icon email"><i class="bi bi-envelope"></i></div>
+                        <div class="node-body">
+                            <div class="node-title">VIP Invite</div>
+                            <div class="node-subtitle">Email personalizzata</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="branch-arm">
+                    <div class="branch-label no">False</div>
+                    <div class="node" style="min-width: 180px; border-color: rgba(248,113,113,0.4);">
+                        <div class="node-badge" style="background:#dc2626">5</div>
+                        <div class="node-icon email"><i class="bi bi-envelope"></i></div>
+                        <div class="node-body">
+                            <div class="node-title">Standard Invite</div>
+                            <div class="node-subtitle">Email standard</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Merge lines -->
+            <svg width="360" height="40" viewBox="0 0 360 40" style="display:block;margin:0 auto">
+                <path d="M90,0 L90,15 Q90,30 180,30 L180,40" fill="none" stroke="#555" stroke-width="2"/>
+                <path d="M270,0 L270,15 Q270,30 180,30 L180,40" fill="none" stroke="#555" stroke-width="2"/>
+            </svg>
+        </div>
+
+        <div class="connector">
+            <div class="connector-line"></div>
+            <div class="add-between" title="Inserisci step">+</div>
+            <div class="connector-line"></div>
+            <div class="connector-arrow">&#9660;</div>
+        </div>
+
+        <!-- Step 6: Human Approval -->
+        <div class="node" style="border-color: #f472b6;">
+            <div class="node-badge">6</div>
+            <div class="node-icon approval"><i class="bi bi-person-check"></i></div>
+            <div class="node-body">
+                <div class="node-title">Manager Approval</div>
+                <div class="node-subtitle">3 approvers &middot; 48h timeout</div>
+            </div>
+            <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+            <div class="node-status idle"></div>
+            <div class="node-actions">
+                <div class="node-action-btn"><i class="bi bi-pencil"></i></div>
+                <div class="node-action-btn delete"><i class="bi bi-trash"></i></div>
+            </div>
+        </div>
+
+        <!-- Approval branch -->
+        <div class="branch-container">
+            <svg width="360" height="40" viewBox="0 0 360 40" style="display:block;margin:0 auto">
+                <line x1="180" y1="0" x2="180" y2="10" stroke="#555" stroke-width="2"/>
+                <path d="M180,10 Q180,25 90,25 L90,40" fill="none" stroke="#4ade80" stroke-width="2"/>
+                <path d="M180,10 Q180,25 270,25 L270,40" fill="none" stroke="#f87171" stroke-width="2"/>
+            </svg>
+            <div class="branch-row">
+                <div class="branch-arm">
+                    <div class="branch-label yes"><i class="bi bi-check-lg"></i> Approved</div>
+                    <div style="color:#888; font-size:11px; text-align:center; padding: 8px 0;">
+                        <i class="bi bi-arrow-return-right"></i> Continue
+                    </div>
+                </div>
+                <div class="branch-arm">
+                    <div class="branch-label no"><i class="bi bi-x-lg"></i> Rejected</div>
+                    <div style="color:#888; font-size:11px; text-align:center; padding: 8px 0;">
+                        <i class="bi bi-stop-circle"></i> Stop workflow
+                    </div>
+                </div>
+            </div>
+            <svg width="360" height="30" viewBox="0 0 360 30" style="display:block;margin:0 auto">
+                <path d="M90,0 L90,10 Q90,20 180,20 L180,30" fill="none" stroke="#555" stroke-width="2"/>
+                <line x1="270" y1="0" x2="270" y2="5" stroke="#f87171" stroke-width="2" stroke-dasharray="4"/>
+            </svg>
+        </div>
+
+        <div class="connector">
+            <div class="connector-line"></div>
+            <div class="add-between" title="Inserisci step">+</div>
+            <div class="connector-line"></div>
+            <div class="connector-arrow">&#9660;</div>
+        </div>
+
+        <!-- Step 7: Export -->
+        <div class="node">
+            <div class="node-badge">7</div>
+            <div class="node-icon export"><i class="bi bi-download"></i></div>
+            <div class="node-body">
+                <div class="node-title">Export CSV</div>
+                <div class="node-subtitle">CSV &rarr; admin@example.com</div>
+            </div>
+            <div class="node-drag"><i class="bi bi-grip-vertical"></i></div>
+            <div class="node-status idle"></div>
+            <div class="node-actions">
+                <div class="node-action-btn"><i class="bi bi-pencil"></i></div>
+                <div class="node-action-btn delete"><i class="bi bi-trash"></i></div>
+            </div>
+        </div>
+
+        <div class="connector">
+            <div class="connector-line"></div>
+            <div class="connector-arrow">&#9660;</div>
+        </div>
+
+        <!-- END -->
+        <div class="flow-pill end"><i class="bi bi-stop-fill"></i> End</div>
+
+        <div style="height: 60px;"></div>
+    </div>
+</div>
+
+<!-- Theme Switcher -->
+<div class="theme-switcher">
+    <div class="theme-btn active" style="background:#1a1a1a" onclick="setTheme('dark', this)">
+        <span class="theme-label">Dark</span>
+    </div>
+    <div class="theme-btn" style="background:#ffffff; border-color:#ddd" onclick="setTheme('white', this)">
+        <span class="theme-label">White</span>
+    </div>
+    <div class="theme-btn" style="background:#f5f0e8; border-color:#d5cfc3" onclick="setTheme('cream', this)">
+        <span class="theme-label">Cream</span>
+    </div>
+    <div class="theme-btn" style="background:#2d2a25" onclick="setTheme('warm-dark', this)">
+        <span class="theme-label">Warm Dark</span>
+    </div>
+</div>
+
+<script>
+function setTheme(theme, btn) {
+    document.body.className = 'theme-' + theme;
+    document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+
+    // Update SVG stroke colors for connectors
+    var connColor = getComputedStyle(document.body).getPropertyValue('--connector-color').trim() || '#555';
+    document.querySelectorAll('.branch-container svg line, .branch-container svg path').forEach(function(el) {
+        // Keep colored lines (green/red) as they are
+        var stroke = el.getAttribute('stroke');
+        if (stroke === '#555' || stroke === connColor || (stroke && stroke !== '#4ade80' && stroke !== '#f87171')) {
+            if (stroke !== '#4ade80' && stroke !== '#f87171') {
+                el.setAttribute('stroke', connColor);
+            }
+        }
+    });
+}
+
+// Init with dark theme
+document.body.classList.add('theme-dark');
+</script>
+</body>
+</html>

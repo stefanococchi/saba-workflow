@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dry Run — Saba Workflow</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+:root {
+    --md-primary: #8B6914;
+    --md-on-primary: #FFFFFF;
+    --md-primary-container: #FFDEA1;
+    --md-on-primary-container: #2B1D00;
+    --md-secondary: #5C6134;
+    --md-on-secondary: #FFFFFF;
+    --md-secondary-container: #E1E6AD;
+    --md-on-secondary-container: #1A1E00;
+    --md-tertiary: #9C5A2E;
+    --md-on-tertiary: #FFFFFF;
+    --md-tertiary-container: #FFDBC9;
+    --md-on-tertiary-container: #371200;
+    --md-error: #B3261E;
+    --md-error-container: #F9DEDC;
+    --md-surface: #FFFBF5;
+    --md-surface-dim: #E0DCD4;
+    --md-surface-container-lowest: #FFFFFF;
+    --md-surface-container-low: #FAF6EE;
+    --md-surface-container: #F4F0E8;
+    --md-surface-container-high: #EDE9E1;
+    --md-surface-container-highest: #E7E3DB;
+    --md-on-surface: #1D1B16;
+    --md-on-surface-variant: #4D4639;
+    --md-outline: #7F7667;
+    --md-outline-variant: #D1C8B8;
+    --md-inverse-surface: #33302A;
+    --md-inverse-on-surface: #F6F1E9;
+    --md-success: #386A20;
+    --md-success-container: #B6F29B;
+    --md-warning: #7C5800;
+    --md-warning-container: #FFDEA1;
+    --md-shape-sm: 8px;
+    --md-shape-md: 12px;
+    --md-shape-lg: 16px;
+    --md-shape-xl: 28px;
+    --md-shape-full: 9999px;
+    --md-elevation-1: 0 1px 3px 1px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.1);
+    --md-elevation-2: 0 2px 6px 2px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.1);
+    --md-elevation-3: 0 4px 8px 3px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.1);
+    --md-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    /* Dry Run specific */
+    --step-email: #8B6914;
+    --step-condition: #7B61C2;
+    --step-wait: #5C6134;
+    --step-approval: #9C5A2E;
+    --step-goal: #386A20;
+    --step-whatsapp: #25D366;
+    --step-survey: #0277BD;
+    --step-export: #6D4C41;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: var(--md-font);
+    background: var(--md-surface-container-low);
+    color: var(--md-on-surface);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+
+/* ===== TOP BAR ===== */
+.top-bar {
+    background: var(--md-surface-container-lowest);
+    border-bottom: 1px solid var(--md-outline-variant);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--md-elevation-1);
+}
+
+.top-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.top-bar-left .back-btn {
+    width: 40px; height: 40px;
+    border-radius: var(--md-shape-full);
+    border: none;
+    background: var(--md-surface-container-high);
+    color: var(--md-on-surface);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    transition: background 0.2s;
+}
+.top-bar-left .back-btn:hover { background: var(--md-outline-variant); }
+
+.top-bar-title h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--md-on-surface);
+    line-height: 1.2;
+}
+.top-bar-title span {
+    font-size: 12px;
+    color: var(--md-on-surface-variant);
+    font-weight: 400;
+}
+
+.top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* ===== BUTTONS ===== */
+.btn-filled {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 24px;
+    border: none;
+    border-radius: var(--md-shape-full);
+    font-family: var(--md-font);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+}
+.btn-filled.primary {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+}
+.btn-filled.primary:hover {
+    box-shadow: var(--md-elevation-2);
+    filter: brightness(1.1);
+}
+.btn-filled.tertiary {
+    background: var(--md-tertiary);
+    color: var(--md-on-tertiary);
+}
+.btn-filled.error {
+    background: var(--md-error);
+    color: white;
+}
+.btn-tonal {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 24px;
+    border: none;
+    border-radius: var(--md-shape-full);
+    font-family: var(--md-font);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--md-secondary-container);
+    color: var(--md-on-secondary-container);
+}
+.btn-tonal:hover { filter: brightness(0.95); }
+
+.btn-outlined {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 23px;
+    border: 1px solid var(--md-outline);
+    border-radius: var(--md-shape-full);
+    background: transparent;
+    font-family: var(--md-font);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--md-primary);
+    transition: all 0.2s;
+}
+.btn-outlined:hover { background: rgba(139,105,20,0.08); }
+
+.btn-icon {
+    width: 40px; height: 40px;
+    border-radius: var(--md-shape-full);
+    border: none;
+    background: transparent;
+    color: var(--md-on-surface-variant);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    transition: background 0.2s;
+}
+.btn-icon:hover { background: var(--md-surface-container-high); }
+
+/* ===== MAIN LAYOUT ===== */
+.main-layout {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 65px);
+}
+
+/* ===== TIMELINE SECTION (TOP) ===== */
+.timeline-section {
+    background: var(--md-surface-container-lowest);
+    border-bottom: 1px solid var(--md-outline-variant);
+    padding: 20px 24px 16px;
+    flex-shrink: 0;
+}
+
+.timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.timeline-header h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--md-on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.timeline-stats {
+    display: flex;
+    gap: 16px;
+}
+
+.timeline-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--md-on-surface-variant);
+}
+.timeline-stat .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+}
+.timeline-stat .dot.completed { background: var(--md-success); }
+.timeline-stat .dot.running { background: var(--md-primary); }
+.timeline-stat .dot.pending { background: var(--md-outline-variant); }
+.timeline-stat .dot.skipped { background: var(--md-outline); }
+
+/* Timeline Track */
+.timeline-track-wrapper {
+    position: relative;
+    overflow-x: auto;
+    padding-bottom: 8px;
+}
+
+.timeline-track {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    min-width: max-content;
+    padding: 0 8px;
+}
+
+/* Single Timeline Node */
+.tl-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    cursor: pointer;
+    min-width: 100px;
+}
+
+.tl-node-dot-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    position: relative;
+}
+
+.tl-connector {
+    flex: 1;
+    height: 3px;
+    background: var(--md-outline-variant);
+    position: relative;
+}
+.tl-connector.completed { background: var(--md-success); }
+.tl-connector.active { background: var(--md-primary); }
+.tl-connector.first { visibility: hidden; }
+.tl-connector.last { visibility: hidden; }
+
+.tl-dot {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    color: white;
+    flex-shrink: 0;
+    transition: all 0.3s;
+    position: relative;
+    z-index: 2;
+}
+
+.tl-dot.email { background: var(--step-email); }
+.tl-dot.condition { background: var(--step-condition); }
+.tl-dot.wait { background: var(--step-wait); }
+.tl-dot.approval { background: var(--step-approval); }
+.tl-dot.goal { background: var(--step-goal); }
+.tl-dot.whatsapp { background: var(--step-whatsapp); }
+.tl-dot.survey { background: var(--step-survey); }
+.tl-dot.export { background: var(--step-export); }
+
+.tl-dot.completed { box-shadow: 0 0 0 3px var(--md-success-container); }
+.tl-dot.active {
+    box-shadow: 0 0 0 3px var(--md-primary-container);
+    animation: pulse-ring 2s ease-out infinite;
+}
+.tl-dot.skipped { opacity: 0.4; }
+.tl-dot.pending { opacity: 0.5; filter: grayscale(0.5); }
+
+@keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 3px var(--md-primary-container); }
+    50% { box-shadow: 0 0 0 8px rgba(139,105,20,0.1); }
+    100% { box-shadow: 0 0 0 3px var(--md-primary-container); }
+}
+
+.tl-node.selected .tl-dot {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 4px var(--md-primary), 0 0 0 8px rgba(139,105,20,0.15);
+}
+
+.tl-label {
+    margin-top: 8px;
+    text-align: center;
+    max-width: 110px;
+}
+.tl-label .tl-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--md-on-surface);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tl-label .tl-type {
+    font-size: 10px;
+    color: var(--md-on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Delay Badge tra nodi */
+.tl-delay {
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--md-warning-container);
+    color: var(--md-warning);
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--md-shape-full);
+    white-space: nowrap;
+    z-index: 5;
+    letter-spacing: 0.03em;
+}
+
+/* Branch indicator */
+.tl-branch-badge {
+    position: absolute;
+    bottom: -8px;
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: var(--md-shape-full);
+    white-space: nowrap;
+    font-weight: 600;
+}
+.tl-branch-badge.true-branch {
+    background: var(--md-success-container);
+    color: var(--md-success);
+}
+.tl-branch-badge.false-branch {
+    background: var(--md-error-container);
+    color: var(--md-error);
+}
+
+/* Step status indicators on timeline */
+.tl-status-icon {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px;
+    color: white;
+    z-index: 3;
+}
+.tl-status-icon.done { background: var(--md-success); }
+.tl-status-icon.running { background: var(--md-primary); }
+.tl-status-icon.skip { background: var(--md-outline); }
+.tl-status-icon.error { background: var(--md-error); }
+
+/* ===== CANVAS / DETAIL SECTION (BOTTOM) ===== */
+.canvas-section {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    gap: 24px;
+}
+
+/* Left: Test Participant Config */
+.config-panel {
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.panel-card {
+    background: var(--md-surface-container-lowest);
+    border-radius: var(--md-shape-lg);
+    box-shadow: var(--md-elevation-1);
+    overflow: hidden;
+}
+
+.panel-card-header {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--md-outline-variant);
+}
+.panel-card-header h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--md-on-surface);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.panel-card-header h3 i { color: var(--md-on-surface-variant); }
+
+.panel-card-body {
+    padding: 16px;
+}
+
+/* Form fields */
+.field-group {
+    margin-bottom: 14px;
+}
+.field-group:last-child { margin-bottom: 0; }
+
+.field-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--md-on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+}
+
+.field-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--md-outline-variant);
+    border-radius: var(--md-shape-sm);
+    font-family: var(--md-font);
+    font-size: 13px;
+    background: var(--md-surface-container-low);
+    color: var(--md-on-surface);
+    transition: border-color 0.2s;
+    outline: none;
+}
+.field-input:focus {
+    border-color: var(--md-primary);
+    box-shadow: 0 0 0 2px rgba(139,105,20,0.15);
+}
+
+.field-input.json-editor {
+    font-family: 'Fira Code', 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 100px;
+}
+
+/* Chip / Tag selectors */
+.chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.chip {
+    padding: 5px 12px;
+    border-radius: var(--md-shape-full);
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--md-outline-variant);
+    background: transparent;
+    color: var(--md-on-surface-variant);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.chip.active {
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
+    border-color: var(--md-primary);
+}
+.chip:hover:not(.active) { background: var(--md-surface-container-high); }
+
+/* Right: Step Detail Canvas */
+.detail-canvas {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+
+/* Step Detail Card */
+.step-detail-card {
+    background: var(--md-surface-container-lowest);
+    border-radius: var(--md-shape-lg);
+    box-shadow: var(--md-elevation-1);
+    overflow: hidden;
+}
+
+.step-detail-header {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid var(--md-outline-variant);
+}
+
+.step-detail-icon {
+    width: 44px; height: 44px;
+    border-radius: var(--md-shape-md);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    color: white;
+}
+
+.step-detail-info h3 {
+    font-size: 16px;
+    font-weight: 600;
+}
+.step-detail-info .step-meta {
+    font-size: 12px;
+    color: var(--md-on-surface-variant);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 2px;
+}
+.step-meta .badge {
+    padding: 2px 8px;
+    border-radius: var(--md-shape-full);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.badge.status-completed {
+    background: var(--md-success-container);
+    color: var(--md-success);
+}
+.badge.status-running {
+    background: var(--md-primary-container);
+    color: var(--md-primary);
+    animation: pulse-bg 2s ease-in-out infinite;
+}
+
+@keyframes pulse-bg {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.step-detail-body {
+    padding: 20px;
+}
+
+/* Email Preview */
+.email-preview {
+    border: 1px solid var(--md-outline-variant);
+    border-radius: var(--md-shape-md);
+    overflow: hidden;
+}
+
+.email-preview-bar {
+    background: var(--md-surface-container-high);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--md-outline-variant);
+}
+.email-preview-bar .ep-row {
+    display: flex;
+    gap: 8px;
+}
+.email-preview-bar .ep-label {
+    color: var(--md-on-surface-variant);
+    font-weight: 600;
+    min-width: 28px;
+}
+.email-preview-bar .ep-value {
+    color: var(--md-on-surface);
+}
+
+.email-preview-body {
+    padding: 20px;
+    background: white;
+    min-height: 160px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #333;
+}
+
+.email-preview-body .placeholder-highlight {
+    background: var(--md-primary-container);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 500;
+    color: var(--md-on-primary-container);
+    font-size: 12px;
+}
+
+.email-preview-body .email-cta-btn {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 12px 32px;
+    background: var(--md-primary);
+    color: white;
+    border-radius: var(--md-shape-full);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+/* Condition Evaluation Card */
+.condition-eval {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.condition-rule {
+    background: var(--md-surface-container);
+    border-radius: var(--md-shape-md);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.condition-field {
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    background: var(--md-surface-container-highest);
+    padding: 4px 10px;
+    border-radius: var(--md-shape-sm);
+    color: var(--md-on-surface);
+}
+.condition-op {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--step-condition);
+    text-transform: uppercase;
+}
+.condition-value {
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    color: var(--md-on-surface);
+}
+.condition-result {
+    margin-left: auto;
+    font-size: 18px;
+}
+
+.branch-outcome {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--md-shape-md);
+    font-size: 13px;
+    font-weight: 500;
+}
+.branch-outcome.taken {
+    background: var(--md-success-container);
+    color: var(--md-success);
+    border: 1px solid rgba(56,106,32,0.2);
+}
+.branch-outcome.not-taken {
+    background: var(--md-surface-container);
+    color: var(--md-on-surface-variant);
+    opacity: 0.6;
+}
+
+/* Approval Interactive */
+.approval-panel {
+    text-align: center;
+    padding: 20px;
+}
+.approval-panel p {
+    font-size: 13px;
+    color: var(--md-on-surface-variant);
+    margin-bottom: 16px;
+}
+.approval-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+/* Activity Log Mini */
+.activity-log {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+.log-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--md-outline-variant);
+    font-size: 12px;
+}
+.log-entry:last-child { border-bottom: none; }
+.log-time {
+    color: var(--md-on-surface-variant);
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    white-space: nowrap;
+    min-width: 55px;
+}
+.log-icon {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: white;
+    flex-shrink: 0;
+}
+.log-icon.email { background: var(--step-email); }
+.log-icon.condition { background: var(--step-condition); }
+.log-icon.wait { background: var(--step-wait); }
+.log-icon.approval { background: var(--step-approval); }
+.log-icon.goal { background: var(--step-goal); }
+.log-icon.success { background: var(--md-success); }
+.log-icon.skip { background: var(--md-outline); }
+
+.log-text {
+    color: var(--md-on-surface);
+    line-height: 1.5;
+}
+.log-text strong { font-weight: 600; }
+.log-text .log-detail {
+    color: var(--md-on-surface-variant);
+    display: block;
+    font-size: 11px;
+}
+
+/* Validation Checklist */
+.validation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.validation-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--md-shape-sm);
+    font-size: 12px;
+    font-weight: 500;
+}
+.validation-item.pass {
+    background: rgba(56,106,32,0.06);
+    color: var(--md-success);
+}
+.validation-item.fail {
+    background: rgba(179,38,30,0.06);
+    color: var(--md-error);
+}
+.validation-item.warn {
+    background: rgba(124,88,0,0.06);
+    color: var(--md-warning);
+}
+.validation-item i { font-size: 16px; }
+
+/* Progress bar during run */
+.run-progress {
+    height: 4px;
+    background: var(--md-surface-container-high);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: -1px;
+}
+.run-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--md-primary), var(--md-tertiary));
+    border-radius: 2px;
+    transition: width 0.8s ease;
+    width: 57%;
+}
+
+/* Speed control */
+.speed-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--md-on-surface-variant);
+}
+.speed-control select {
+    padding: 4px 8px;
+    border: 1px solid var(--md-outline-variant);
+    border-radius: var(--md-shape-sm);
+    font-family: var(--md-font);
+    font-size: 12px;
+    background: var(--md-surface-container);
+    color: var(--md-on-surface);
+    cursor: pointer;
+}
+
+/* Responsive tweaks */
+@media (max-width: 900px) {
+    .canvas-section { flex-direction: column; }
+    .config-panel { width: 100%; }
+}
+
+/* Scrollbar */
+.timeline-track-wrapper::-webkit-scrollbar { height: 6px; }
+.timeline-track-wrapper::-webkit-scrollbar-track { background: var(--md-surface-container); border-radius: 3px; }
+.timeline-track-wrapper::-webkit-scrollbar-thumb { background: var(--md-outline-variant); border-radius: 3px; }
+
+.canvas-section::-webkit-scrollbar { width: 6px; }
+.canvas-section::-webkit-scrollbar-track { background: transparent; }
+.canvas-section::-webkit-scrollbar-thumb { background: var(--md-outline-variant); border-radius: 3px; }
+
+/* Collapse animation for panels */
+.panel-card-body.collapsed { display: none; }
+.panel-card-header .collapse-icon { transition: transform 0.2s; }
+.panel-card-header.collapsed .collapse-icon { transform: rotate(-90deg); }
+
+/* Persona selector */
+.persona-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 0 16px 12px;
+    border-bottom: 1px solid var(--md-outline-variant);
+    overflow-x: auto;
+}
+.persona-tab {
+    padding: 6px 16px;
+    border-radius: var(--md-shape-full);
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--md-outline-variant);
+    background: transparent;
+    color: var(--md-on-surface-variant);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+.persona-tab.active {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border-color: var(--md-primary);
+}
+.persona-tab:hover:not(.active) { background: var(--md-surface-container-high); }
+.persona-tab i { margin-right: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ===== TOP BAR ===== -->
+<div class="top-bar">
+    <div class="top-bar-left">
+        <button class="back-btn"><i class="bi bi-arrow-left"></i></button>
+        <div class="top-bar-title">
+            <h1>Dry Run — Onboarding Nuovo Cliente</h1>
+            <span>Workflow #42 &middot; 7 steps &middot; Draft</span>
+        </div>
+    </div>
+    <div class="top-bar-right">
+        <div class="speed-control">
+            <i class="bi bi-speedometer2"></i>
+            <span>Velocita:</span>
+            <select>
+                <option>Istantanea</option>
+                <option selected>1x (reale)</option>
+                <option>5x</option>
+                <option>10x</option>
+            </select>
+        </div>
+        <button class="btn-outlined" title="Reset"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+        <button class="btn-filled primary" id="runBtn"><i class="bi bi-play-fill"></i> Avvia Dry Run</button>
+    </div>
+</div>
+
+<!-- Progress bar -->
+<div class="run-progress"><div class="run-progress-bar"></div></div>
+
+<!-- ===== MAIN LAYOUT ===== -->
+<div class="main-layout">
+
+    <!-- ===== TIMELINE (TOP) ===== -->
+    <div class="timeline-section">
+        <div class="timeline-header">
+            <h2><i class="bi bi-bezier2"></i> &nbsp;Timeline Esecuzione</h2>
+            <div class="timeline-stats">
+                <div class="timeline-stat"><span class="dot completed"></span> Completati 4</div>
+                <div class="timeline-stat"><span class="dot running"></span> In corso 1</div>
+                <div class="timeline-stat"><span class="dot pending"></span> In attesa 1</div>
+                <div class="timeline-stat"><span class="dot skipped"></span> Saltati 1</div>
+            </div>
+        </div>
+
+        <div class="timeline-track-wrapper">
+            <div class="timeline-track">
+
+                <!-- Node 1: Email Benvenuto -->
+                <div class="tl-node" onclick="selectNode(this, 0)">
+                    <div class="tl-node-dot-row">
+                        <div class="tl-connector first"></div>
+                        <div class="tl-dot email completed">
+                            <i class="bi bi-envelope-fill"></i>
+                            <span class="tl-status-icon done"><i class="bi bi-check"></i></span>
+                        </div>
+                        <div class="tl-connector completed"></div>
+                    </div>
+                    <div class="tl-label">
+                        <div class="tl-name">Email Benvenuto</div>
+                        <div class="tl-type">email</div>
+                    </div>
+                </div>
+
+                <!-- Delay badge -->
+                <div style="position: relative; width: 0;">
+                    <div class="tl-delay" style="position: relative; top: -62px; left: -20px;">
+                        <i class="bi bi-clock"></i> 24h delay
+                    </div>
+                </div>
+
+                <!-- Node 2: Attesa Form -->
+                <div class="tl-node" onclick="selectNode(this, 1)">
+                    <div class="tl-node-dot-row">
+                        <div class="tl-connector completed"></div>
+                        <div class="tl-dot wait completed">
+                            <i class="bi bi-hourglass-split"></i>
+                            <span class="tl-status-icon done"><i class="bi bi-check"></i></span>
+                        </div>
+                        <div class="tl-connector completed"></div>
+                    </div>
+                    <div class="tl-label">
+                        <div class="tl-name">Attesa Form</div>
+                        <div class="tl-type">wait_until</div>
+                    </div>
+                </div>
+
+                <!-- Node 3: Check Dati -->
+                <div class="tl-node" onclick="selectNode(this, 2)">
+                    <div class="tl-node-dot-row">
+                        <div class="tl-connector completed"></div>
+                        <div class="tl-dot condition completed">
+                            <i class="bi bi-signpost-split-fill"></i>
+                            <span class="tl-status-icon done"><i class="bi bi-check"></i></span>
+                        </div>
+                        <div class="tl-connector completed"></div>
+                    </div>
+                    <div class="tl-label">
+                        <div class="tl-name">Check Dati</div>
+                        <div class="tl-type">condition</div>
+                    </div>
+                </div>
+
+                <!-- Node 4: Approvazione -->
+                <div class="tl-node selected" onclick="selectNode(this, 3)">
+                    <div class="tl-node-dot-row">
+                        <div class="tl-connector completed"></div>
+                        <div class="tl-dot approval active">
+                            <i class="bi bi-person-check-fill"></i>
+                            <span class="tl-status-icon running"><i class="bi bi-three-dots"></i></span>
+                        </div>
+                        <div class="tl-connector active"></div>
+                    </div>
+                    <div class="tl-label">
+                        <div class="tl-name">Approvazione</div>
+                        <div class="tl-type">human_approval</div>
+                    </div>
+                </div>
+
+                <!-- Node 5: Conferma Email -->
+                <div class="tl-node" onclick="selectNode(this, 4)">
+                    <div class="tl-node-dot-row">
+                        <div class="tl-connector"></div>
+                        <div class="tl-dot email pending">
+                            <i class="bi bi-envelope-fill"></i>
+                        </div>
+                        <div class="tl-connector"></div>
+                    </div>
+                    <div class="tl-label">
+                        <div class="tl-name">Conferma Email</div>
+                        <div class="tl-type">email</div>
+                    </div>
+                </div>
+
+                <!-- Node 6: Export Dati -->
+                <div class="tl-node" onclick="selectNode(this, 5)">
+                    <div class="tl-node-dot-row">
+                        <div class="tl-connector"></div>
+                        <div class="tl-dot export skipped">
+                            <i class="bi bi-file-earmark-excel"></i>
+                            <span class="tl-status-icon skip"><i class="bi bi-dash"></i></span>
+                        </div>
+                        <div class="tl-connector"></div>
+                    </div>
+                    <div class="tl-label">
+                        <div class="tl-name">Export Dati</div>
+                        <div class="tl-type">excel_write</div>
+                    </div>
+                </div>
+
+                <!-- Node 7: Goal Check -->
+                <div class="tl-node" onclick="selectNode(this, 6)">
+                    <div class="tl-node-dot-row">
+                        <div class="tl-connector"></div>
+                        <div class="tl-dot goal pending">
+                            <i class="bi bi-bullseye"></i>
+                        </div>
+                        <div class="tl-connector last"></div>
+                    </div>
+                    <div class="tl-label">
+                        <div class="tl-name">Goal Finale</div>
+                        <div class="tl-type">goal_check</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CANVAS (BOTTOM) ===== -->
+    <div class="canvas-section">
+
+        <!-- LEFT: Config Panel -->
+        <div class="config-panel">
+
+            <!-- Test Persona -->
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <h3><i class="bi bi-person-badge"></i> Test Persona</h3>
+                    <button class="btn-icon" style="width:28px;height:28px;font-size:14px;" title="Aggiungi persona"><i class="bi bi-plus-lg"></i></button>
+                </div>
+                <div class="persona-tabs">
+                    <button class="persona-tab active"><i class="bi bi-person-fill"></i> Marco R.</button>
+                    <button class="persona-tab"><i class="bi bi-person"></i> Sara B.</button>
+                    <button class="persona-tab"><i class="bi bi-person"></i> Luca M.</button>
+                    <button class="persona-tab" style="border-style: dashed; color: var(--md-outline);"><i class="bi bi-plus"></i> Nuovo</button>
+                </div>
+                <div class="panel-card-body">
+                    <div class="field-group">
+                        <div class="field-label">Nome</div>
+                        <input class="field-input" value="Marco Rossi" />
+                    </div>
+                    <div class="field-group">
+                        <div class="field-label">Email</div>
+                        <input class="field-input" value="marco.rossi@example.com" />
+                    </div>
+                    <div class="field-group">
+                        <div class="field-label">Telefono</div>
+                        <input class="field-input" value="+39 333 1234567" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dati Simulati -->
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <h3><i class="bi bi-braces"></i> Dati Simulati</h3>
+                    <button class="btn-icon collapse-icon" style="width:28px;height:28px;font-size:14px;"><i class="bi bi-chevron-down"></i></button>
+                </div>
+                <div class="panel-card-body">
+                    <div class="field-group">
+                        <div class="field-label">collected_data (JSON)</div>
+                        <textarea class="field-input json-editor" rows="4">{
+  "azienda": "Acme Srl",
+  "ruolo": "CTO",
+  "budget": "premium"
+}</textarea>
+                    </div>
+                    <div class="field-group">
+                        <div class="field-label">sabaform_data (JSON)</div>
+                        <textarea class="field-input json-editor" rows="3">{
+  "evento": "Workshop AI 2026",
+  "data_iscrizione": "2026-04-15"
+}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simula Risposte -->
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <h3><i class="bi bi-toggles"></i> Risposte Simulate</h3>
+                </div>
+                <div class="panel-card-body">
+                    <div class="field-group">
+                        <div class="field-label">Landing Form</div>
+                        <div class="chip-group">
+                            <span class="chip active">Compilato</span>
+                            <span class="chip">Non compilato</span>
+                            <span class="chip">Timeout</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <div class="field-label">Approvazione</div>
+                        <div class="chip-group">
+                            <span class="chip active">Approvato</span>
+                            <span class="chip">Rifiutato</span>
+                            <span class="chip">Nessuna risposta</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <div class="field-label">Email Apertura</div>
+                        <div class="chip-group">
+                            <span class="chip active">Aperta</span>
+                            <span class="chip">Non aperta</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Validazione Pre-lancio -->
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <h3><i class="bi bi-shield-check"></i> Validazione</h3>
+                </div>
+                <div class="panel-card-body">
+                    <div class="validation-list">
+                        <div class="validation-item pass">
+                            <i class="bi bi-check-circle-fill"></i>
+                            Tutti gli step hanno template
+                        </div>
+                        <div class="validation-item pass">
+                            <i class="bi bi-check-circle-fill"></i>
+                            Condizioni referenziano campi validi
+                        </div>
+                        <div class="validation-item pass">
+                            <i class="bi bi-check-circle-fill"></i>
+                            Jump targets validi
+                        </div>
+                        <div class="validation-item warn">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            Step 6 (Export): credenziali OneDrive mancanti
+                        </div>
+                        <div class="validation-item pass">
+                            <i class="bi bi-check-circle-fill"></i>
+                            Graph API configurata
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT: Step Detail Canvas -->
+        <div class="detail-canvas">
+
+            <!-- Current Step Detail: Approvazione (Step 4) -->
+            <div class="step-detail-card">
+                <div class="step-detail-header">
+                    <div class="step-detail-icon" style="background: var(--step-approval);">
+                        <i class="bi bi-person-check-fill"></i>
+                    </div>
+                    <div class="step-detail-info">
+                        <h3>Step 4 — Approvazione Manager</h3>
+                        <div class="step-meta">
+                            <span class="badge status-running">In attesa risposta</span>
+                            <span><i class="bi bi-person"></i> Approver: admin@saba.it</span>
+                            <span><i class="bi bi-clock"></i> Timeout: 48h</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-detail-body">
+
+                    <!-- Email sent to approver preview -->
+                    <div style="margin-bottom: 16px;">
+                        <div style="font-size:12px; font-weight:600; color: var(--md-on-surface-variant); margin-bottom:8px; text-transform: uppercase; letter-spacing: 0.05em;">
+                            Email inviata all'approvatore
+                        </div>
+                        <div class="email-preview">
+                            <div class="email-preview-bar">
+                                <div class="ep-row"><span class="ep-label">A:</span><span class="ep-value">admin@saba.it</span></div>
+                                <div class="ep-row"><span class="ep-label">Ogg:</span><span class="ep-value">Richiesta approvazione: Marco Rossi — Onboarding</span></div>
+                            </div>
+                            <div class="email-preview-body">
+                                <p>Nuova richiesta di approvazione per il partecipante:</p>
+                                <p style="margin: 12px 0;">
+                                    <strong>Nome:</strong> <span class="placeholder-highlight">Marco Rossi</span><br>
+                                    <strong>Azienda:</strong> <span class="placeholder-highlight">Acme Srl</span><br>
+                                    <strong>Piano:</strong> <span class="placeholder-highlight">premium</span>
+                                </p>
+                                <p>Seleziona un'azione:</p>
+                                <div style="display:flex; gap:10px; margin-top: 12px;">
+                                    <a class="email-cta-btn" style="background: var(--md-success); font-size: 13px; padding: 10px 24px;">Approva</a>
+                                    <a class="email-cta-btn" style="background: var(--md-error); font-size: 13px; padding: 10px 24px;">Rifiuta</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Simulated action -->
+                    <div class="approval-panel" style="background: var(--md-surface-container); border-radius: var(--md-shape-md); padding: 20px;">
+                        <p><i class="bi bi-hand-index"></i> &nbsp;Simula la risposta dell'approvatore:</p>
+                        <div class="approval-buttons">
+                            <button class="btn-filled primary" style="background: var(--md-success);"><i class="bi bi-check-lg"></i> Approva</button>
+                            <button class="btn-filled error"><i class="bi bi-x-lg"></i> Rifiuta</button>
+                            <button class="btn-outlined"><i class="bi bi-clock-history"></i> Timeout</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Condition Evaluation: Step 3 (already completed) -->
+            <div class="step-detail-card" style="opacity: 0.75;">
+                <div class="step-detail-header">
+                    <div class="step-detail-icon" style="background: var(--step-condition);">
+                        <i class="bi bi-signpost-split-fill"></i>
+                    </div>
+                    <div class="step-detail-info">
+                        <h3>Step 3 — Check Dati Cliente</h3>
+                        <div class="step-meta">
+                            <span class="badge status-completed">Completato</span>
+                            <span><i class="bi bi-clock"></i> 0.02s</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-detail-body">
+                    <div class="condition-eval">
+                        <div class="condition-rule">
+                            <span class="condition-field">collected_data.budget</span>
+                            <span class="condition-op">equals</span>
+                            <span class="condition-value">"premium"</span>
+                            <span class="condition-result">&#10004;</span>
+                        </div>
+                        <div class="branch-outcome taken">
+                            <i class="bi bi-arrow-right-circle-fill"></i>
+                            <span><strong>TRUE</strong> &rarr; Continua a Step 4 (Approvazione)</span>
+                        </div>
+                        <div class="branch-outcome not-taken">
+                            <i class="bi bi-skip-forward-circle"></i>
+                            <span><strong>FALSE</strong> &rarr; Salta a Step 5 (Conferma Email)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Log -->
+            <div class="step-detail-card">
+                <div class="step-detail-header" style="border-bottom: 1px solid var(--md-outline-variant);">
+                    <div class="step-detail-icon" style="background: var(--md-on-surface-variant);">
+                        <i class="bi bi-journal-text"></i>
+                    </div>
+                    <div class="step-detail-info">
+                        <h3>Log Esecuzione</h3>
+                        <div class="step-meta">
+                            <span>6 eventi registrati</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-detail-body">
+                    <div class="activity-log">
+                        <div class="log-entry">
+                            <span class="log-time">00:00.0</span>
+                            <span class="log-icon success"><i class="bi bi-play-fill"></i></span>
+                            <div class="log-text">
+                                <strong>Dry run avviato</strong>
+                                <span class="log-detail">Persona: Marco Rossi &middot; 7 steps da eseguire</span>
+                            </div>
+                        </div>
+                        <div class="log-entry">
+                            <span class="log-time">00:00.1</span>
+                            <span class="log-icon email"><i class="bi bi-envelope"></i></span>
+                            <div class="log-text">
+                                <strong>Step 1 — Email Benvenuto</strong> inviata (simulata)
+                                <span class="log-detail">To: marco.rossi@example.com &middot; Subject: "Benvenuto in Saba!"</span>
+                            </div>
+                        </div>
+                        <div class="log-entry">
+                            <span class="log-time">00:00.2</span>
+                            <span class="log-icon wait"><i class="bi bi-hourglass"></i></span>
+                            <div class="log-text">
+                                <strong>Step 2 — Attesa Form</strong> wait 24h (skip in dry run)
+                                <span class="log-detail">Simulato: form compilato con dati test persona</span>
+                            </div>
+                        </div>
+                        <div class="log-entry">
+                            <span class="log-time">00:00.3</span>
+                            <span class="log-icon condition"><i class="bi bi-signpost-split"></i></span>
+                            <div class="log-text">
+                                <strong>Step 3 — Check Dati</strong> condizione valutata
+                                <span class="log-detail">budget == "premium" &rarr; TRUE &rarr; continua a Step 4</span>
+                            </div>
+                        </div>
+                        <div class="log-entry">
+                            <span class="log-time">00:00.4</span>
+                            <span class="log-icon approval"><i class="bi bi-person-check"></i></span>
+                            <div class="log-text">
+                                <strong>Step 4 — Approvazione</strong> email approvazione inviata (simulata)
+                                <span class="log-detail">Approver: admin@saba.it &middot; In attesa di risposta simulata...</span>
+                            </div>
+                        </div>
+                        <div class="log-entry">
+                            <span class="log-time">00:00.4</span>
+                            <span class="log-icon skip"><i class="bi bi-dash"></i></span>
+                            <div class="log-text">
+                                <strong>Step 6 — Export Dati</strong> saltato
+                                <span class="log-detail">Credenziali OneDrive non configurate &middot; skip_condition soddisfatta</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+function selectNode(el, idx) {
+    document.querySelectorAll('.tl-node').forEach(n => n.classList.remove('selected'));
+    el.classList.add('selected');
+}
+
+// Chip toggle
+document.querySelectorAll('.chip-group').forEach(group => {
+    group.querySelectorAll('.chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            group.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+        });
+    });
+});
+
+// Persona tab toggle
+document.querySelectorAll('.persona-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.persona-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+    });
+});
+
+// Panel collapse toggle
+document.querySelectorAll('.panel-card-header .collapse-icon').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const header = btn.closest('.panel-card-header');
+        const body = header.nextElementSibling;
+        header.classList.toggle('collapsed');
+        body.classList.toggle('collapsed');
+    });
+});
+
+// Simulate run button
+document.getElementById('runBtn').addEventListener('click', function() {
+    const bar = document.querySelector('.run-progress-bar');
+    bar.style.width = '0%';
+    bar.style.transition = 'none';
+
+    setTimeout(() => {
+        bar.style.transition = 'width 3s ease';
+        bar.style.width = '100%';
+    }, 50);
+
+    this.innerHTML = '<i class="bi bi-pause-fill"></i> In esecuzione...';
+    this.classList.remove('primary');
+    this.style.background = 'var(--md-tertiary)';
+
+    setTimeout(() => {
+        this.innerHTML = '<i class="bi bi-play-fill"></i> Avvia Dry Run';
+        this.style.background = '';
+        this.classList.add('primary');
+    }, 3500);
+});
+</script>
+</body>
+</html>
