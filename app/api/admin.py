@@ -574,19 +574,30 @@ def executions_monitor():
                 exec_map = exec_batch.get(step.id, {})
                 has_landing = bool(step.landing_html or step.landing_gjs_data or step.landing_page_config)
 
-                # Activity map: step-specific first, then legacy fallback
-                activity_map = activity_by_step.get(step.id, {})
-                if not activity_map:
-                    is_first_landing = has_landing and first_landing_id == step.id
-                    is_first_survey = step.type.value == 'survey' and first_survey_id == step.id
-                    if is_first_landing or is_first_survey:
-                        relevant = []
-                        if is_first_landing:
-                            relevant.extend(['landing_opened', 'form_submitted'])
-                        if is_first_survey:
-                            relevant.append('survey_submitted')
-                        legacy = activity_by_wf_legacy.get(wf.id, {})
-                        activity_map = {k: v for k, v in legacy.items() if k in relevant}
+                # Activity map: step-specific + legacy (step_id=NULL) merged for first landing/survey
+                activity_map = dict(activity_by_step.get(step.id, {}))
+                is_first_landing = has_landing and first_landing_id == step.id
+                is_first_survey = step.type.value == 'survey' and first_survey_id == step.id
+                if (is_first_landing or is_first_survey) and activity_by_wf_legacy.get(wf.id):
+                    relevant = []
+                    if is_first_landing:
+                        relevant.extend(['landing_opened', 'form_submitted'])
+                    if is_first_survey:
+                        relevant.append('survey_submitted')
+                    legacy = activity_by_wf_legacy[wf.id]
+                    has_legacy = any(k in legacy for k in relevant)
+                    if has_legacy:
+                        # Query distinct count across step_id=X and step_id=NULL to avoid double counting
+                        for evt, cnt in db.query(
+                            ActivityLog.event_type,
+                            func.count(func.distinct(ActivityLog.participant_id))
+                        ).filter(
+                            ActivityLog.workflow_id == wf.id,
+                            ActivityLog.participant_id.isnot(None),
+                            ActivityLog.event_type.in_(relevant),
+                            (ActivityLog.step_id == step.id) | (ActivityLog.step_id.is_(None))
+                        ).group_by(ActivityLog.event_type).all():
+                            activity_map[evt] = cnt
 
                 # Build substates
                 substates = []
