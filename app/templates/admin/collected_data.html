@@ -138,6 +138,9 @@
                 <button class="btn btn-primary btn-sm" onclick="exportXLSX()">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Export Excel
                 </button>
+                <button class="btn btn-sm btn-outline-primary" onclick="exportCompleted()">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Export Completati
+                </button>
                 <button class="btn btn-primary btn-sm" onclick="exportImagesPDF()">
                     <i class="bi bi-file-earmark-pdf"></i> PDF Allegati
                 </button>
@@ -647,6 +650,12 @@ function exportXLSX() {
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Dati Raccolti');
     XLSX.writeFile(wb, 'dati_raccolti_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+}
+
+function exportCompleted() {
+    var wfId = document.getElementById('filterWorkflow').value;
+    if (!wfId) { alert('Seleziona un workflow'); return; }
+    window.location.href = '/admin/api/collected-data/export-completed?workflow_id=' + wfId;
 }
 
 async function exportImagesPDF() {
