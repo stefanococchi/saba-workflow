@@ -309,25 +309,8 @@ var T = {{ t|tojson }};
 // =============================================
 // DATA
 // =============================================
-var ALL_TIMELINE = [
-    {% for item in timeline %}
-    {
-        entry_type: {{ item.type | tojson }},
-        entry_id: {{ item.entry_id }},
-        participant_id: {{ item.participant_id | tojson }},
-        time: {{ item.time.isoformat() | tojson }},
-        time_local: {{ item.time|localtime | tojson }},
-        event_type: {{ item.event_type | tojson }},
-        participant: {{ item.participant_name | tojson }},
-        step: {{ item.step_name | tojson }},
-        step_type: {{ item.step_type | tojson }},
-        description: {{ item.description | tojson }},
-        workflow: {{ item.workflow_name | default('', true) | tojson }},
-        error: {{ item.error | tojson if item.error else 'null' }},
-        details: {{ item.details | tojson if item.details else 'null' }}
-    }{% if not loop.last %},{% endif %}
-    {% endfor %}
-];
+var ALL_TIMELINE = [];
+var _timelineLoaded = false;
 
 // =============================================
 // COLUMNS
@@ -1124,8 +1107,29 @@ function showStepParticipants(stepId, substate, stepName, substateLabel) {
 // INIT
 // =============================================
 buildColumnChips();
-updateCounts();
-applyFilters();
+renderFlowCharts();
+
+// Load timeline via AJAX (non-blocking)
+(function() {
+    var wfId = {{ current_workflow_id | tojson }};
+    var url = '/admin/api/executions/timeline';
+    if (wfId) url += '?workflow_id=' + wfId;
+
+    // Show loading state
+    document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div> ' + (T.loading || 'Caricamento...') + '</td></tr>';
+
+    fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        ALL_TIMELINE = data;
+        _timelineLoaded = true;
+        updateCounts();
+        applyFilters();
+    })
+    .catch(function(e) {
+        document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">Errore caricamento timeline</td></tr>';
+    });
+})();
 
 // Auto-refresh ogni 5 minuti (si ferma se l'utente interagisce)
 var _autoRefresh = setTimeout(function() { location.reload(); }, 300000);
