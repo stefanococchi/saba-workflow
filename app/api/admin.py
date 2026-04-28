@@ -940,10 +940,25 @@ def export_status_flow():
             'survey_submitted': 'Survey Submitted',
         }
 
+        import pytz
+        _local_tz = pytz.timezone('Europe/Rome')
+
+        def _fmt_ts(ts):
+            if ts is None:
+                return ''
+            utc_dt = pytz.utc.localize(ts)
+            return utc_dt.astimezone(_local_tz).strftime('%d-%m-%Y %H:%M')
+
+        def _raw_ts(ts):
+            """Return localized datetime for sorting (None-safe)"""
+            if ts is None:
+                return datetime.min
+            return pytz.utc.localize(ts).astimezone(_local_tz)
+
         def _get_participants_for_substate(step, substate, wf):
-            """Return list of (name, email, status) for a step+substate"""
+            """Return list of (name, email, datetime_formatted, raw_ts, status) for a step+substate"""
             if substate in ACTIVITY_SUBSTATES:
-                rows = db.query(ActivityLog.participant_id).filter(
+                rows = db.query(ActivityLog.participant_id, ActivityLog.created_at).filter(
                     ActivityLog.workflow_id == wf.id,
                     ActivityLog.event_type == substate,
                     ActivityLog.participant_id.isnot(None)
@@ -952,21 +967,33 @@ def export_status_flow():
                     rows = rows.filter(
                         (ActivityLog.step_id == step.id) | (ActivityLog.step_id.is_(None))
                     )
-                pids = [r[0] for r in rows.distinct().all()]
+                pid_ts = {}
+                for r in rows.all():
+                    if r[0] not in pid_ts or (r[1] and r[1] > pid_ts[r[0]]):
+                        pid_ts[r[0]] = r[1]
+                pids = list(pid_ts.keys())
             elif substate in EXEC_SUBSTATES:
                 statuses = [substate]
                 if substate == 'sent':
                     statuses.append('delivered')
-                pids = [r[0] for r in db.query(Execution.participant_id).filter(
+                exec_rows = db.query(Execution.participant_id, Execution.sent_at, Execution.scheduled_at, Execution.created_at).filter(
                     Execution.step_id == step.id,
                     Execution.status.in_(statuses)
-                ).distinct().all()]
+                ).all()
+                pid_ts = {}
+                for r in exec_rows:
+                    ts = r[1] or r[2] or r[3]
+                    if r[0] not in pid_ts or (ts and ts > pid_ts[r[0]]):
+                        pid_ts[r[0]] = ts
+                pids = list(pid_ts.keys())
             else:
                 return []
             if not pids:
                 return []
             parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
-            return [(p.full_name or p.email or f'#{p.id}', p.email or '', p.status.value) for p in parts]
+            result = [(p.full_name or p.email or f'#{p.id}', p.email or '', _fmt_ts(pid_ts.get(p.id)), _raw_ts(pid_ts.get(p.id)), p.status.value) for p in parts]
+            result.sort(key=lambda x: x[3])  # sort by timestamp ascending
+            return result
 
         def _apply_header(ws, headers):
             for col, h in enumerate(headers, 1):
@@ -976,111 +1003,11 @@ def export_status_flow():
                 cell.alignment = Alignment(horizontal='center')
 
         # ═══════════════════════════════════════
-        # SHEET 1: Flusso Eventi (all substates with participants)
+        # Single sheet: Nello Stato (funnel with participants)
         # ═══════════════════════════════════════
-        ws1 = wb.active
-        ws1.title = 'Flusso Eventi'
-        _apply_header(ws1, ['Workflow', 'Step', 'Ordine', 'Tipo Step', 'Entrati', 'Sottostato', 'Conteggio', 'Partecipante', 'Email', 'Stato'])
-
-        row = 2
-        for wf in target_workflows:
-            if not wf.steps:
-                continue
-            for step in sorted(wf.steps, key=lambda s: s.order):
-                # Get execution counts
-                exec_counts = db.query(
-                    Execution.status, func.count(Execution.id)
-                ).filter(Execution.step_id == step.id).group_by(Execution.status).all()
-                exec_map = {s.value: c for s, c in exec_counts}
-                total_entered = sum(exec_map.values()) - exec_map.get('skipped', 0)
-
-                # Get activity counts
-                has_landing = bool(step.landing_html or step.landing_gjs_data or step.landing_page_config)
-                relevant_events = []
-                if has_landing:
-                    relevant_events.extend(['landing_opened', 'form_submitted'])
-                if step.type.value == 'survey':
-                    relevant_events.append('survey_submitted')
-
-                # Build substates list
-                substates = []
-                sent = exec_map.get('sent', 0) + exec_map.get('delivered', 0)
-                if exec_map.get('scheduled', 0):
-                    substates.append(('scheduled', exec_map['scheduled']))
-                if sent:
-                    substates.append(('sent', sent))
-                if exec_map.get('opened', 0):
-                    substates.append(('opened', exec_map['opened']))
-                if exec_map.get('clicked', 0):
-                    substates.append(('clicked', exec_map['clicked']))
-
-                for evt in relevant_events:
-                    cnt = db.query(func.count(func.distinct(ActivityLog.participant_id))).filter(
-                        ActivityLog.workflow_id == wf.id,
-                        ActivityLog.event_type == evt,
-                        ActivityLog.participant_id.isnot(None),
-                        (ActivityLog.step_id == step.id) | (ActivityLog.step_id.is_(None))
-                    ).scalar() or 0
-                    if cnt:
-                        substates.append((evt, cnt))
-
-                if exec_map.get('completed', 0):
-                    substates.append(('completed', exec_map['completed']))
-                if exec_map.get('failed', 0):
-                    substates.append(('failed', exec_map['failed']))
-
-                if not substates:
-                    continue
-
-                # Section header row
-                ws1.cell(row=row, column=1, value=wf.name).font = section_font
-                ws1.cell(row=row, column=1).fill = section_fill
-                ws1.cell(row=row, column=2, value=step.name).font = section_font
-                ws1.cell(row=row, column=2).fill = section_fill
-                ws1.cell(row=row, column=3, value=step.order).fill = section_fill
-                ws1.cell(row=row, column=4, value=step.type.value).fill = section_fill
-                ws1.cell(row=row, column=5, value=total_entered).fill = section_fill
-                for c in range(6, 11):
-                    ws1.cell(row=row, column=c).fill = section_fill
-                row += 1
-
-                for ss_key, ss_count in substates:
-                    label = SUBSTATE_LABELS.get(ss_key, ss_key)
-                    participants = _get_participants_for_substate(step, ss_key, wf)
-
-                    if not participants:
-                        ws1.cell(row=row, column=6, value=label)
-                        ws1.cell(row=row, column=7, value=ss_count)
-                        for c in range(1, 11):
-                            ws1.cell(row=row, column=c).border = thin_border
-                        row += 1
-                    else:
-                        for i, (name, email, status) in enumerate(participants):
-                            if i == 0:
-                                ws1.cell(row=row, column=6, value=label)
-                                ws1.cell(row=row, column=7, value=ss_count)
-                            ws1.cell(row=row, column=8, value=name)
-                            ws1.cell(row=row, column=9, value=email)
-                            ws1.cell(row=row, column=10, value=status)
-                            for c in range(1, 11):
-                                ws1.cell(row=row, column=c).border = thin_border
-                            row += 1
-
-                row += 1  # blank row between steps
-
-        # Auto-width columns
-        for col in ws1.columns:
-            max_len = 0
-            for cell in col:
-                if cell.value:
-                    max_len = max(max_len, len(str(cell.value)))
-            ws1.column_dimensions[col[0].column_letter].width = min(max_len + 3, 40)
-
-        # ═══════════════════════════════════════
-        # SHEET 2: Nello Stato (funnel with participants)
-        # ═══════════════════════════════════════
-        ws2 = wb.create_sheet('Nello Stato')
-        _apply_header(ws2, ['Workflow', 'Sottostato', 'Entrati', 'Nello Stato', 'Partecipante', 'Email', 'Stato'])
+        ws = wb.active
+        ws.title = 'Nello Stato'
+        _apply_header(ws, ['Workflow', 'Sottostato', 'Entrati', 'Nello Stato', 'Partecipante', 'Email', 'Data e Ora', 'Stato'])
 
         row = 2
         for wf in target_workflows:
@@ -1141,23 +1068,31 @@ def export_status_flow():
                 all_pids = set()
                 next_pids = set()
 
-                # PIDs for this substate
+                # PIDs for this substate (with timestamps)
+                pid_ts = {}
                 if f['key'] in ACTIVITY_SUBSTATES:
-                    rows = db.query(ActivityLog.participant_id).filter(
+                    rows = db.query(ActivityLog.participant_id, ActivityLog.created_at).filter(
                         ActivityLog.workflow_id == wf.id,
                         ActivityLog.event_type == f['key'],
                         ActivityLog.participant_id.isnot(None)
-                    ).distinct().all()
-                    all_pids = {r[0] for r in rows}
+                    ).all()
+                    for r in rows:
+                        if r[0] not in pid_ts or (r[1] and r[1] > pid_ts[r[0]]):
+                            pid_ts[r[0]] = r[1]
+                    all_pids = set(pid_ts.keys())
                 elif f['key'] in EXEC_SUBSTATES:
                     statuses = [f['key']]
                     if f['key'] == 'sent':
                         statuses.append('delivered')
-                    rows = db.query(Execution.participant_id).filter(
+                    exec_rows = db.query(Execution.participant_id, Execution.sent_at, Execution.scheduled_at, Execution.created_at).filter(
                         Execution.step_id == f['step'].id,
                         Execution.status.in_(statuses)
-                    ).distinct().all()
-                    all_pids = {r[0] for r in rows}
+                    ).all()
+                    for r in exec_rows:
+                        ts = r[1] or r[2] or r[3]
+                        if r[0] not in pid_ts or (ts and ts > pid_ts[r[0]]):
+                            pid_ts[r[0]] = ts
+                    all_pids = set(pid_ts.keys())
 
                 # PIDs for next substate (to subtract)
                 if i < len(funnel) - 1:
@@ -1182,48 +1117,51 @@ def export_status_flow():
                 in_state_pids = all_pids - next_pids
                 if in_state_pids:
                     parts = db.query(Participant).filter(Participant.id.in_(in_state_pids)).all()
-                    f['participants'] = [(p.full_name or p.email or f'#{p.id}', p.email or '', p.status.value) for p in parts]
+                    result = [(p.full_name or p.email or f'#{p.id}', p.email or '', _fmt_ts(pid_ts.get(p.id)), _raw_ts(pid_ts.get(p.id)), p.status.value) for p in parts]
+                    result.sort(key=lambda x: x[3])  # sort by timestamp ascending
+                    f['participants'] = result
                 else:
                     f['participants'] = []
 
             # Write funnel rows
-            ws2.cell(row=row, column=1, value=wf.name).font = section_font
-            ws2.cell(row=row, column=1).fill = section_fill
-            for c in range(2, 8):
-                ws2.cell(row=row, column=c).fill = section_fill
+            ws.cell(row=row, column=1, value=wf.name).font = section_font
+            ws.cell(row=row, column=1).fill = section_fill
+            for c in range(2, 9):
+                ws.cell(row=row, column=c).fill = section_fill
             row += 1
 
             for f in funnel:
                 label = SUBSTATE_LABELS.get(f['key'], f['key'])
                 if not f['participants']:
-                    ws2.cell(row=row, column=2, value=label)
-                    ws2.cell(row=row, column=3, value=f['count'])
-                    ws2.cell(row=row, column=4, value=f['in_state'])
-                    for c in range(1, 8):
-                        ws2.cell(row=row, column=c).border = thin_border
+                    ws.cell(row=row, column=2, value=label)
+                    ws.cell(row=row, column=3, value=f['count'])
+                    ws.cell(row=row, column=4, value=f['in_state'])
+                    for c in range(1, 9):
+                        ws.cell(row=row, column=c).border = thin_border
                     row += 1
                 else:
-                    for i, (name, email, status) in enumerate(f['participants']):
+                    for i, (name, email, ts_str, _raw, status) in enumerate(f['participants']):
                         if i == 0:
-                            ws2.cell(row=row, column=2, value=label)
-                            ws2.cell(row=row, column=3, value=f['count'])
-                            ws2.cell(row=row, column=4, value=f['in_state'])
-                        ws2.cell(row=row, column=5, value=name)
-                        ws2.cell(row=row, column=6, value=email)
-                        ws2.cell(row=row, column=7, value=status)
-                        for c in range(1, 8):
-                            ws2.cell(row=row, column=c).border = thin_border
+                            ws.cell(row=row, column=2, value=label)
+                            ws.cell(row=row, column=3, value=f['count'])
+                            ws.cell(row=row, column=4, value=f['in_state'])
+                        ws.cell(row=row, column=5, value=name)
+                        ws.cell(row=row, column=6, value=email)
+                        ws.cell(row=row, column=7, value=ts_str)
+                        ws.cell(row=row, column=8, value=status)
+                        for c in range(1, 9):
+                            ws.cell(row=row, column=c).border = thin_border
                         row += 1
 
             row += 1  # blank row between workflows
 
         # Auto-width columns
-        for col in ws2.columns:
+        for col in ws.columns:
             max_len = 0
             for cell in col:
                 if cell.value:
                     max_len = max(max_len, len(str(cell.value)))
-            ws2.column_dimensions[col[0].column_letter].width = min(max_len + 3, 40)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 3, 40)
 
         # Write to buffer
         buffer = BytesIO()
