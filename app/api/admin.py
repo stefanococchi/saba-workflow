@@ -367,6 +367,168 @@ def collected_data_api():
         return jsonify([])
 
 
+@admin_bp.route('/api/collected-data/export-all')
+def export_all_collected_excel():
+    """Export all participants with collected data (same format as completed)"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.styles.numbers import FORMAT_TEXT
+    from io import BytesIO
+    import re
+    import pytz
+
+    try:
+        workflow_id = request.args.get('workflow_id', type=int)
+        if not workflow_id:
+            return jsonify({'error': 'workflow_id richiesto'}), 400
+
+        local_tz = pytz.timezone('Europe/Rome')
+
+        # Get landing field order from step config
+        steps = db.query(WorkflowStep).filter_by(workflow_id=workflow_id).order_by(WorkflowStep.order).all()
+        ordered_fields = []
+        seen = set()
+        for step in steps:
+            for config in [step.landing_page_config, step.landing_gjs_data]:
+                if config and isinstance(config, dict):
+                    for f in config.get('fields', []):
+                        name = f.get('name', '')
+                        if name and name not in seen:
+                            seen.add(name)
+                            ordered_fields.append({'name': name, 'label': f.get('label', name)})
+
+        # Get ALL participants with collected data
+        rows = db.query(
+            Participant.id, Participant.first_name, Participant.last_name,
+            Participant.email, Participant.collected_data
+        ).filter(
+            Participant.workflow_id == workflow_id,
+            Participant.collected_data.isnot(None)
+        ).order_by(Participant.last_name, Participant.first_name).all()
+
+        # Latest substate per participant
+        SUBSTATE_LABELS = {
+            'scheduled': 'Scheduled', 'sent': 'Email Sent', 'delivered': 'Email Sent',
+            'opened': 'Email Opened', 'clicked': 'Link Clicked',
+            'completed': 'Completed', 'failed': 'Failed',
+            'landing_opened': 'Landing Opened', 'form_submitted': 'Form Submitted',
+            'survey_submitted': 'Survey Submitted',
+        }
+        participant_ids = [r[0] for r in rows]
+        latest_substate = {}
+
+        if participant_ids:
+            for pid_val, evt, created in db.query(
+                ActivityLog.participant_id, ActivityLog.event_type, func.max(ActivityLog.created_at)
+            ).filter(
+                ActivityLog.workflow_id == workflow_id,
+                ActivityLog.participant_id.in_(participant_ids),
+                ActivityLog.event_type.in_(['landing_opened', 'form_submitted', 'survey_submitted'])
+            ).group_by(ActivityLog.participant_id, ActivityLog.event_type).all():
+                if pid_val not in latest_substate or (created and created > latest_substate[pid_val][1]):
+                    latest_substate[pid_val] = (SUBSTATE_LABELS.get(evt, evt), created)
+
+            step_ids = [s.id for s in steps]
+            if step_ids:
+                for pid_val, status, ts in db.query(
+                    Execution.participant_id, Execution.status,
+                    func.max(func.coalesce(Execution.sent_at, Execution.scheduled_at, Execution.created_at))
+                ).filter(
+                    Execution.step_id.in_(step_ids),
+                    Execution.participant_id.in_(participant_ids)
+                ).group_by(Execution.participant_id, Execution.status).all():
+                    label = SUBSTATE_LABELS.get(status.value, status.value)
+                    if pid_val not in latest_substate or (ts and ts > latest_substate[pid_val][1]):
+                        latest_substate[pid_val] = (label, ts)
+
+        # Fallback field order
+        if not ordered_fields:
+            all_keys = []
+            keys_seen = set()
+            for _, _, _, _, cd in rows:
+                if cd and isinstance(cd, dict):
+                    for k in cd.keys():
+                        if k not in keys_seen:
+                            keys_seen.add(k)
+                            all_keys.append(k)
+            ordered_fields = [{'name': k, 'label': k} for k in all_keys]
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Dati Raccolti'
+
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='795548', end_color='795548', fill_type='solid')
+        thin_border = Border(bottom=Side(style='thin', color='D7CCC8'))
+
+        headers = ['Nome', 'Cognome', 'Email'] + [f['label'] for f in ordered_fields] + ['Sottostato', 'Data Sottostato']
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+
+        date_field_names = {'data_nascita', 'birth_date', 'data_di_nascita', 'date_of_birth'}
+        phone_field_names = {'telefono', 'phone', 'cellulare', 'mobile', 'tel'}
+        date_re = re.compile(r'^(\d{4})-(\d{2})-(\d{2})')
+
+        def _fmt_ts(ts):
+            if ts is None:
+                return ''
+            utc_dt = pytz.utc.localize(ts)
+            return utc_dt.astimezone(local_tz).strftime('%d-%m-%Y %H:%M')
+
+        for row_idx, (pid, fn, ln, email, cd) in enumerate(rows, 2):
+            ws.cell(row=row_idx, column=1, value=fn or '')
+            ws.cell(row=row_idx, column=2, value=ln or '')
+            ws.cell(row=row_idx, column=3, value=email or '')
+
+            cd = cd or {}
+            for col_offset, field in enumerate(ordered_fields):
+                val = cd.get(field['name'], '')
+                if field['name'].lower() in date_field_names and isinstance(val, str):
+                    m = date_re.match(val)
+                    if m:
+                        val = f'{m.group(3)}-{m.group(2)}-{m.group(1)}'
+                if isinstance(val, dict) and 'filename' in val:
+                    val = val.get('filename', '[file]')
+                cell = ws.cell(row=row_idx, column=4 + col_offset, value=str(val) if val else '')
+                if field['name'].lower() in phone_field_names:
+                    cell.number_format = FORMAT_TEXT
+
+            substate_info = latest_substate.get(pid, ('', None))
+            ws.cell(row=row_idx, column=len(headers) - 1, value=substate_info[0])
+            ws.cell(row=row_idx, column=len(headers), value=_fmt_ts(substate_info[1]))
+
+            for c in range(1, len(headers) + 1):
+                ws.cell(row=row_idx, column=c).border = thin_border
+
+        for col in ws.columns:
+            max_len = 0
+            for cell in col:
+                if cell.value:
+                    max_len = max(max_len, len(str(cell.value)))
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 3, 40)
+
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        wf = db.get(Workflow, workflow_id)
+        wf_name = (wf.name if wf else 'export').replace(' ', '_')
+        filename = f'dati_raccolti_{wf_name}_{datetime.utcnow().strftime("%Y-%m-%d")}.xlsx'
+
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
+
+    except Exception as e:
+        logger.error(f"Errore export all collected: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @admin_bp.route('/api/collected-data/export-completed')
 def export_completed_excel():
     """Export completed participants with landing field order"""
@@ -400,24 +562,48 @@ def export_completed_excel():
             Participant.workflow_id == workflow_id,
             Participant.status == ParticipantStatus.COMPLETED,
             Participant.collected_data.isnot(None)
-        ).all()
+        ).order_by(Participant.last_name, Participant.first_name).all()
 
-        # Get form_submitted timestamps from activity_log
         import pytz
         local_tz = pytz.timezone('Europe/Rome')
 
-        submit_times = {}
-        for pid_val, created in db.query(
-            ActivityLog.participant_id, func.max(ActivityLog.created_at)
-        ).filter(
-            ActivityLog.workflow_id == workflow_id,
-            ActivityLog.event_type == 'form_submitted',
-            ActivityLog.participant_id.isnot(None)
-        ).group_by(ActivityLog.participant_id).all():
-            submit_times[pid_val] = created
+        # Get latest substate per participant from activity_log + executions
+        SUBSTATE_LABELS = {
+            'scheduled': 'Scheduled', 'sent': 'Email Sent', 'delivered': 'Email Sent',
+            'opened': 'Email Opened', 'clicked': 'Link Clicked',
+            'completed': 'Completed', 'failed': 'Failed',
+            'landing_opened': 'Landing Opened', 'form_submitted': 'Form Submitted',
+            'survey_submitted': 'Survey Submitted',
+        }
 
-        # Sort by submit time ascending (latest at bottom)
-        rows = sorted(rows, key=lambda r: submit_times.get(r[0]) or datetime.min)
+        participant_ids = [r[0] for r in rows]
+        latest_substate = {}  # pid → (label, timestamp)
+
+        if participant_ids:
+            # From activity_log
+            for pid_val, evt, created in db.query(
+                ActivityLog.participant_id, ActivityLog.event_type, func.max(ActivityLog.created_at)
+            ).filter(
+                ActivityLog.workflow_id == workflow_id,
+                ActivityLog.participant_id.in_(participant_ids),
+                ActivityLog.event_type.in_(['landing_opened', 'form_submitted', 'survey_submitted'])
+            ).group_by(ActivityLog.participant_id, ActivityLog.event_type).all():
+                if pid_val not in latest_substate or (created and created > latest_substate[pid_val][1]):
+                    latest_substate[pid_val] = (SUBSTATE_LABELS.get(evt, evt), created)
+
+            # From executions (email states)
+            step_ids = [s.id for s in steps]
+            if step_ids:
+                for pid_val, status, ts in db.query(
+                    Execution.participant_id, Execution.status,
+                    func.max(func.coalesce(Execution.sent_at, Execution.scheduled_at, Execution.created_at))
+                ).filter(
+                    Execution.step_id.in_(step_ids),
+                    Execution.participant_id.in_(participant_ids)
+                ).group_by(Execution.participant_id, Execution.status).all():
+                    label = SUBSTATE_LABELS.get(status.value, status.value)
+                    if pid_val not in latest_substate or (ts and ts > latest_substate[pid_val][1]):
+                        latest_substate[pid_val] = (label, ts)
 
         # If no field order from config, derive from collected_data keys
         if not ordered_fields:
@@ -441,8 +627,8 @@ def export_completed_excel():
         thin_border = Border(bottom=Side(style='thin', color='D7CCC8'))
         from openpyxl.styles.numbers import FORMAT_TEXT
 
-        # Header: Nome, Cognome, Email + landing fields + Data Invio
-        headers = ['Nome', 'Cognome', 'Email'] + [f['label'] for f in ordered_fields] + ['Data Invio']
+        # Header: Nome, Cognome, Email + landing fields + Sottostato + Data Sottostato
+        headers = ['Nome', 'Cognome', 'Email'] + [f['label'] for f in ordered_fields] + ['Sottostato', 'Data Sottostato']
         for col, h in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=h)
             cell.font = header_font
@@ -455,7 +641,7 @@ def export_completed_excel():
         phone_field_names = {'telefono', 'phone', 'cellulare', 'mobile', 'tel'}
         date_re = re.compile(r'^(\d{4})-(\d{2})-(\d{2})')
 
-        def _fmt_submit_time(ts):
+        def _fmt_ts(ts):
             if ts is None:
                 return ''
             utc_dt = pytz.utc.localize(ts)
@@ -482,8 +668,11 @@ def export_completed_excel():
                 if field['name'].lower() in phone_field_names:
                     cell.number_format = FORMAT_TEXT
 
-            # Data Invio (last column)
-            ws.cell(row=row_idx, column=len(headers), value=_fmt_submit_time(submit_times.get(pid)))
+            # Sottostato (penultima colonna)
+            substate_info = latest_substate.get(pid, ('', None))
+            ws.cell(row=row_idx, column=len(headers) - 1, value=substate_info[0])
+            # Data Sottostato (ultima colonna)
+            ws.cell(row=row_idx, column=len(headers), value=_fmt_ts(substate_info[1]))
 
             for c in range(1, len(headers) + 1):
                 ws.cell(row=row_idx, column=c).border = thin_border
