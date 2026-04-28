@@ -309,24 +309,19 @@ def landing_builder(workflow_id, step_id):
         return redirect(url_for('admin.workflow_detail', workflow_id=workflow_id))
 
 
-@admin_bp.route('/collected-data')
-def collected_data():
-    """Vista dati raccolti da tutti i partecipanti"""
+@admin_bp.route('/api/collected-data')
+def collected_data_api():
+    """API endpoint for collected data (AJAX)"""
+    import pytz
+    local_tz = pytz.timezone('Europe/Rome')
+
     try:
         workflow_id = request.args.get('workflow_id', type=int)
         LIMIT = 500
 
         workflows = db.query(Workflow).all()
+        wf_names = {w.id: w.name for w in workflows}
 
-        # Default to most recently updated active workflow
-        if not workflow_id and workflows:
-            active = [w for w in workflows if w.status.value == 'active']
-            if active:
-                workflow_id = max(active, key=lambda w: w.updated_at or w.created_at).id
-            else:
-                workflow_id = max(workflows, key=lambda w: w.updated_at or w.created_at).id
-
-        # Lightweight query: only needed columns, no joinedload
         query = db.query(
             Participant.id, Participant.first_name, Participant.last_name,
             Participant.email, Participant.phone, Participant.workflow_id,
@@ -343,15 +338,14 @@ def collected_data():
             Participant.completed_at.desc()
         ).limit(LIMIT).all()
 
-        # Build name map for workflows
-        wf_names = {w.id: w.name for w in workflows}
+        def _fmt_time(dt):
+            if dt is None:
+                return None
+            utc_dt = pytz.utc.localize(dt)
+            return utc_dt.astimezone(local_tz).strftime('%d/%m/%Y %H:%M')
 
-        # Build participant dicts and collect fields in one pass
-        all_fields = set()
         participants = []
         for pid, fn, ln, email, phone, wf_id, status, completed_at, cd, sf in rows:
-            if cd and isinstance(cd, dict):
-                all_fields.update(cd.keys())
             participants.append({
                 'id': pid,
                 'first_name': fn or '',
@@ -359,27 +353,45 @@ def collected_data():
                 'email': email or '',
                 'phone': phone or '',
                 'workflow_id': wf_id,
-                'workflow_name': wf_names.get(wf_id, ''),
+                'workflow': wf_names.get(wf_id, ''),
                 'status': status.value,
-                'completed_at': completed_at,
+                'completed_at': _fmt_time(completed_at),
                 'collected_data': cd or {},
                 'sabaform_data': sf or {},
             })
-        all_fields = sorted(all_fields)
+
+        return jsonify(participants)
+
+    except Exception as e:
+        logger.error(f"Errore collected data API: {str(e)}")
+        return jsonify([])
+
+
+@admin_bp.route('/collected-data')
+def collected_data():
+    """Vista dati raccolti da tutti i partecipanti"""
+    try:
+        workflow_id = request.args.get('workflow_id', type=int)
+
+        workflows = db.query(Workflow).all()
+
+        # Default to most recently updated active workflow
+        if not workflow_id and workflows:
+            active = [w for w in workflows if w.status.value == 'active']
+            if active:
+                workflow_id = max(active, key=lambda w: w.updated_at or w.created_at).id
+            else:
+                workflow_id = max(workflows, key=lambda w: w.updated_at or w.created_at).id
 
         return render_template('admin/collected_data.html',
-                             participants=participants,
                              workflows=workflows,
-                             all_fields=all_fields,
                              current_workflow_id=workflow_id)
 
     except Exception as e:
         logger.error(f"Errore collected data: {str(e)}")
         flash(f'Errore: {str(e)}', 'danger')
         return render_template('admin/collected_data.html',
-                             participants=[],
                              workflows=[],
-                             all_fields=[],
                              current_workflow_id=None)
 
 

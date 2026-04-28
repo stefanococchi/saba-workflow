@@ -258,23 +258,7 @@ var T = {{ t|tojson }};
 // =============================================
 // DATA
 // =============================================
-var ALL_DATA = [
-    {% for p in participants %}
-    {
-        id: {{ p.id }},
-        first_name: {{ p.first_name | tojson }},
-        last_name: {{ p.last_name | tojson }},
-        email: {{ p.email | tojson }},
-        phone: {{ p.phone | tojson }},
-        workflow: {{ p.workflow_name | tojson }},
-        workflow_id: {{ p.workflow_id }},
-        status: {{ p.status | tojson }},
-        completed_at: {{ p.completed_at|localtime | tojson if p.completed_at else 'null' }},
-        collected_data: {{ p.collected_data | tojson }},
-        sabaform_data: {{ p.sabaform_data | tojson }}
-    }{% if not loop.last %},{% endif %}
-    {% endfor %}
-];
+var ALL_DATA = [];
 
 // =============================================
 // COLUMNS — base + dynamic from collected_data
@@ -311,8 +295,38 @@ var _filteredRows = [];
 // =============================================
 // INIT
 // =============================================
-buildColumnChips();
-renderTable(ALL_DATA);
+(function() {
+    var wfId = {{ current_workflow_id | tojson }};
+    var url = '/admin/api/collected-data';
+    if (wfId) url += '?workflow_id=' + wfId;
+
+    // Show loading state
+    document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div> ' + (T.loading || 'Caricamento...') + '</td></tr>';
+
+    fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        ALL_DATA = data;
+        // Rebuild dynamic columns from collected_data
+        var extraCols = new Set();
+        ALL_DATA.forEach(function(p) {
+            if (p.collected_data) {
+                Object.keys(p.collected_data).forEach(function(k) { extraCols.add(k); });
+            }
+        });
+        // Remove old dynamic columns and re-add
+        ALL_COLUMNS = ALL_COLUMNS.filter(function(c) { return !c.key.startsWith('cd_'); });
+        extraCols.forEach(function(k) {
+            ALL_COLUMNS.push({ key: 'cd_' + k, label: k, default: true });
+        });
+        visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(function(c) { return c.key; });
+        buildColumnChips();
+        renderTable(ALL_DATA);
+    })
+    .catch(function(e) {
+        document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">Errore caricamento dati</td></tr>';
+    });
+})();
 
 // =============================================
 // COLUMN MANAGEMENT
