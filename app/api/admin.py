@@ -742,39 +742,50 @@ def executions_timeline_api():
         workflow_id = request.args.get('workflow_id', type=int)
         TIMELINE_LIMIT = 500
 
-        workflows = db.query(Workflow).options(selectinload(Workflow.steps)).all()
-        wf_names = {w.id: w.name for w in workflows}
+        wf_names = {w.id: w.name for w in db.query(Workflow.id, Workflow.name).all()}
 
-        participant_query = db.query(
-            Participant.id, Participant.first_name, Participant.last_name,
-            Participant.email, Participant.workflow_id
-        )
-        if workflow_id:
-            participant_query = participant_query.filter(Participant.workflow_id == workflow_id)
-        participant_map = {}
-        for pid, fn, ln, email, wid in participant_query.all():
-            name = ' '.join(p for p in [fn or '', ln or ''] if p).strip() or email or '—'
-            participant_map[pid] = {'name': name, 'wf_id': wid}
-
-        step_query = db.query(WorkflowStep.id, WorkflowStep.name, WorkflowStep.type)
-        if workflow_id:
-            step_query = step_query.filter(WorkflowStep.workflow_id == workflow_id)
-        step_map = {sid: {'name': sname, 'type': stype.value} for sid, sname, stype in step_query.all()}
+        # Query executions con JOIN (niente mappe in memoria)
+        from sqlalchemy.sql import func, case, literal_column
+        from sqlalchemy import literal
 
         exec_query = db.query(
-            Execution.id, Execution.participant_id, Execution.step_id,
-            Execution.status, Execution.scheduled_at, Execution.sent_at,
-            Execution.error_message, Execution.result_data
-        )
+            Execution.id,
+            Execution.participant_id,
+            Execution.status,
+            Execution.scheduled_at,
+            Execution.sent_at,
+            Execution.error_message,
+            Execution.result_data,
+            Participant.first_name,
+            Participant.last_name,
+            Participant.email.label('p_email'),
+            Participant.workflow_id,
+            WorkflowStep.name.label('step_name'),
+            WorkflowStep.type.label('step_type'),
+        ).join(Participant, Execution.participant_id == Participant.id)\
+         .join(WorkflowStep, Execution.step_id == WorkflowStep.id)
+
         if workflow_id:
-            exec_query = exec_query.join(Participant).filter(Participant.workflow_id == workflow_id)
+            exec_query = exec_query.filter(Participant.workflow_id == workflow_id)
         executions = exec_query.order_by(Execution.scheduled_at.desc()).limit(TIMELINE_LIMIT).all()
 
+        # Query activities con JOIN
         activity_query = db.query(
-            ActivityLog.id, ActivityLog.participant_id, ActivityLog.step_id,
-            ActivityLog.workflow_id, ActivityLog.event_type, ActivityLog.description,
-            ActivityLog.details, ActivityLog.created_at
-        )
+            ActivityLog.id,
+            ActivityLog.participant_id,
+            ActivityLog.workflow_id,
+            ActivityLog.event_type,
+            ActivityLog.description,
+            ActivityLog.details,
+            ActivityLog.created_at,
+            Participant.first_name,
+            Participant.last_name,
+            Participant.email.label('p_email'),
+            WorkflowStep.name.label('step_name'),
+            WorkflowStep.type.label('step_type'),
+        ).outerjoin(Participant, ActivityLog.participant_id == Participant.id)\
+         .outerjoin(WorkflowStep, ActivityLog.step_id == WorkflowStep.id)
+
         if workflow_id:
             activity_query = activity_query.filter(ActivityLog.workflow_id == workflow_id)
         activities = activity_query.order_by(ActivityLog.created_at.desc()).limit(TIMELINE_LIMIT).all()
@@ -785,43 +796,47 @@ def executions_timeline_api():
             utc_dt = pytz.utc.localize(dt)
             return utc_dt.astimezone(local_tz).strftime('%d/%m/%Y %H:%M')
 
+        def _pname(fn, ln, email):
+            name = ' '.join(p for p in [fn or '', ln or ''] if p).strip()
+            return name or email or '—'
+
         timeline = []
-        for ex_id, p_id, s_id, status, sched_at, sent_at, err, details in executions:
-            p = participant_map.get(p_id, {'name': '—', 'wf_id': None})
-            s = step_map.get(s_id, {'name': '—', 'type': ''})
-            display_time = sent_at or sched_at
+        for row in executions:
+            display_time = row.sent_at or row.scheduled_at
+            stype = row.step_type.value if row.step_type else ''
+            sname = row.step_name or '—'
             timeline.append({
                 'entry_type': 'execution',
-                'entry_id': ex_id,
-                'participant_id': p_id,
+                'entry_id': row.id,
+                'participant_id': row.participant_id,
                 'time': display_time.isoformat() if display_time else '',
                 'time_local': _fmt_time(display_time),
-                'event_type': 'email_failed' if status.value == 'failed' else 'email_' + status.value,
-                'description': f'{s["name"]}: {status.value}',
-                'participant': p['name'],
-                'step': s['name'],
-                'step_type': s['type'],
-                'workflow': wf_names.get(p['wf_id'], ''),
-                'error': err,
-                'details': details,
+                'event_type': 'email_failed' if row.status.value == 'failed' else 'email_' + row.status.value,
+                'description': f'{sname}: {row.status.value}',
+                'participant': _pname(row.first_name, row.last_name, row.p_email),
+                'step': sname,
+                'step_type': stype,
+                'workflow': wf_names.get(row.workflow_id, ''),
+                'error': row.error_message,
+                'details': row.result_data,
             })
-        for a_id, p_id, s_id, wf_id_a, evt, desc, details, created_at in activities:
-            p = participant_map.get(p_id, {'name': '—', 'wf_id': None})
-            s = step_map.get(s_id, {'name': '—', 'type': ''}) if s_id else {'name': '—', 'type': ''}
+        for row in activities:
+            sname = row.step_name or '—'
+            stype = row.step_type.value if row.step_type else ''
             timeline.append({
                 'entry_type': 'activity',
-                'entry_id': a_id,
-                'participant_id': p_id,
-                'time': created_at.isoformat() if created_at else '',
-                'time_local': _fmt_time(created_at),
-                'event_type': evt,
-                'description': desc,
-                'participant': p['name'],
-                'step': s['name'],
-                'step_type': s['type'],
-                'workflow': wf_names.get(wf_id_a, ''),
+                'entry_id': row.id,
+                'participant_id': row.participant_id,
+                'time': row.created_at.isoformat() if row.created_at else '',
+                'time_local': _fmt_time(row.created_at),
+                'event_type': row.event_type,
+                'description': row.description,
+                'participant': _pname(row.first_name, row.last_name, row.p_email),
+                'step': sname,
+                'step_type': stype,
+                'workflow': wf_names.get(row.workflow_id, ''),
                 'error': None,
-                'details': details,
+                'details': row.details,
             })
 
         timeline.sort(key=lambda x: x['time'], reverse=True)
@@ -1555,10 +1570,12 @@ def participant_timeline(participant_id):
 
         events = []
 
-        # Execution records
+        # Execution records (ultimi 200, ordinati per data)
         executions = db.query(Execution).options(
             joinedload(Execution.step)
-        ).filter_by(participant_id=participant_id).all()
+        ).filter_by(participant_id=participant_id)\
+         .order_by(Execution.scheduled_at.desc())\
+         .limit(200).all()
         for ex in executions:
             step_name = ex.step.name if ex.step else '?'
             step_type = ex.step.type.value if ex.step else '?'
@@ -1591,8 +1608,10 @@ def participant_timeline(participant_id):
                 'details': ex.result_data
             })
 
-        # ActivityLog records
-        activities = db.query(ActivityLog).filter_by(participant_id=participant_id).all()
+        # ActivityLog records (ultimi 200, ordinati per data)
+        activities = db.query(ActivityLog).filter_by(
+            participant_id=participant_id
+        ).order_by(ActivityLog.created_at.desc()).limit(200).all()
         for a in activities:
             category = 'user' if a.event_type in USER_EVENTS else 'system'
 

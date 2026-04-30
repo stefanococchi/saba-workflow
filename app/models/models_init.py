@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, LargeBinary, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, LargeBinary, Enum as SQLEnum, Index
 from sqlalchemy.orm import relationship
 from app import Base
 
@@ -163,16 +163,20 @@ class Participant(Base):
 class Execution(Base):
     """Esecuzione di uno step per un partecipante"""
     __tablename__ = 'executions'
-    
+    __table_args__ = (
+        Index('ix_executions_step_status', 'step_id', 'status'),
+        Index('ix_executions_participant_status', 'participant_id', 'status'),
+    )
+
     id = Column(Integer, primary_key=True)
-    participant_id = Column(Integer, ForeignKey('participants.id'), nullable=False)
-    step_id = Column(Integer, ForeignKey('workflow_steps.id'), nullable=False)
-    
+    participant_id = Column(Integer, ForeignKey('participants.id'), nullable=False, index=True)
+    step_id = Column(Integer, ForeignKey('workflow_steps.id'), nullable=False, index=True)
+
     # Stato
-    status = Column(SQLEnum(ExecutionStatus), default=ExecutionStatus.SCHEDULED, nullable=False)
-    
+    status = Column(SQLEnum(ExecutionStatus), default=ExecutionStatus.SCHEDULED, nullable=False, index=True)
+
     # Timing
-    scheduled_at = Column(DateTime, nullable=False)
+    scheduled_at = Column(DateTime, nullable=False, index=True)
     sent_at = Column(DateTime)
     completed_at = Column(DateTime)
     
@@ -197,18 +201,23 @@ class Execution(Base):
 class ActivityLog(Base):
     """Log di tutte le attività del workflow"""
     __tablename__ = 'activity_log'
+    __table_args__ = (
+        Index('ix_activity_wf_event', 'workflow_id', 'event_type'),
+        Index('ix_activity_step_event', 'step_id', 'event_type'),
+        Index('ix_activity_participant_created', 'participant_id', 'created_at'),
+    )
 
     id = Column(Integer, primary_key=True)
-    workflow_id = Column(Integer, ForeignKey('workflows.id'), nullable=False)
-    participant_id = Column(Integer, ForeignKey('participants.id'), nullable=True)
-    step_id = Column(Integer, ForeignKey('workflow_steps.id'), nullable=True)
+    workflow_id = Column(Integer, ForeignKey('workflows.id'), nullable=False, index=True)
+    participant_id = Column(Integer, ForeignKey('participants.id'), nullable=True, index=True)
+    step_id = Column(Integer, ForeignKey('workflow_steps.id'), nullable=True, index=True)
 
     # Tipo evento
-    event_type = Column(String(50), nullable=False)  # email_sent, form_submitted, goal_met, goal_not_met, status_changed, workflow_started, simulation, etc.
+    event_type = Column(String(50), nullable=False)
     description = Column(Text)
-    details = Column(JSON)  # Dati extra (form data, error, etc.)
+    details = Column(JSON)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     # Relazioni
     workflow = relationship('Workflow')
