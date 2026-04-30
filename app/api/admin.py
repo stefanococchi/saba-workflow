@@ -755,7 +755,6 @@ def executions_timeline_api():
             Execution.scheduled_at,
             Execution.sent_at,
             Execution.error_message,
-            Execution.result_data,
             Participant.first_name,
             Participant.last_name,
             Participant.email.label('p_email'),
@@ -776,7 +775,6 @@ def executions_timeline_api():
             ActivityLog.workflow_id,
             ActivityLog.event_type,
             ActivityLog.description,
-            ActivityLog.details,
             ActivityLog.created_at,
             Participant.first_name,
             Participant.last_name,
@@ -818,7 +816,6 @@ def executions_timeline_api():
                 'step_type': stype,
                 'workflow': wf_names.get(row.workflow_id, ''),
                 'error': row.error_message,
-                'details': row.result_data,
             })
         for row in activities:
             sname = row.step_name or '—'
@@ -836,7 +833,6 @@ def executions_timeline_api():
                 'step_type': stype,
                 'workflow': wf_names.get(row.workflow_id, ''),
                 'error': None,
-                'details': row.details,
             })
 
         timeline.sort(key=lambda x: x['time'], reverse=True)
@@ -846,6 +842,24 @@ def executions_timeline_api():
     except Exception as e:
         logger.error(f"Errore timeline API: {str(e)}")
         return jsonify([])
+
+
+@admin_bp.route('/api/timeline-entry-details')
+def timeline_entry_details():
+    """Fetch details for a single timeline entry (on-demand)"""
+    entry_type = request.args.get('type')  # 'execution' or 'activity'
+    entry_id = request.args.get('id', type=int)
+    if not entry_type or not entry_id:
+        return jsonify({'error': 'Missing params'}), 400
+    try:
+        if entry_type == 'execution':
+            row = db.query(Execution.result_data).filter_by(id=entry_id).first()
+            return jsonify({'details': row.result_data if row else None})
+        else:
+            row = db.query(ActivityLog.details).filter_by(id=entry_id).first()
+            return jsonify({'details': row.details if row else None})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @admin_bp.route('/executions')

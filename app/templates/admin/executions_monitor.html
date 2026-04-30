@@ -527,7 +527,7 @@ function buildRowCells(r, cols) {
 function buildActions(r, idx) {
     var actions = '<div class="btn-group btn-group-sm">';
     if (r.error) actions += '<button class="btn btn-outline-danger" onclick="showError('+idx+')" title="Errore"><i class="bi bi-exclamation-triangle"></i></button>';
-    else if (r.details) actions += '<button class="btn btn-outline-info" onclick="showDetails('+idx+')" title="Dettagli"><i class="bi bi-info-circle"></i></button>';
+    else if (r.has_details) actions += '<button class="btn btn-outline-info" onclick="showDetails('+idx+')" title="Dettagli"><i class="bi bi-info-circle"></i></button>';
     if (r.participant_id) actions += '<button class="btn btn-outline-warning" onclick="rollbackParticipant('+r.participant_id+')" title="Retrocedi"><i class="bi bi-arrow-counterclockwise"></i></button>';
     if (r.participant_id) actions += '<button class="btn btn-outline-primary" onclick="editParticipant('+r.participant_id+')" title="Modifica partecipante"><i class="bi bi-pencil"></i></button>';
     actions += '<button class="btn btn-outline-danger" onclick="deleteEntry('+idx+')" title="Elimina"><i class="bi bi-trash"></i></button>';
@@ -657,26 +657,34 @@ function showError(idx) {
 }
 
 function showDetails(idx) {
-    var r = _filteredRows[idx]; if (!r || !r.details) return;
-    document.getElementById('infoModalTitle').textContent = 'Dettagli';
+    var r = _filteredRows[idx]; if (!r) return;
     var body = document.getElementById('infoModalBody');
-    var data = r.details;
-    var cd = data.collected_data || data;
-    if (typeof cd === 'object' && !Array.isArray(cd)) {
-        var html = '<dl class="row mb-0" style="font-size:14px">';
-        for (var k in cd) {
-            if (k === 'collected_data' && typeof cd[k] === 'object') {
-                for (var ck in cd[k]) { html += '<dt class="col-sm-4 text-muted">'+esc(ck)+'</dt><dd class="col-sm-8">'+esc(String(cd[k][ck]))+'</dd>'; }
-            } else {
-                html += '<dt class="col-sm-4 text-muted">'+esc(k)+'</dt><dd class="col-sm-8">'+esc(String(cd[k]))+'</dd>';
-            }
-        }
-        html += '</dl>';
-        body.innerHTML = html;
-    } else {
-        body.innerHTML = '<pre style="max-height:400px;overflow:auto">'+JSON.stringify(data, null, 2)+'</pre>';
-    }
+    document.getElementById('infoModalTitle').textContent = 'Dettagli';
+    body.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
     _getInfoModal().show();
+
+    fetch('/admin/api/timeline-entry-details?type=' + r.entry_type + '&id=' + r.entry_id)
+    .then(function(resp) { return resp.json(); })
+    .then(function(result) {
+        var data = result.details;
+        if (!data) { body.innerHTML = '<p class="text-muted">Nessun dettaglio</p>'; return; }
+        var cd = data.collected_data || data;
+        if (typeof cd === 'object' && !Array.isArray(cd)) {
+            var html = '<dl class="row mb-0" style="font-size:14px">';
+            for (var k in cd) {
+                if (k === 'collected_data' && typeof cd[k] === 'object') {
+                    for (var ck in cd[k]) { html += '<dt class="col-sm-4 text-muted">'+esc(ck)+'</dt><dd class="col-sm-8">'+esc(String(cd[k][ck]))+'</dd>'; }
+                } else {
+                    html += '<dt class="col-sm-4 text-muted">'+esc(k)+'</dt><dd class="col-sm-8">'+esc(String(cd[k]))+'</dd>';
+                }
+            }
+            html += '</dl>';
+            body.innerHTML = html;
+        } else {
+            body.innerHTML = '<pre style="max-height:400px;overflow:auto">'+JSON.stringify(data, null, 2)+'</pre>';
+        }
+    })
+    .catch(function() { body.innerHTML = '<p class="text-danger">Errore caricamento dettagli</p>'; });
 }
 
 function exportCSV() {
@@ -1121,13 +1129,20 @@ renderFlowCharts();
     // Show loading state
     document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div> ' + (T.loading || 'Caricamento...') + '</td></tr>';
 
+    console.time('fetch_timeline');
     fetch(url)
-    .then(function(r) { return r.json(); })
+    .then(function(r) { console.timeEnd('fetch_timeline'); console.time('parse_json'); return r.json(); })
     .then(function(data) {
+        console.timeEnd('parse_json');
+        console.log('timeline rows:', data.length);
         ALL_TIMELINE = data;
         _timelineLoaded = true;
+        console.time('updateCounts');
         updateCounts();
+        console.timeEnd('updateCounts');
+        console.time('applyFilters');
         applyFilters();
+        console.timeEnd('applyFilters');
     })
     .catch(function(e) {
         document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">Errore caricamento timeline</td></tr>';
