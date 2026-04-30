@@ -1129,20 +1129,13 @@ renderFlowCharts();
     // Show loading state
     document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div> ' + (T.loading || 'Caricamento...') + '</td></tr>';
 
-    console.time('fetch_timeline');
     fetch(url)
-    .then(function(r) { console.timeEnd('fetch_timeline'); console.time('parse_json'); return r.json(); })
+    .then(function(r) { return r.json(); })
     .then(function(data) {
-        console.timeEnd('parse_json');
-        console.log('timeline rows:', data.length);
         ALL_TIMELINE = data;
         _timelineLoaded = true;
-        console.time('updateCounts');
         updateCounts();
-        console.timeEnd('updateCounts');
-        console.time('applyFilters');
         applyFilters();
-        console.timeEnd('applyFilters');
     })
     .catch(function(e) {
         document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">Errore caricamento timeline</td></tr>';

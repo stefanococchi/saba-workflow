@@ -261,18 +261,7 @@ def participants_list():
             else:
                 workflow_id = max(workflows, key=lambda w: w.updated_at or w.created_at).id
 
-        query = db.query(Participant).options(
-            joinedload(Participant.workflow),
-            joinedload(Participant.current_step)
-        )
-
-        if workflow_id:
-            query = query.filter_by(workflow_id=workflow_id)
-
-        participants = query.order_by(Participant.enrolled_at.desc()).limit(LIMIT).all()
-
         return render_template('admin/participants_list.html',
-                             participants=participants,
                              workflows=workflows,
                              current_workflow_id=workflow_id)
 
@@ -280,9 +269,85 @@ def participants_list():
         logger.error(f"Errore lista partecipanti: {str(e)}")
         flash(f'Errore: {str(e)}', 'danger')
         return render_template('admin/participants_list.html',
-                             participants=[],
                              workflows=[],
                              current_workflow_id=None)
+
+
+@admin_bp.route('/api/participants-list')
+def participants_list_api():
+    """API endpoint for participants list (AJAX, lightweight)"""
+    import pytz
+    local_tz = pytz.timezone('Europe/Rome')
+
+    try:
+        workflow_id = request.args.get('workflow_id', type=int)
+        LIMIT = 500
+
+        wf_names = {w.id: w.name for w in db.query(Workflow.id, Workflow.name).all()}
+
+        query = db.query(
+            Participant.id, Participant.first_name, Participant.last_name,
+            Participant.email, Participant.phone, Participant.workflow_id,
+            Participant.status, Participant.enrolled_at, Participant.last_interaction,
+            Participant.completed_at, Participant.token,
+            Participant.current_step_id,
+            WorkflowStep.name.label('step_name'),
+            WorkflowStep.order.label('step_order'),
+        ).outerjoin(WorkflowStep, Participant.current_step_id == WorkflowStep.id)
+
+        if workflow_id:
+            query = query.filter(Participant.workflow_id == workflow_id)
+
+        rows = query.order_by(Participant.enrolled_at.desc()).limit(LIMIT).all()
+
+        # Collect unique keys from collected_data/sabaform_data (lightweight query)
+        cd_keys = set()
+        sf_keys = set()
+        key_query = db.query(Participant.collected_data, Participant.sabaform_data)
+        if workflow_id:
+            key_query = key_query.filter(Participant.workflow_id == workflow_id)
+        for cd, sf in key_query.filter(
+            (Participant.collected_data.isnot(None)) | (Participant.sabaform_data.isnot(None))
+        ).limit(LIMIT).all():
+            if cd and isinstance(cd, dict):
+                cd_keys.update(cd.keys())
+            if sf and isinstance(sf, dict):
+                sf_keys.update(sf.keys())
+
+        def _fmt(dt):
+            if dt is None:
+                return None
+            utc_dt = pytz.utc.localize(dt)
+            return utc_dt.astimezone(local_tz).strftime('%d/%m/%Y %H:%M')
+
+        participants = []
+        for row in rows:
+            participants.append({
+                'id': row.id,
+                'first_name': row.first_name or '',
+                'last_name': row.last_name or '',
+                'email': row.email or '',
+                'phone': row.phone or '',
+                'workflow': wf_names.get(row.workflow_id, ''),
+                'workflow_id': row.workflow_id,
+                'status': row.status.value,
+                'current_step': row.step_name or '',
+                'current_step_order': row.step_order,
+                'enrolled_at': _fmt(row.enrolled_at),
+                'last_interaction': _fmt(row.last_interaction),
+                'completed_at': _fmt(row.completed_at),
+                'token': row.token or '',
+            })
+
+        return jsonify({
+            'participants': participants,
+            'cd_keys': sorted(cd_keys),
+            'sf_keys': sorted(sf_keys),
+        })
+
+    except Exception as e:
+        logger.error(f"Errore participants list API: {str(e)}")
+        return jsonify({'participants': [], 'cd_keys': [], 'sf_keys': []})
 
 
 @admin_bp.route('/workflows/<int:workflow_id>/steps/<int:step_id>/landing-builder')
@@ -344,6 +409,18 @@ def collected_data_api():
             utc_dt = pytz.utc.localize(dt)
             return utc_dt.astimezone(local_tz).strftime('%d/%m/%Y %H:%M')
 
+        def _strip_file_data(cd):
+            """Strip base64 data from file objects, keep metadata only"""
+            if not cd or not isinstance(cd, dict):
+                return cd or {}
+            light = {}
+            for k, v in cd.items():
+                if isinstance(v, dict) and v.get('filename') and v.get('data'):
+                    light[k] = {'filename': v['filename'], 'mime': v.get('mime', ''), 'has_file': True}
+                else:
+                    light[k] = v
+            return light
+
         participants = []
         for pid, fn, ln, email, phone, wf_id, status, completed_at, cd, sf in rows:
             participants.append({
@@ -356,8 +433,7 @@ def collected_data_api():
                 'workflow': wf_names.get(wf_id, ''),
                 'status': status.value,
                 'completed_at': _fmt_time(completed_at),
-                'collected_data': cd or {},
-                'sabaform_data': sf or {},
+                'collected_data': _strip_file_data(cd),
             })
 
         return jsonify(participants)
@@ -842,6 +918,23 @@ def executions_timeline_api():
     except Exception as e:
         logger.error(f"Errore timeline API: {str(e)}")
         return jsonify([])
+
+
+@admin_bp.route('/api/participant/<int:pid>/full-data')
+def participant_full_data(pid):
+    """Fetch full collected_data and sabaform_data for a single participant (on-demand)"""
+    try:
+        row = db.query(
+            Participant.collected_data, Participant.sabaform_data
+        ).filter_by(id=pid).first()
+        if not row:
+            return jsonify({'error': 'Not found'}), 404
+        return jsonify({
+            'collected_data': row.collected_data or {},
+            'sabaform_data': row.sabaform_data or {},
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @admin_bp.route('/api/timeline-entry-details')

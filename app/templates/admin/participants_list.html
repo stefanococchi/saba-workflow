@@ -331,28 +331,7 @@ var T = {{ t|tojson }};
 // =============================================
 // DATA
 // =============================================
-var ALL_PARTICIPANTS = [
-    {% for p in participants %}
-    {
-        id: {{ p.id }},
-        first_name: {{ p.first_name | default('', true) | tojson }},
-        last_name: {{ p.last_name | default('', true) | tojson }},
-        email: {{ p.email | default('', true) | tojson }},
-        phone: {{ p.phone | default('', true) | tojson }},
-        workflow: {{ p.workflow.name | tojson }},
-        workflow_id: {{ p.workflow_id }},
-        status: {{ p.status.value | tojson }},
-        current_step: {{ (p.current_step.name if p.current_step else '') | tojson }},
-        current_step_order: {{ p.current_step.order if p.current_step else 'null' }},
-        enrolled_at: {{ p.enrolled_at|localtime | tojson }},
-        last_interaction: {{ p.last_interaction|localtime | tojson if p.last_interaction else 'null' }},
-        completed_at: {{ p.completed_at|localtime | tojson if p.completed_at else 'null' }},
-        token: {{ p.token | default('', true) | tojson }},
-        collected_data: {{ p.collected_data | tojson if p.collected_data else '{}' }},
-        sabaform_data: {{ p.sabaform_data | tojson if p.sabaform_data else '{}' }}
-    }{% if not loop.last %},{% endif %}
-    {% endfor %}
-];
+var ALL_PARTICIPANTS = [];
 
 // =============================================
 // COLUMNS CONFIG
@@ -383,27 +362,7 @@ var SF_LABELS = {
     'notes': T.notes, 'confirmed': T.confirmed
 };
 
-// Aggiungi colonne dai sabaform_data
-var sfCols = new Set();
-ALL_PARTICIPANTS.forEach(function(p) {
-    if (p.sabaform_data) {
-        Object.keys(p.sabaform_data).forEach(function(k) { sfCols.add(k); });
-    }
-});
-sfCols.forEach(function(k) {
-    ALL_COLUMNS.push({ key: 'sf_' + k, label: SF_LABELS[k] || k, default: false });
-});
-
-// Aggiungi colonne dai collected_data
-var extraCols = new Set();
-ALL_PARTICIPANTS.forEach(function(p) {
-    if (p.collected_data) {
-        Object.keys(p.collected_data).forEach(function(k) { extraCols.add(k); });
-    }
-});
-extraCols.forEach(function(k) {
-    ALL_COLUMNS.push({ key: 'cd_' + k, label: k, default: false });
-});
+// Dynamic columns will be added after AJAX load
 
 var visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(function(c) { return c.key; });
 var currentStatus = 'all';
@@ -415,11 +374,35 @@ var _filteredRows = [];
 var queryConditions = [];
 
 // =============================================
-// INIT
+// INIT — load participants via AJAX
 // =============================================
-buildColumnChips();
-renderTable(ALL_PARTICIPANTS);
-updateCounts();
+(function() {
+    var wfId = {{ current_workflow_id | tojson }};
+    var url = '/admin/api/participants-list';
+    if (wfId) url += '?workflow_id=' + wfId;
+
+    document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div> ' + (T.loading || 'Caricamento...') + '</td></tr>';
+
+    fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        ALL_PARTICIPANTS = data.participants;
+        // Add dynamic columns from keys
+        (data.sf_keys || []).forEach(function(k) {
+            ALL_COLUMNS.push({ key: 'sf_' + k, label: SF_LABELS[k] || k, default: false });
+        });
+        (data.cd_keys || []).forEach(function(k) {
+            ALL_COLUMNS.push({ key: 'cd_' + k, label: k, default: false });
+        });
+        visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(function(c) { return c.key; });
+        buildColumnChips();
+        renderTable(ALL_PARTICIPANTS);
+        updateCounts();
+    })
+    .catch(function() {
+        document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">Errore caricamento</td></tr>';
+    });
+})();
 
 // =============================================
 // COLUMN MANAGEMENT
@@ -706,62 +689,70 @@ function viewData(id) {
     var sfLabels = SF_LABELS;
     sfLabels['status'] = T.status;
 
-    var html = '';
+    // Show loading, then fetch full data on demand
+    body.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+    new bootstrap.Modal(document.getElementById('dataModal')).show();
 
-    // Dati base partecipante
-    html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-person"></i> ' + T.participant_data + '</h6>';
-    html += '<dl class="row" style="font-size:14px">';
-    var origFields = [
-        { key: 'first_name', label: T.name },
-        { key: 'last_name', label: T.last_name },
-        { key: 'email', label: T.email },
-        { key: 'phone', label: T.phone },
-        { key: 'workflow', label: T.workflow },
-        { key: 'status', label: T.status },
-        { key: 'enrolled_at', label: T.enrolled },
-        { key: 'completed_at', label: T.completed }
-    ];
-    origFields.forEach(function(f) {
-        var val = p[f.key];
-        if (val !== null && val !== undefined && val !== '') {
-            html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(f.label) + '</dt>';
-            html += '<dd class="col-sm-8">' + esc(val) + '</dd>';
-        }
-    });
-    html += '</dl>';
+    fetch('/admin/api/participant/' + id + '/full-data')
+    .then(function(r) { return r.json(); })
+    .then(function(full) {
+        var html = '';
 
-    // Dati Saba Form
-    if (p.sabaform_data && Object.keys(p.sabaform_data).length > 0) {
-        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-cloud-download"></i> ' + T.sabaform_data + '</h6>';
+        // Dati base partecipante
+        html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-person"></i> ' + T.participant_data + '</h6>';
         html += '<dl class="row" style="font-size:14px">';
-        for (var k in p.sabaform_data) {
-            var val = p.sabaform_data[k];
+        var origFields = [
+            { key: 'first_name', label: T.name },
+            { key: 'last_name', label: T.last_name },
+            { key: 'email', label: T.email },
+            { key: 'phone', label: T.phone },
+            { key: 'workflow', label: T.workflow },
+            { key: 'status', label: T.status },
+            { key: 'enrolled_at', label: T.enrolled },
+            { key: 'completed_at', label: T.completed }
+        ];
+        origFields.forEach(function(f) {
+            var val = p[f.key];
             if (val !== null && val !== undefined && val !== '') {
-                html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(sfLabels[k] || k) + '</dt>';
+                html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(f.label) + '</dt>';
                 html += '<dd class="col-sm-8">' + esc(val) + '</dd>';
             }
-        }
+        });
         html += '</dl>';
-    }
 
-    // Dati raccolti dal workflow
-    if (p.collected_data && Object.keys(p.collected_data).length > 0) {
-        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-collection"></i> ' + T.collected_data_section + '</h6>';
-        html += '<dl class="row" style="font-size:14px">';
-        for (var k in p.collected_data) {
-            html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(k) + '</dt>';
-            html += '<dd class="col-sm-8">' + esc(p.collected_data[k]) + '</dd>';
+        // Dati Saba Form
+        if (full.sabaform_data && Object.keys(full.sabaform_data).length > 0) {
+            html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+            html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-cloud-download"></i> ' + T.sabaform_data + '</h6>';
+            html += '<dl class="row" style="font-size:14px">';
+            for (var k in full.sabaform_data) {
+                var val = full.sabaform_data[k];
+                if (val !== null && val !== undefined && val !== '') {
+                    html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(sfLabels[k] || k) + '</dt>';
+                    html += '<dd class="col-sm-8">' + esc(val) + '</dd>';
+                }
+            }
+            html += '</dl>';
         }
-        html += '</dl>';
-    } else {
-        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<p style="color:var(--md-on-surface-variant);font-size:14px"><i class="bi bi-info-circle"></i> ' + T.no_data_collected + '</p>';
-    }
 
-    body.innerHTML = html;
-    new bootstrap.Modal(document.getElementById('dataModal')).show();
+        // Dati raccolti dal workflow
+        if (full.collected_data && Object.keys(full.collected_data).length > 0) {
+            html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+            html += '<h6 style="color:var(--md-primary);margin-bottom:8px"><i class="bi bi-collection"></i> ' + T.collected_data_section + '</h6>';
+            html += '<dl class="row" style="font-size:14px">';
+            for (var k in full.collected_data) {
+                html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(k) + '</dt>';
+                html += '<dd class="col-sm-8">' + esc(full.collected_data[k]) + '</dd>';
+            }
+            html += '</dl>';
+        } else {
+            html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+            html += '<p style="color:var(--md-on-surface-variant);font-size:14px"><i class="bi bi-info-circle"></i> ' + T.no_data_collected + '</p>';
+        }
+
+        body.innerHTML = html;
+    })
+    .catch(function() { body.innerHTML = '<p class="text-danger">Errore caricamento dati</p>'; });
 }
 
 function copyUrl(token) {
@@ -842,8 +833,18 @@ function buildEditForm(p) {
 function editParticipant(id) {
     var p = ALL_PARTICIPANTS.find(function(x) { return x.id === id; });
     if (!p) return;
-    document.getElementById('editModalBody').innerHTML = buildEditForm(p);
+    var editBody = document.getElementById('editModalBody');
+    editBody.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
     new bootstrap.Modal(document.getElementById('editModal')).show();
+
+    // Fetch full data for edit form (need sabaform_data)
+    fetch('/admin/api/participant/' + id + '/full-data')
+    .then(function(r) { return r.json(); })
+    .then(function(full) {
+        var editP = Object.assign({}, p, { sabaform_data: full.sabaform_data });
+        editBody.innerHTML = buildEditForm(editP);
+    })
+    .catch(function() { editBody.innerHTML = '<p class="text-danger">Errore caricamento dati</p>'; });
 }
 
 function saveParticipant() {
