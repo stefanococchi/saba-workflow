@@ -478,6 +478,9 @@ var _filteredRows = [];
 
 function renderTable(rows) {
     _filteredRows = rows;
+    // Build index map for fast lookup (avoid O(n) indexOf in render loops)
+    _filteredIndexMap = new Map();
+    rows.forEach(function(r, i) { _filteredIndexMap.set(r, i); });
     _visibleCount = PAGE_SIZE;
     if (viewMode === 'grouped') renderGrouped(rows);
     else renderFlat(rows);
@@ -604,7 +607,7 @@ function renderGrouped(rows) {
 
         // Child rows (hidden by default)
         events.forEach(function(r) {
-            var globalIdx = _filteredRows.indexOf(r);
+            var globalIdx = _filteredIndexMap.get(r);
             var childCells = cols.map(function(c) {
                 var val = r[c.key] || '';
                 if (c.key === 'time_local') return '<td><small class="text-muted">' + esc(val) + '</small></td>';
@@ -622,7 +625,7 @@ function renderGrouped(rows) {
 
     // Render ungrouped events (no participant)
     ungrouped.forEach(function(r) {
-        var globalIdx = _filteredRows.indexOf(r);
+        var globalIdx = _filteredIndexMap.get(r);
         html += '<tr>' + buildRowCells(r, cols) + '<td>' + buildActions(r, globalIdx) + '</td></tr>';
     });
 
