@@ -1074,6 +1074,7 @@ function _renderStepEditFormInner(step, index, common) {
                                 <select class="form-select form-select-sm" id="editLandingIfFilled" onchange="toggleLandingJump('Filled')">
                                     <option value="continue" ${(step.config.landing_if_filled || 'continue') === 'continue' ? 'selected' : ''}>Continue to next step</option>
                                     <option value="jump" ${step.config.landing_if_filled === 'jump' ? 'selected' : ''}>Jump to step...</option>
+                                    <option value="stop" ${step.config.landing_if_filled === 'stop' ? 'selected' : ''}>Stop workflow</option>
                                 </select>
                                 <div id="jumpFilledRow" class="mt-1" ${step.config.landing_if_filled === 'jump' ? '' : 'style="display:none"'}>
                                     <select class="form-select form-select-sm" id="editLandingIfFilledStep">
