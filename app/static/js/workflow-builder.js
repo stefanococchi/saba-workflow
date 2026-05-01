@@ -2271,9 +2271,11 @@ function saveStepEdit() {
             step.config.wait_for_landing = document.getElementById('editWaitForLanding')?.checked || false;
             step.config.landing_timeout_days = parseInt(document.getElementById('editLandingTimeout')?.value) || 7;
             step.config.landing_if_filled = document.getElementById('editLandingIfFilled')?.value || 'continue';
-            step.config.landing_if_filled_step = parseInt(document.getElementById('editLandingIfFilledStep')?.value) || 0;
+            var _filledStepVal = document.getElementById('editLandingIfFilledStep')?.value || '0';
+            step.config.landing_if_filled_step = _filledStepVal === 'end' ? 'end' : (parseInt(_filledStepVal) || 0);
             step.config.landing_if_timeout = document.getElementById('editLandingIfTimeout')?.value || 'continue';
-            step.config.landing_if_timeout_step = parseInt(document.getElementById('editLandingIfTimeoutStep')?.value) || 0;
+            var _timeoutStepVal = document.getElementById('editLandingIfTimeoutStep')?.value || '0';
+            step.config.landing_if_timeout_step = _timeoutStepVal === 'end' ? 'end' : (parseInt(_timeoutStepVal) || 0);
             if (!step.config.has_landing) {
                 step.config.wait_for_landing = false;
             }

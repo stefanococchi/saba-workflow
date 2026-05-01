@@ -382,7 +382,9 @@ class SchedulerService:
     @staticmethod
     def _handle_landing_branch(participant, step, action, jump_target):
         """Handle branching after landing wait (filled or timeout)."""
-        if action == 'jump' and jump_target:
+        if action == 'jump' and jump_target == 'end':
+            action = 'stop'
+        elif action == 'jump' and jump_target:
             target_step = _db().query(WorkflowStep).filter_by(
                 workflow_id=step.workflow_id,
                 order=jump_target

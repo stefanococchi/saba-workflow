@@ -1619,7 +1619,7 @@ window._drT = {
     waiting: {{ t.get('pending', 'Pending') | tojson }},
     skipped: {{ t.dr_skipped | tojson }}
 };</script>
-<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=4.2.0"></script>
+<script src="{{ url_for('static', filename='js/workflow-builder.js') }}?v=4.2.1"></script>
 <script src="{{ url_for('static', filename='js/workflow-canvas-2d.js') }}?v=1.1.0"></script>
 {% if mode == 'edit' and workflow and workflow.steps %}
 <script>
