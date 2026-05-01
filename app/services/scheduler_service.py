@@ -319,7 +319,7 @@ class SchedulerService:
     def _schedule_landing_wait(participant, step, config):
         """
         After sending email with landing, poll for form submission.
-        Checks every 6 hours. After timeout_days, branches based on config.
+        Checks every 10 minutes. After timeout_days, branches based on config.
         """
         timeout_days = config.get('landing_timeout_days', 7)
         timeout_at = datetime.utcnow() + timedelta(days=timeout_days)
@@ -353,11 +353,11 @@ class SchedulerService:
                         SchedulerService._handle_landing_branch(p, s, cfg['if_timeout'], cfg['if_timeout_step'])
                         return
 
-                    # Re-schedule check in 6 hours
+                    # Re-schedule check in 10 minutes
                     import threading
                     def _delayed():
                         import time
-                        time.sleep(6 * 3600)
+                        time.sleep(10 * 60)
                         _check_landing(participant_id, step_id, timeout_iso, cfg)
                     t = threading.Thread(target=_delayed, daemon=True)
                     t.start()
@@ -365,7 +365,7 @@ class SchedulerService:
                 except Exception as e:
                     logger.error(f"✗ Landing wait check error: {str(e)}")
 
-        # Start first check in 6 hours
+        # Start first check in 10 minutes
         import threading
         cfg = {
             'if_filled': if_filled, 'if_filled_step': if_filled_step,
@@ -373,7 +373,7 @@ class SchedulerService:
         }
         def _delayed_start():
             import time
-            time.sleep(6 * 3600)
+            time.sleep(10 * 60)
             _check_landing(participant.id, step.id, timeout_at.isoformat(), cfg)
         t = threading.Thread(target=_delayed_start, daemon=True)
         t.start()
