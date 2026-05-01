@@ -987,15 +987,20 @@ function renderFlowCurrent() {
         var wf = FLOW_DATA[wfId];
         if (wf.total === 0) continue;
 
-        // Flatten all substates across steps into a funnel
-        var funnel = [];
+        // Flatten all substates across steps into a funnel, merging duplicates
+        var funnelMap = {};
         wf.steps.forEach(function(step) {
             step.substates.forEach(function(ss) {
-                // Skip 'failed' from funnel — it's a dead end, not a progression
-                if (ss.key === 'failed') return;
-                funnel.push({ key: ss.key, label: ss.label, icon: ss.icon, color: ss.color, count: ss.count, stepId: step.id, stepName: step.name });
+                // Skip internal/dead-end states
+                if (ss.key === 'failed' || ss.key === 'scheduled') return;
+                if (funnelMap[ss.key]) {
+                    funnelMap[ss.key].count += ss.count;
+                } else {
+                    funnelMap[ss.key] = { key: ss.key, label: ss.label, icon: ss.icon, color: ss.color, count: ss.count, stepId: step.id, stepName: step.name };
+                }
             });
         });
+        var funnel = Object.values(funnelMap);
 
         // Sort by funnel order
         funnel.sort(function(a, b) {
