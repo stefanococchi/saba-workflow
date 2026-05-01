@@ -932,6 +932,9 @@ function rollbackParticipant(participantId) {
             html += '<i class="bi '+icon+'"></i> <strong>Step '+s.order+':</strong> '+esc(s.name);
             html += '<br><small class="text-muted">'+s.type+(s.delay_hours?' — delay '+s.delay_hours+'h':'')+'</small></button>';
         });
+        html += '<button class="list-group-item list-group-item-action list-group-item-success" onclick="doRollback(\'end\')">';
+        html += '<i class="bi bi-check-circle"></i> <strong>END</strong>';
+        html += '<br><small class="text-muted">Segna come completato</small></button>';
         stepsDiv.innerHTML = html;
     })
     .catch(function(e) {
@@ -940,15 +943,17 @@ function rollbackParticipant(participantId) {
 }
 
 function doRollback(stepOrder) {
-    if (!confirm(stepOrder === 0
+    var msg = stepOrder === 0
         ? 'Riportare il partecipante a PENDING?'
-        : 'Riportare il partecipante allo step ' + stepOrder + '?'))
-        return;
+        : stepOrder === 'end'
+        ? 'Segnare il partecipante come COMPLETATO?'
+        : 'Riportare il partecipante allo step ' + stepOrder + '?';
+    if (!confirm(msg)) return;
 
     fetch('/api/participants/' + _rollbackParticipantId + '/rollback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step_order: stepOrder || null })
+        body: JSON.stringify({ step_order: stepOrder === 'end' ? 'end' : (stepOrder || null) })
     })
     .then(function(r) {
         if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Errore'); });

@@ -483,7 +483,20 @@ def rollback_participant(participant_id):
         # Cancella esecuzioni schedulate
         SchedulerService.cancel_scheduled_executions(participant_id)
 
-        if target_step_order is None or target_step_order == 0:
+        if target_step_order == 'end':
+            participant.status = ParticipantStatus.COMPLETED
+            participant.completed_at = datetime.utcnow()
+            db.commit()
+            log_activity(
+                workflow_id=participant.workflow_id,
+                event_type='status_changed',
+                description='Partecipante segnato come COMPLETED',
+                participant_id=participant_id,
+                details={'action': 'rollback', 'target': 'completed'}
+            )
+            logger.info(f"Rollback partecipante {participant_id} a COMPLETED")
+            return jsonify({'status': 'completed', 'message': 'Partecipante segnato come completato'}), 200
+        elif target_step_order is None or target_step_order == 0:
             # Reset completo a PENDING
             participant.status = ParticipantStatus.PENDING
             participant.current_step_id = None
