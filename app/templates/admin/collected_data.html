@@ -641,9 +641,6 @@ function viewData(id) {
         body.innerHTML = html;
     })
     .catch(function() { body.innerHTML = '<p class="text-danger">Errore caricamento dati</p>'; });
-
-    body.innerHTML = html;
-    new bootstrap.Modal(document.getElementById('dataModal')).show();
 }
 
 function exportXLSX() {
