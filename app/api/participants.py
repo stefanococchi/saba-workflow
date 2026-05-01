@@ -431,6 +431,8 @@ def update_participant(participant_id):
             participant.status = ParticipantStatus(data['status'])
         if 'sabaform_data' in data:
             participant.sabaform_data = data['sabaform_data']
+        if 'collected_data' in data:
+            participant.collected_data = data['collected_data']
 
         db.commit()
         logger.info(f"Aggiornato partecipante {participant_id}")

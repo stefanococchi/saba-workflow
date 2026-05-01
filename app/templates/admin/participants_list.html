@@ -800,6 +800,19 @@ function getFilteredRows() {
 // =============================================
 var _editSfLabels = SF_LABELS;
 
+var _editCollectedDataOriginal = {};
+
+function addCollectedField() {
+    var key = prompt('Nome del campo:');
+    if (!key) return;
+    var row = document.querySelector('.edit-cd-field') ? document.querySelector('.edit-cd-field').closest('.row') : document.getElementById('cdFieldsRow');
+    if (!row) return;
+    var div = document.createElement('div');
+    div.className = 'col-md-6 mb-3';
+    div.innerHTML = '<label class="form-label">' + esc(key) + '</label><input type="text" class="form-control form-control-sm edit-cd-field" data-cd-key="' + esc(key) + '" value="">';
+    row.appendChild(div);
+}
+
 function buildEditForm(p) {
     var html = '<input type="hidden" id="editId" value="' + p.id + '">';
     html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-person"></i> ' + T.participant_data + '</h6>';
@@ -827,6 +840,27 @@ function buildEditForm(p) {
         }
         html += '</div>';
     }
+
+    // Collected data (editable text fields, skip file objects)
+    var cd = p.collected_data;
+    if (cd && Object.keys(cd).length > 0) {
+        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-collection"></i> ' + (T.collected_data_section || 'Dati raccolti') + '</h6>';
+        html += '<div class="row">';
+        for (var k in cd) {
+            var val = cd[k];
+            if (val && typeof val === 'object' && val.filename) continue; // skip file objects
+            html += '<div class="col-md-6 mb-3"><label class="form-label">' + esc(k) + '</label>';
+            html += '<input type="text" class="form-control form-control-sm edit-cd-field" data-cd-key="' + esc(k) + '" value="' + esc(String(val !== null && val !== undefined ? val : '')) + '"></div>';
+        }
+        html += '</div>';
+        html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="addCollectedField()"><i class="bi bi-plus-lg"></i> Aggiungi campo</button>';
+    } else {
+        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-collection"></i> ' + (T.collected_data_section || 'Dati raccolti') + '</h6>';
+        html += '<div id="cdFieldsRow" class="row"></div>';
+        html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="addCollectedField()"><i class="bi bi-plus-lg"></i> Aggiungi campo</button>';
+    }
     return html;
 }
 
@@ -841,7 +875,8 @@ function editParticipant(id) {
     fetch('/admin/api/participant/' + id + '/full-data')
     .then(function(r) { return r.json(); })
     .then(function(full) {
-        var editP = Object.assign({}, p, { sabaform_data: full.sabaform_data });
+        _editCollectedDataOriginal = full.collected_data || {};
+        var editP = Object.assign({}, p, { sabaform_data: full.sabaform_data, collected_data: full.collected_data });
         editBody.innerHTML = buildEditForm(editP);
     })
     .catch(function() { editBody.innerHTML = '<p class="text-danger">Errore caricamento dati</p>'; });
@@ -865,6 +900,18 @@ function saveParticipant() {
             sfData[el.dataset.sfKey] = el.value;
         });
         data.sabaform_data = sfData;
+    }
+
+    // Raccogli campi collected_data
+    var cdFields = document.querySelectorAll('.edit-cd-field');
+    if (cdFields.length > 0) {
+        // Start with existing collected_data to preserve file objects
+        var cdData = Object.assign({}, _editCollectedDataOriginal || {});
+        cdFields.forEach(function(el) {
+            var key = el.dataset.cdKey;
+            if (key) cdData[key] = el.value;
+        });
+        data.collected_data = cdData;
     }
 
     fetch('/api/participants/' + id, {
