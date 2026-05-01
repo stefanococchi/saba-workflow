@@ -565,3 +565,14 @@ def reconcile_execute(workflow_id):
         db.rollback()
         logger.error(f"Errore reconcile: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@workflow_bp.route('/workflows/check-landing-waits', methods=['POST'])
+def force_check_landing_waits():
+    """Force immediate check of all landing wait participants."""
+    try:
+        SchedulerService.check_all_landing_waits()
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        logger.error(f"Errore force check: {str(e)}")
+        return jsonify({'error': str(e)}), 500

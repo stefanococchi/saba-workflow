@@ -147,7 +147,7 @@
                 <button class="btn btn-outline-danger btn-sm" onclick="showPurgeModal()">
                     <i class="bi bi-trash3"></i> {{ t.purge_all }}
                 </button>
-                <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
+                <button class="btn btn-outline-primary btn-sm" onclick="forceCheckAndReload(this)">
                     <i class="bi bi-arrow-clockwise"></i>
                 </button>
             </div>
@@ -1156,6 +1156,14 @@ renderFlowCharts();
         document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4 text-danger">Errore caricamento timeline</td></tr>';
     });
 })();
+
+function forceCheckAndReload(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    fetch('/api/workflows/check-landing-waits', { method: 'POST' })
+    .then(function() { location.reload(); })
+    .catch(function() { location.reload(); });
+}
 
 // Auto-refresh ogni 5 minuti (si ferma se l'utente interagisce)
 var _autoRefresh = setTimeout(function() { location.reload(); }, 300000);
