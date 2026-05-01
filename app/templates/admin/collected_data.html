@@ -531,7 +531,7 @@ function sortBy(key) {
 
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function isFileObj(val) { return val && typeof val === 'object' && val.filename && (val.data || val.has_file); }
+function isFileObj(val) { return val && typeof val === 'object' && val.filename; }
 
 function downloadFile(filename, mime, el) {
     var b64 = el.getAttribute('data-b64');
