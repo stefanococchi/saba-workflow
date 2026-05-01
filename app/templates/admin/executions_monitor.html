@@ -186,7 +186,7 @@
 {% if flow_data %}
 <div class="card mb-3" id="flowChartCard">
     <div class="card-header d-flex justify-content-between align-items-center py-2">
-        <h6 class="mb-0"><i class="bi bi-bar-chart-steps"></i> {{ t.status_flow }}</h6>
+        <h6 class="mb-0"><i class="bi bi-bar-chart-steps"></i> {{ t.status_flow or 'Status Flow' }}</h6>
         <div class="d-flex align-items-center gap-2">
             <button class="btn btn-sm btn-primary" onclick="exportStatusFlow()">
                 <i class="bi bi-file-earmark-spreadsheet"></i> Export Excel
@@ -197,8 +197,7 @@
         </div>
     </div>
     <div class="card-body py-3">
-        <div id="flowChartsContainer"></div>
-        <div id="flowCurrentContainer" style="margin-top:16px"></div>
+        <div id="flowCurrentContainer"></div>
     </div>
 </div>
 {% endif %}
@@ -914,7 +913,7 @@ function doPurge() {
 }
 
 // =============================================
-// STATUS FLOW
+// EVENT SUMMARY + CURRENT POSITION
 // =============================================
 var FLOW_DATA = {{ flow_data | tojson }};
 
@@ -926,57 +925,7 @@ var STEP_TYPE_ICONS = {
 };
 
 function renderFlowCharts() {
-    var container = document.getElementById('flowChartsContainer');
-    if (!container || !Object.keys(FLOW_DATA).length) return;
-
-    var html = '';
-    for (var wfId in FLOW_DATA) {
-        var wf = FLOW_DATA[wfId];
-        if (wf.total === 0) continue;
-
-        html += '<div class="flow-wf">';
-        html += '<div class="d-flex align-items-center gap-2 mb-2"><strong style="font-size:14px">' + esc(wf.name) + '</strong><span class="counter-badge">' + wf.total + ' ' + (T.participants || 'partecipanti') + '</span></div>';
-
-        wf.steps.forEach(function(step, idx) {
-            var stIcon = STEP_TYPE_ICONS[step.type] || 'bi-circle';
-            html += '<div class="flow-step">';
-            html += '<div class="flow-step-header">';
-            html += '<span class="step-order">' + step.order + '</span>';
-            html += '<i class="bi ' + stIcon + '" style="color:var(--md-primary)"></i> ';
-            html += esc(step.name);
-            if (step.entered > 0) {
-                html += '<span class="step-entered">' + step.entered + ' ' + (T.entered || 'entrati') + '</span>';
-            }
-            html += '</div>';
-
-            if (step.substates.length > 0) {
-                html += '<div class="flow-substates">';
-                step.substates.forEach(function(ss) {
-                    html += '<span class="flow-substate" style="border-left: 3px solid ' + ss.color + '" onclick="showStepParticipants(' + step.id + ',\'' + ss.key + '\',\'' + esc(step.name) + '\',\'' + ss.label + '\')">';
-                    html += '<i class="bi ' + ss.icon + '" style="color:' + ss.color + '"></i> ';
-                    html += '<span class="fs-count">' + ss.count + '</span> ';
-                    html += ss.label;
-                    html += '</span>';
-                });
-                html += '</div>';
-            }
-            html += '</div>';
-
-            // Connector between steps
-            if (idx < wf.steps.length - 1) {
-                html += '<div class="flow-connector"></div>';
-            }
-        });
-
-        html += '</div>';
-    }
-    container.innerHTML = html;
-
-    // Hide/show the card
-    var card = document.getElementById('flowChartCard');
-    if (card) card.style.display = html ? '' : 'none';
-
-    // Render current position view
+    // Render only Current Position (Event Summary removed — redundant)
     renderFlowCurrent();
 }
 
@@ -1059,6 +1008,9 @@ function renderFlowCurrent() {
         html += '</div>';
     }
     container.innerHTML = html;
+
+    var card = document.getElementById('flowChartCard');
+    if (card) card.style.display = html ? '' : 'none';
 }
 
 // =============================================
