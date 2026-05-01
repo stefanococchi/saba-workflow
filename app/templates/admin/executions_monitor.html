@@ -997,23 +997,22 @@ function renderFlowCurrent() {
         var funnel = [];
         wf.steps.forEach(function(step) {
             var psubs = step.participant_substates || [];
-            // Build entered map from original substates (execution counts = total who entered)
-            var enteredMap = {};
-            (step.substates || []).forEach(function(ss) { enteredMap[ss.key] = ss.count; });
+            // Build current-count map from participant_substates
+            var currentMap = {};
+            psubs.forEach(function(ss) { currentMap[ss.key] = ss; });
 
-            psubs.forEach(function(ss) {
+            // Use Status Flow substates as the template — show ALL, even with 0 current
+            var baseSubs = step.substates || [];
+            if (baseSubs.length === 0) return;
+
+            baseSubs.forEach(function(ss) {
+                var cur = currentMap[ss.key];
                 var label = wf.steps.length > 1 ? ss.label + ' — ' + step.name : ss.label;
-                var entered = enteredMap[ss.key] || ss.count;
-                funnel.push({ key: ss.key + '_' + step.id, origKey: ss.key, label: label, icon: ss.icon, color: ss.color, count: ss.count, entered: entered, stepId: step.id, stepName: step.name });
+                funnel.push({ key: ss.key + '_' + step.id, origKey: ss.key, label: label, icon: ss.icon, color: ss.color, count: cur ? cur.count : 0, entered: ss.count, stepId: step.id, stepName: step.name });
             });
         });
 
-        // Sort by funnel order
-        funnel.sort(function(a, b) {
-            var ia = FUNNEL_ORDER.indexOf(a.key); if (ia === -1) ia = 99;
-            var ib = FUNNEL_ORDER.indexOf(b.key); if (ib === -1) ib = 99;
-            return ia - ib;
-        });
+        // Funnel is already ordered by step sequence + substate order from backend
 
         // Add completed/pending participants
         var sc = wf.status_counts || {};
@@ -1035,7 +1034,8 @@ function renderFlowCurrent() {
         funnel.forEach(function(f) {
             var pctEntered = (f.entered / maxCount * 100);
             var pctInState = (f.count / maxCount * 100);
-            html += '<div class="flow-current-bar">';
+            var isSubstate = f.origKey !== 'sent' && f.origKey !== 'completed' && f.origKey !== 'pending';
+            html += '<div class="flow-current-bar"' + (isSubstate ? ' style="margin-left:24px"' : '') + '>';
             html += '<div class="flow-current-label"><i class="bi ' + f.icon + '" style="color:' + f.color + ';font-size:13px"></i> ' + f.label + '</div>';
             var clickHandler = f.stepId ? 'showStepParticipants(' + f.stepId + ',\'' + f.origKey + '\',\'' + esc(f.stepName) + '\',\'' + esc(f.label) + '\')' : 'showCurrentParticipants(' + wfId + ',\'' + f.origKey + '\',\'' + esc(wf.name) + '\')';
             html += '<div class="flow-current-track" onclick="' + clickHandler + '">';
