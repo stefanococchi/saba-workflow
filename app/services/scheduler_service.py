@@ -1436,25 +1436,37 @@ class SchedulerService:
                    'in_progress': 0, 'waiting_landing': 0, 'actionable': 0,
                    'bounced': 0, 'unsubscribed': 0}
         by_step = {}
+        by_status = {'completed': [], 'pending': [], 'in_progress': [],
+                     'waiting_landing': [], 'actionable': [], 'bounced': [], 'unsubscribed': []}
+
+        def _p_info(p):
+            return {'id': p.id,
+                    'name': ((p.first_name or '') + ' ' + (p.last_name or '')).strip() or p.email,
+                    'email': p.email}
 
         for p in participants:
             if p.status == ParticipantStatus.COMPLETED:
                 summary['completed'] += 1
+                by_status['completed'].append(_p_info(p))
                 continue
             elif p.status == ParticipantStatus.PENDING:
                 summary['pending'] += 1
+                by_status['pending'].append(_p_info(p))
                 continue
             elif p.status == ParticipantStatus.BOUNCED:
                 summary['bounced'] += 1
+                by_status['bounced'].append(_p_info(p))
                 continue
             elif p.status == ParticipantStatus.UNSUBSCRIBED:
                 summary['unsubscribed'] += 1
+                by_status['unsubscribed'].append(_p_info(p))
                 continue
 
             # IN_PROGRESS — determine sub-state
             step = p.current_step
             if not step:
                 summary['in_progress'] += 1
+                by_status['in_progress'].append(_p_info(p))
                 continue
 
             config = step.skip_conditions or {}
@@ -1463,8 +1475,10 @@ class SchedulerService:
             if not is_landing_wait:
                 if p.id in scheduled_pids:
                     summary['in_progress'] += 1
+                    by_status['in_progress'].append(_p_info(p))
                 else:
                     summary['actionable'] += 1
+                    by_status['actionable'].append(_p_info(p))
                     # Group stuck non-landing
                     step_key = step.id
                     if step_key not in by_step:
@@ -1502,9 +1516,11 @@ class SchedulerService:
             # Determine sub-state
             if has_form or timeout_passed:
                 summary['actionable'] += 1
+                by_status['actionable'].append(_p_info(p))
                 status_label = 'form_compilato' if has_form else 'timeout_scaduto'
             else:
                 summary['waiting_landing'] += 1
+                by_status['waiting_landing'].append(_p_info(p))
                 status_label = 'in_attesa' if email_sent else 'mail_non_inviata'
 
             # Group by step
@@ -1532,6 +1548,7 @@ class SchedulerService:
             'workflow_id': workflow_id,
             'workflow_name': workflow.name,
             'summary': summary,
+            'by_status': by_status,
             'by_step': sorted(by_step.values(), key=lambda x: x['step_order'])
         }
 

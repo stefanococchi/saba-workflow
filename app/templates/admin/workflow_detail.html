@@ -447,12 +447,13 @@ function openReconcile() {
         var s = data.summary;
 
         var html = '<div class="row g-2 mb-3">';
-        html += _rcBadge('Totale', s.total, 'secondary');
-        html += _rcBadge('Completati', s.completed, 'success');
-        html += _rcBadge('In corso', s.in_progress, 'primary');
-        html += _rcBadge('Attesa landing', s.waiting_landing, 'info');
-        html += _rcBadge('Da gestire', s.actionable, s.actionable > 0 ? 'warning' : 'secondary');
+        html += _rcBadge('Totale', s.total, 'secondary', null);
+        html += _rcBadge('Completati', s.completed, 'success', 'completed');
+        html += _rcBadge('In corso', s.in_progress, 'primary', 'in_progress');
+        html += _rcBadge('Attesa landing', s.waiting_landing, 'info', 'waiting_landing');
+        html += _rcBadge('Da gestire', s.actionable, s.actionable > 0 ? 'warning' : 'secondary', 'actionable');
         html += '</div>';
+        html += '<div id="rcStatusList" style="display:none"></div>';
 
         if (data.by_step.length === 0) {
             html += '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Nessun partecipante da gestire.</div>';
@@ -529,10 +530,47 @@ function openReconcile() {
     });
 }
 
-function _rcBadge(label, count, color) {
-    return '<div class="col"><div class="text-center p-2 rounded bg-' + color + ' bg-opacity-10">' +
+function _rcBadge(label, count, color, statusKey) {
+    var clickAttr = (statusKey && count > 0) ? ' role="button" onclick="toggleStatusList(\'' + statusKey + '\')"' : '';
+    return '<div class="col"><div class="text-center p-2 rounded bg-' + color + ' bg-opacity-10"' + clickAttr + '>' +
         '<div class="fs-4 fw-bold text-' + color + '">' + count + '</div>' +
         '<small class="text-muted">' + label + '</small></div></div>';
+}
+
+function toggleStatusList(statusKey) {
+    var container = document.getElementById('rcStatusList');
+    if (container.dataset.active === statusKey) {
+        container.style.display = 'none';
+        container.dataset.active = '';
+        return;
+    }
+    container.dataset.active = statusKey;
+    var list = _reconcileData.by_status[statusKey] || [];
+    var labels = { completed: 'Completati', pending: 'In attesa', in_progress: 'In corso',
+                   waiting_landing: 'Attesa landing', actionable: 'Da gestire',
+                   bounced: 'Bounced', unsubscribed: 'Unsubscribed' };
+
+    var html = '<div class="card mb-2"><div class="card-header py-2 d-flex justify-content-between align-items-center">';
+    html += '<strong>' + (labels[statusKey] || statusKey) + '</strong>';
+    html += '<span class="badge bg-secondary">' + list.length + '</span></div>';
+    html += '<div class="card-body p-2"><div class="table-responsive" style="max-height:300px;overflow-y:auto">';
+    html += '<table class="table table-sm table-hover mb-0"><thead class="sticky-top bg-white"><tr>';
+    html += '<th><input type="checkbox" onchange="toggleStatusCheck(this)"></th><th>Nome</th><th>Email</th></tr></thead><tbody>';
+    list.forEach(function(p) {
+        html += '<tr><td><input type="checkbox" class="rc-check" data-pid="' + p.id + '" data-step="0"></td>';
+        html += '<td>' + (p.name || '-') + '</td>';
+        html += '<td><small>' + (p.email || '-') + '</small></td></tr>';
+    });
+    html += '</tbody></table></div></div></div>';
+    container.innerHTML = html;
+    container.style.display = '';
+    updateRcSelectedCount();
+}
+
+function toggleStatusCheck(master) {
+    var container = document.getElementById('rcStatusList');
+    container.querySelectorAll('.rc-check').forEach(function(cb) { cb.checked = master.checked; });
+    updateRcSelectedCount();
 }
 
 function toggleRcList(idx) {
