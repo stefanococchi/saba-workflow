@@ -467,7 +467,8 @@ function openReconcile() {
 
             stepInfo.stuck.forEach(function(p) {
                 var statusBadge = '';
-                if (p.has_form_data) statusBadge = '<span class="badge bg-success">form compilato</span>';
+                if (!p.email_sent) statusBadge = '<span class="badge bg-dark">mail non inviata</span>';
+                else if (p.has_form_data) statusBadge = '<span class="badge bg-success">form compilato</span>';
                 else if (p.timeout_passed) statusBadge = '<span class="badge bg-danger">timeout scaduto</span>';
                 else statusBadge = '<span class="badge bg-secondary">in attesa</span>';
 

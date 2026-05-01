@@ -1474,13 +1474,18 @@ class SchedulerService:
             if is_landing_wait and last_exec and last_exec.sent_at:
                 timeout_passed = datetime.utcnow() >= (last_exec.sent_at + timedelta(days=timeout_days))
 
+            email_sent = bool(last_exec and last_exec.sent_at)
+            exec_status = last_exec.status.value if last_exec else None
+
             by_step[step_key]['stuck'].append({
                 'id': p.id,
                 'name': ((p.first_name or '') + ' ' + (p.last_name or '')).strip() or p.email,
                 'email': p.email,
                 'has_form_data': has_form,
                 'timeout_passed': timeout_passed,
-                'sent_at': last_exec.sent_at.isoformat() if last_exec and last_exec.sent_at else None
+                'email_sent': email_sent,
+                'exec_status': exec_status,
+                'sent_at': last_exec.sent_at.isoformat() if email_sent else None
             })
 
         return {
