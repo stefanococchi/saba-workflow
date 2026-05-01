@@ -172,21 +172,20 @@ def submit_landing_data(token):
 
         if current_step:
             # If participant is already past the landing step (e.g. received a reminder),
-            # mark as completed directly — they did what was asked
+            # bring them back to the landing step and apply its configured branch
             if participant.current_step_id and participant.current_step and \
                participant.current_step.order > current_step.order:
                 SchedulerService.cancel_scheduled_executions(participant.id)
-                participant.status = ParticipantStatus.COMPLETED
-                participant.completed_at = datetime.utcnow()
+                participant.current_step_id = current_step.id
                 db.commit()
-                logger.info(f"Partecipante {participant.id} completato (form compilato dopo avanzamento a step {participant.current_step.order})")
-            else:
-                # Usa _handle_landing_branch per rispettare landing_if_filled/jump/stop
-                config = current_step.skip_conditions or {}
-                if_filled = config.get('landing_if_filled', 'continue')
-                if_filled_step = config.get('landing_if_filled_step', 0)
-                SchedulerService._handle_landing_branch(participant, current_step, if_filled, if_filled_step)
-                logger.info(f"Partecipante {participant.id} completato landing, branch: {if_filled}")
+                logger.info(f"Partecipante {participant.id} riportato a step {current_step.order} dopo form compilato")
+
+            # Usa _handle_landing_branch per rispettare landing_if_filled/jump/stop
+            config = current_step.skip_conditions or {}
+            if_filled = config.get('landing_if_filled', 'continue')
+            if_filled_step = config.get('landing_if_filled_step', 0)
+            SchedulerService._handle_landing_branch(participant, current_step, if_filled, if_filled_step)
+            logger.info(f"Partecipante {participant.id} completato landing, branch: {if_filled}")
         else:
             # Nessuno step trovato — marca completato come fallback
             participant.status = ParticipantStatus.COMPLETED
