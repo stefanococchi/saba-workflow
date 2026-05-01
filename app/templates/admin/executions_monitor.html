@@ -993,7 +993,7 @@ function renderFlowCurrent() {
             var psubs = step.participant_substates || [];
             psubs.forEach(function(ss) {
                 var label = wf.steps.length > 1 ? ss.label + ' — ' + step.name : ss.label;
-                funnel.push({ key: ss.key + '_' + step.id, label: label, icon: ss.icon, color: ss.color, count: ss.count, stepId: step.id, stepName: step.name });
+                funnel.push({ key: ss.key + '_' + step.id, origKey: ss.key, label: label, icon: ss.icon, color: ss.color, count: ss.count, stepId: step.id, stepName: step.name });
             });
         });
 
@@ -1016,7 +1016,7 @@ function renderFlowCurrent() {
             var pct = (f.count / maxCount * 100);
             html += '<div class="flow-current-bar">';
             html += '<div class="flow-current-label"><i class="bi ' + f.icon + '" style="color:' + f.color + ';font-size:13px"></i> ' + f.label + '</div>';
-            html += '<div class="flow-current-track" onclick="showStepParticipants(' + f.stepId + ',\'' + f.key + '\',\'' + esc(f.stepName) + '\',\'' + f.label + '\')">';
+            html += '<div class="flow-current-track" onclick="showStepParticipants(' + f.stepId + ',\'' + f.origKey + '\',\'' + esc(f.stepName) + '\',\'' + esc(f.label) + '\')">';
             html += '<div class="flow-current-fill" style="width:' + pct + '%;background:' + f.color + '"></div>';
             html += '</div>';
             html += '<div class="flow-current-count" style="color:' + f.color + '">' + f.count + '</div>';
