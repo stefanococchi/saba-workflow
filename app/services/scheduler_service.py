@@ -330,11 +330,19 @@ class SchedulerService:
         Global cron job: checks ALL participants waiting for landing page submission.
         Runs every 10 minutes via APScheduler. Survives server restarts.
         """
-        from app.models import Participant
+        from app.models import Participant, Workflow, WorkflowStatus
         try:
-            # Find all IN_PROGRESS participants on email steps with wait_for_landing
-            participants = _db().query(Participant).filter_by(
-                status=ParticipantStatus.IN_PROGRESS
+            # Find active workflow IDs (skip paused/draft)
+            active_wf_ids = set(
+                r[0] for r in _db().query(Workflow.id).filter_by(status=WorkflowStatus.ACTIVE).all()
+            )
+            if not active_wf_ids:
+                return
+
+            # Find all IN_PROGRESS participants on active workflows
+            participants = _db().query(Participant).filter(
+                Participant.status == ParticipantStatus.IN_PROGRESS,
+                Participant.workflow_id.in_(active_wf_ids)
             ).all()
 
             checked = 0
