@@ -521,7 +521,7 @@ def batch_rollback():
     try:
         data = request.get_json()
         participant_ids = data.get('participant_ids', [])
-        target_step_order = data.get('step_order')  # None/0 = PENDING
+        target_step_order = data.get('step_order')  # None/0 = PENDING, 'end' = COMPLETED
 
         if not participant_ids:
             return jsonify({'error': 'Nessun partecipante selezionato'}), 400
@@ -536,7 +536,19 @@ def batch_rollback():
 
                 SchedulerService.cancel_scheduled_executions(pid)
 
-                if target_step_order is None or target_step_order == 0:
+                if target_step_order == 'end':
+                    participant.status = ParticipantStatus.COMPLETED
+                    participant.completed_at = datetime.utcnow()
+                    db.commit()
+                    log_activity(
+                        workflow_id=participant.workflow_id,
+                        event_type='status_changed',
+                        description='Batch rollback → COMPLETED',
+                        participant_id=pid,
+                        details={'action': 'batch_rollback', 'target': 'completed'}
+                    )
+                    results.append({'id': pid, 'status': 'ok', 'target': 'COMPLETED'})
+                elif target_step_order is None or target_step_order == 0:
                     participant.status = ParticipantStatus.PENDING
                     participant.current_step_id = None
                     participant.last_interaction = None

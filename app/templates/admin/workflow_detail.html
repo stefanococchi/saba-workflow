@@ -222,6 +222,7 @@
                         {% for step in workflow.steps %}
                         <option value="{{ step.order }}">Rollback → Step {{ step.order }}: {{ step.name }}</option>
                         {% endfor %}
+                        <option value="end">Rollback → END (completa)</option>
                     </select>
                     <button type="button" class="btn btn-warning btn-sm" id="btnRcApply" onclick="applyRcAction()">
                         <i class="bi bi-check-lg"></i> Applica
@@ -582,8 +583,8 @@ function applyRcAction() {
     if (action === 'reconcile') {
         _doReconcile(ids);
     } else {
-        var stepOrder = action === 'pending' ? 0 : parseInt(action);
-        var label = action === 'pending' ? 'PENDING' : 'Step ' + action;
+        var stepOrder = action === 'pending' ? 0 : (action === 'end' ? 'end' : parseInt(action));
+        var label = action === 'pending' ? 'PENDING' : (action === 'end' ? 'COMPLETED' : 'Step ' + action);
         if (!confirm('Rollback di ' + ids.length + ' partecipanti a ' + label + '?')) return;
         _doRollback(ids, stepOrder);
     }
