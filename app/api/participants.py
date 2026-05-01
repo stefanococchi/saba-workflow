@@ -490,8 +490,9 @@ def rollback_participant(participant_id):
             participant.current_step_id = target_step.id
             db.commit()
 
-            # Schedula lo step target
-            SchedulerService.schedule_step(participant, target_step, delay_hours=0)
+            # Schedula lo step target solo se workflow attivo
+            if participant.workflow.status == WorkflowStatus.ACTIVE:
+                SchedulerService.schedule_step(participant, target_step, delay_hours=0)
 
             log_activity(
                 workflow_id=participant.workflow_id,
@@ -589,7 +590,8 @@ def batch_rollback():
                     participant.current_step_id = target_step.id
                     db.commit()
 
-                    SchedulerService.schedule_step(participant, target_step, delay_hours=0)
+                    if participant.workflow.status == WorkflowStatus.ACTIVE:
+                        SchedulerService.schedule_step(participant, target_step, delay_hours=0)
 
                     log_activity(
                         workflow_id=participant.workflow_id,
