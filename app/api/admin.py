@@ -636,8 +636,7 @@ def export_completed_excel():
             Participant.email, Participant.collected_data
         ).filter(
             Participant.workflow_id == workflow_id,
-            Participant.status == ParticipantStatus.COMPLETED,
-            Participant.collected_data.isnot(None)
+            Participant.status == ParticipantStatus.COMPLETED
         ).order_by(Participant.last_name, Participant.first_name).all()
 
         import pytz
