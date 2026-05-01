@@ -262,10 +262,17 @@ def resume_stuck_participants(workflow_id):
             step = p.current_step
             if not step:
                 continue
-            # Skip landing wait steps — cron job handles those
+            # For landing wait steps: skip only if email was already sent (cron handles those)
             config = step.skip_conditions or {}
             if step.type.value == 'email' and config.get('wait_for_landing'):
-                continue
+                has_sent = db.query(Execution).filter(
+                    Execution.participant_id == p.id,
+                    Execution.step_id == step.id,
+                    Execution.status.in_([ExecutionStatus.SENT, ExecutionStatus.DELIVERED,
+                                          ExecutionStatus.OPENED, ExecutionStatus.CLICKED])
+                ).first()
+                if has_sent:
+                    continue
 
             SchedulerService.schedule_step(p, step, delay_hours=0)
             resumed += 1
