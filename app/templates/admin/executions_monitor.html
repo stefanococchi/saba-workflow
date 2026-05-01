@@ -1105,10 +1105,14 @@ renderFlowCharts();
     // Show loading state
     document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div> ' + (T.loading || 'Caricamento...') + '</td></tr>';
 
-    // Build set of active step names from FLOW_DATA
+    // Build set of active step names from FLOW_DATA (only steps with substates)
     var _activeStepNames = {};
     for (var _wfId in FLOW_DATA) {
-        (FLOW_DATA[_wfId].steps || []).forEach(function(s) { _activeStepNames[s.name] = true; });
+        (FLOW_DATA[_wfId].steps || []).forEach(function(s) {
+            if ((s.substates && s.substates.length > 0) || (s.participant_substates && s.participant_substates.length > 0)) {
+                _activeStepNames[s.name] = true;
+            }
+        });
     }
 
     fetch(url)
