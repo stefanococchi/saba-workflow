@@ -391,7 +391,9 @@ var queryConditions = [];
         (data.sf_keys || []).forEach(function(k) {
             ALL_COLUMNS.push({ key: 'sf_' + k, label: SF_LABELS[k] || k, default: false });
         });
-        (data.cd_keys || []).forEach(function(k) {
+        var ALL_CD_KEYS = data.cd_keys || [];
+        window._allCdKeys = ALL_CD_KEYS;
+        ALL_CD_KEYS.forEach(function(k) {
             ALL_COLUMNS.push({ key: 'cd_' + k, label: k, default: false });
         });
         visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(function(c) { return c.key; });
@@ -803,8 +805,56 @@ var _editSfLabels = SF_LABELS;
 var _editCollectedDataOriginal = {};
 
 function addCollectedField() {
-    var key = prompt('Nome del campo:');
-    if (!key) return;
+    // Get existing keys already in the form
+    var usedKeys = {};
+    document.querySelectorAll('.edit-cd-field').forEach(function(el) {
+        if (el.dataset.cdKey) usedKeys[el.dataset.cdKey] = true;
+    });
+    // Filter available keys (from all participants) excluding already-used ones
+    var available = (window._allCdKeys || []).filter(function(k) { return !usedKeys[k]; });
+
+    if (available.length === 0) {
+        // No suggestions available, fallback to prompt
+        var key = prompt('Nome del campo:');
+        if (!key) return;
+        _insertCollectedField(key);
+        return;
+    }
+
+    // Build a picker modal
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--md-surface,#fff);border-radius:16px;padding:24px;min-width:320px;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,.2)';
+    box.innerHTML = '<h6 style="color:var(--md-primary);margin-bottom:16px"><i class="bi bi-collection"></i> Seleziona campo</h6>' +
+        '<div id="_cdPickerList" style="max-height:240px;overflow-y:auto;margin-bottom:12px"></div>' +
+        '<div style="border-top:1px solid var(--md-outline-variant,#ddd);padding-top:12px;display:flex;gap:8px">' +
+        '<button type="button" class="btn btn-sm btn-outline-primary" id="_cdPickerCustom"><i class="bi bi-plus-lg"></i> Campo personalizzato</button>' +
+        '<button type="button" class="btn btn-sm btn-outline-secondary" id="_cdPickerCancel">Annulla</button></div>';
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    var listEl = box.querySelector('#_cdPickerList');
+    available.forEach(function(k) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-outline-secondary d-block w-100 text-start mb-1';
+        btn.style.cssText = 'border-radius:8px;padding:8px 12px';
+        btn.textContent = k;
+        btn.onclick = function() { document.body.removeChild(overlay); _insertCollectedField(k); };
+        listEl.appendChild(btn);
+    });
+
+    box.querySelector('#_cdPickerCancel').onclick = function() { document.body.removeChild(overlay); };
+    box.querySelector('#_cdPickerCustom').onclick = function() {
+        document.body.removeChild(overlay);
+        var key = prompt('Nome del campo:');
+        if (key) _insertCollectedField(key);
+    };
+    overlay.onclick = function(e) { if (e.target === overlay) document.body.removeChild(overlay); };
+}
+
+function _insertCollectedField(key) {
     var row = document.querySelector('.edit-cd-field') ? document.querySelector('.edit-cd-field').closest('.row') : document.getElementById('cdFieldsRow');
     if (!row) return;
     var div = document.createElement('div');
