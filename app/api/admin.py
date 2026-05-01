@@ -1412,6 +1412,7 @@ def step_participants(step_id):
     """Return participants for a given step + substate"""
     try:
         substate = request.args.get('substate', '')
+        current_only = request.args.get('current_only', '') == '1'
         step = db.get(WorkflowStep, step_id)
         if not step:
             return jsonify({'error': 'Step not found'}), 404
@@ -1441,7 +1442,13 @@ def step_participants(step_id):
             )
             pids = [r[0] for r in rows.distinct().all()]
             if pids:
-                parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
+                query = db.query(Participant).filter(Participant.id.in_(pids))
+                if current_only:
+                    query = query.filter(
+                        Participant.current_step_id == step_id,
+                        Participant.status == ParticipantStatus.IN_PROGRESS
+                    )
+                parts = query.all()
                 participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
         elif substate in EXEC_SUBSTATES:
             # Map 'sent' to include 'delivered' too
@@ -1453,7 +1460,13 @@ def step_participants(step_id):
                 Execution.status.in_(statuses)
             ).distinct().all()]
             if pids:
-                parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
+                query = db.query(Participant).filter(Participant.id.in_(pids))
+                if current_only:
+                    query = query.filter(
+                        Participant.current_step_id == step_id,
+                        Participant.status == ParticipantStatus.IN_PROGRESS
+                    )
+                parts = query.all()
                 participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
 
         return jsonify({'participants': participants, 'step': step.name, 'substate': substate}), 200

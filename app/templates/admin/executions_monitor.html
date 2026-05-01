@@ -1086,8 +1086,8 @@ function showCurrentParticipants(wfId, status, wfName) {
 // STEP PARTICIPANTS DRILL-DOWN
 // =============================================
 function showStepParticipants(stepId, substate, stepName, substateLabel) {
-    var title = esc(stepName) + ' — ' + substateLabel;
-    _openInfoModal(title, '/admin/api/step/' + stepId + '/participants?substate=' + encodeURIComponent(substate));
+    var title = substateLabel;
+    _openInfoModal(title, '/admin/api/step/' + stepId + '/participants?substate=' + encodeURIComponent(substate) + '&current_only=1');
 }
 
 // =============================================
@@ -1105,10 +1105,19 @@ renderFlowCharts();
     // Show loading state
     document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div> ' + (T.loading || 'Caricamento...') + '</td></tr>';
 
+    // Build set of active step names from FLOW_DATA
+    var _activeStepNames = {};
+    for (var _wfId in FLOW_DATA) {
+        (FLOW_DATA[_wfId].steps || []).forEach(function(s) { _activeStepNames[s.name] = true; });
+    }
+
     fetch(url)
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        ALL_TIMELINE = data;
+        // Filter out events for deleted/removed steps
+        ALL_TIMELINE = data.filter(function(evt) {
+            return !evt.step || evt.step === '—' || _activeStepNames[evt.step];
+        });
         _timelineLoaded = true;
         updateCounts();
         applyFilters();
