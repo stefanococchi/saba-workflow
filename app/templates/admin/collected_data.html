@@ -569,7 +569,7 @@ function viewData(id) {
 
     // Show loading, then fetch full data on demand
     body.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
-    _getDataModal().show();
+    (bootstrap.Modal.getInstance(document.getElementById('dataModal')) || new bootstrap.Modal(document.getElementById('dataModal'))).show();
 
     fetch('/admin/api/participant/' + id + '/full-data')
     .then(function(r) { return r.json(); })
