@@ -987,13 +987,11 @@ function renderFlowCurrent() {
         var wf = FLOW_DATA[wfId];
         if (wf.total === 0) continue;
 
-        // Flatten all substates across steps into a funnel
+        // Build participant-based funnel (each participant counted once at their current position)
         var funnel = [];
         wf.steps.forEach(function(step) {
-            step.substates.forEach(function(ss) {
-                // Skip internal/dead-end states
-                if (ss.key === 'failed' || ss.key === 'scheduled') return;
-                // Add step name to label when there are multiple steps of same type
+            var psubs = step.participant_substates || [];
+            psubs.forEach(function(ss) {
                 var label = wf.steps.length > 1 ? ss.label + ' — ' + step.name : ss.label;
                 funnel.push({ key: ss.key + '_' + step.id, label: label, icon: ss.icon, color: ss.color, count: ss.count, stepId: step.id, stepName: step.name });
             });
@@ -1008,28 +1006,20 @@ function renderFlowCurrent() {
 
         if (funnel.length === 0) continue;
 
-        // Compute "nello stato" = this count - next count
-        for (var i = 0; i < funnel.length; i++) {
-            var nextCount = (i < funnel.length - 1) ? funnel[i + 1].count : 0;
-            funnel[i].inState = funnel[i].count - nextCount;
-            if (funnel[i].inState < 0) funnel[i].inState = 0;
-        }
-
-        var maxCount = funnel[0].count || 1;
+        // No need to compute inState — counts are already per-participant at current position
+        var maxCount = wf.total || 1;
 
         html += '<div class="flow-wf">';
-        html += '<div class="flow-section-label"><i class="bi bi-funnel"></i> ' + (T.current_position || 'Nello stato') + ' — ' + esc(wf.name) + '</div>';
+        html += '<div class="flow-section-label"><i class="bi bi-funnel"></i> ' + (T.current_position || 'Posizione attuale') + ' — ' + esc(wf.name) + ' <small style="color:var(--md-on-surface-variant)">(' + wf.total + ' partecipanti)</small></div>';
 
         funnel.forEach(function(f) {
-            var pctEntered = (f.count / maxCount * 100);
-            var pctInState = (f.inState / maxCount * 100);
+            var pct = (f.count / maxCount * 100);
             html += '<div class="flow-current-bar">';
             html += '<div class="flow-current-label"><i class="bi ' + f.icon + '" style="color:' + f.color + ';font-size:13px"></i> ' + f.label + '</div>';
             html += '<div class="flow-current-track" onclick="showStepParticipants(' + f.stepId + ',\'' + f.key + '\',\'' + esc(f.stepName) + '\',\'' + f.label + '\')">';
-            html += '<div class="flow-current-fill" style="width:' + pctEntered + '%;background:' + f.color + ';opacity:0.25;position:absolute"></div>';
-            html += '<div class="flow-current-fill" style="width:' + pctInState + '%;background:' + f.color + '"></div>';
+            html += '<div class="flow-current-fill" style="width:' + pct + '%;background:' + f.color + '"></div>';
             html += '</div>';
-            html += '<div class="flow-current-count" style="color:' + f.color + '">' + f.inState + ' <small style="font-weight:400;color:var(--md-on-surface-variant)">/' + f.count + '</small></div>';
+            html += '<div class="flow-current-count" style="color:' + f.color + '">' + f.count + '</div>';
             html += '</div>';
         });
 

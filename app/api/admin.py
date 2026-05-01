@@ -1044,6 +1044,62 @@ def executions_monitor():
         ).group_by(Participant.workflow_id, Participant.current_step_id).all():
             current_at_batch[(wf_id, step_id)] = cnt
 
+        # Batch 6: For current position funnel — count participants (not executions)
+        # per step per their highest execution status, only for participants AT that step
+        from sqlalchemy import case
+        STATUS_RANK = {'scheduled': 1, 'sent': 2, 'delivered': 2, 'opened': 3, 'clicked': 4, 'completed': 5, 'failed': 0, 'skipped': 0}
+        # Get each participant's best execution status at their current step
+        participant_substates = {}  # (step_id) → {substate: count}
+        if all_step_ids:
+            # Query: for each participant at their current step, get all execution statuses
+            rows = db.query(
+                Participant.current_step_id,
+                Participant.id,
+                Execution.status
+            ).join(
+                Execution,
+                (Execution.participant_id == Participant.id) & (Execution.step_id == Participant.current_step_id)
+            ).filter(
+                Participant.workflow_id.in_(target_wf_ids),
+                Participant.current_step_id.in_(all_step_ids),
+                Participant.status == ParticipantStatus.IN_PROGRESS
+            ).all()
+
+            # For each participant, keep the highest-ranked status
+            best_status = {}  # (step_id, participant_id) → best_status
+            for step_id, pid, exec_status in rows:
+                key = (step_id, pid)
+                rank = STATUS_RANK.get(exec_status.value, 0)
+                if key not in best_status or rank > STATUS_RANK.get(best_status[key], 0):
+                    best_status[key] = exec_status.value
+
+            # Count participants per step per best status
+            for (step_id, pid), status_val in best_status.items():
+                # Normalize delivered to sent
+                if status_val == 'delivered':
+                    status_val = 'sent'
+                participant_substates.setdefault(step_id, {})
+                participant_substates[step_id][status_val] = participant_substates[step_id].get(status_val, 0) + 1
+
+            # Also check activity logs for landing_opened / form_submitted for participants at current step
+            if all_step_ids:
+                activity_current = {}  # step_id → {event: count}
+                for step_id, evt, cnt in db.query(
+                    Participant.current_step_id,
+                    ActivityLog.event_type,
+                    func.count(func.distinct(ActivityLog.participant_id))
+                ).join(
+                    ActivityLog,
+                    (ActivityLog.participant_id == Participant.id)
+                ).filter(
+                    Participant.workflow_id.in_(target_wf_ids),
+                    Participant.current_step_id.in_(all_step_ids),
+                    Participant.status == ParticipantStatus.IN_PROGRESS,
+                    ActivityLog.event_type.in_(['landing_opened', 'form_submitted', 'survey_submitted']),
+                    (ActivityLog.step_id == Participant.current_step_id) | (ActivityLog.step_id.is_(None))
+                ).group_by(Participant.current_step_id, ActivityLog.event_type).all():
+                    activity_current.setdefault(step_id, {})[evt] = cnt
+
         # Build flow_data from batched results (no more queries in loops)
         for wf in target_workflows:
             wf_pcounts = participant_counts.get(wf.id, {})
@@ -1116,6 +1172,30 @@ def executions_monitor():
                 if failed:
                     substates.append({'key': 'failed', 'label': 'Failed', 'count': failed, 'icon': 'bi-x-circle', 'color': '#f44336'})
 
+                # Build participant-based substates for current position funnel
+                p_sub = participant_substates.get(step.id, {})
+                a_cur = activity_current.get(step.id, {}) if 'activity_current' in dir() else {}
+                p_substates = []
+                p_sent = p_sub.get('sent', 0)
+                p_opened = p_sub.get('opened', 0)
+                p_clicked = p_sub.get('clicked', 0)
+                p_completed = p_sub.get('completed', 0)
+                p_landing = a_cur.get('landing_opened', 0)
+                p_form = a_cur.get('form_submitted', 0)
+                p_survey = a_cur.get('survey_submitted', 0)
+                if p_sent:
+                    p_substates.append({'key': 'sent', 'label': 'Email Sent', 'count': p_sent, 'icon': 'bi-envelope-check', 'color': '#2196f3'})
+                if p_opened:
+                    p_substates.append({'key': 'opened', 'label': 'Email Opened', 'count': p_opened, 'icon': 'bi-envelope-open', 'color': '#00bcd4'})
+                if p_clicked:
+                    p_substates.append({'key': 'clicked', 'label': 'Link Clicked', 'count': p_clicked, 'icon': 'bi-cursor', 'color': '#9c27b0'})
+                if p_landing:
+                    p_substates.append({'key': 'landing_opened', 'label': 'Landing Opened', 'count': p_landing, 'icon': 'bi-box-arrow-up-right', 'color': '#ff9800'})
+                if p_form:
+                    p_substates.append({'key': 'form_submitted', 'label': 'Form Submitted', 'count': p_form, 'icon': 'bi-check2-square', 'color': '#4caf50'})
+                if p_survey:
+                    p_substates.append({'key': 'survey_submitted', 'label': 'Survey Submitted', 'count': p_survey, 'icon': 'bi-ui-checks', 'color': '#00bcd4'})
+
                 steps_flow.append({
                     'id': step.id,
                     'order': step.order,
@@ -1124,6 +1204,7 @@ def executions_monitor():
                     'entered': total_entered,
                     'current_at': current_at_batch.get((wf.id, step.id), 0),
                     'substates': substates,
+                    'participant_substates': p_substates,
                 })
 
             flow_data[wf.id] = {
