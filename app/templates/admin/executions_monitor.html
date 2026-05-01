@@ -984,27 +984,26 @@ function renderFlowCurrent() {
 
         if (funnel.length === 0) continue;
 
-        // No need to compute inState — counts are already per-participant at current position
-        var maxCount = wf.total || 1;
-
         html += '<div class="flow-wf">';
-        html += '<div class="flow-section-label"><i class="bi bi-funnel"></i> ' + (T.current_position || 'Posizione attuale') + ' — ' + esc(wf.name) + ' <small style="color:var(--md-on-surface-variant)">(' + wf.total + ' partecipanti)</small></div>';
+        html += '<div class="flow-section-label"><i class="bi bi-funnel"></i> ' + (T.current_position || 'Posizione attuale') + ' — ' + esc(wf.name) + ' <small style="color:var(--md-on-surface-variant)">(' + wf.total + ' ' + (T.participants || 'partecipanti') + ')</small></div>';
+
+        html += '<table class="table table-sm mb-0" style="font-size:13px">';
+        html += '<thead><tr><th style="color:var(--md-on-surface-variant);font-weight:500"></th>';
+        html += '<th style="color:var(--md-on-surface-variant);font-weight:500;text-align:right;width:80px">' + (T.entered_col || 'Ingressi') + '</th>';
+        html += '<th style="color:var(--md-on-surface-variant);font-weight:500;text-align:right;width:80px">' + (T.in_state_col || 'Nello stato') + '</th>';
+        html += '</tr></thead><tbody>';
 
         funnel.forEach(function(f) {
-            var pctEntered = (f.entered / maxCount * 100);
-            var pctInState = (f.count / maxCount * 100);
             var isSubstate = f.origKey !== 'sent' && f.origKey !== 'completed' && f.origKey !== 'pending';
-            html += '<div class="flow-current-bar"' + (isSubstate ? ' style="margin-left:24px"' : '') + '>';
-            html += '<div class="flow-current-label"><i class="bi ' + f.icon + '" style="color:' + f.color + ';font-size:13px"></i> ' + f.label + '</div>';
             var clickHandler = f.stepId ? 'showStepParticipants(' + f.stepId + ',\'' + f.origKey + '\',\'' + esc(f.stepName) + '\',\'' + esc(f.label) + '\')' : 'showCurrentParticipants(' + wfId + ',\'' + f.origKey + '\',\'' + esc(wf.name) + '\')';
-            html += '<div class="flow-current-track" onclick="' + clickHandler + '">';
-            html += '<div class="flow-current-fill" style="width:' + pctEntered + '%;background:' + f.color + ';opacity:0.25;position:absolute"></div>';
-            html += '<div class="flow-current-fill" style="width:' + pctInState + '%;background:' + f.color + '"></div>';
-            html += '</div>';
-            html += '<div class="flow-current-count" style="color:' + f.color + '">' + f.count + ' <small style="font-weight:400;color:var(--md-on-surface-variant)">/' + f.entered + '</small></div>';
-            html += '</div>';
+            html += '<tr style="cursor:pointer" onclick="' + clickHandler + '">';
+            html += '<td' + (isSubstate ? ' style="padding-left:32px"' : '') + '><i class="bi ' + f.icon + '" style="color:' + f.color + ';font-size:13px"></i> ' + f.label + '</td>';
+            html += '<td style="text-align:right;color:var(--md-on-surface-variant)">' + f.entered + '</td>';
+            html += '<td style="text-align:right;font-weight:600;color:' + f.color + '">' + f.count + '</td>';
+            html += '</tr>';
         });
 
+        html += '</tbody></table>';
         html += '</div>';
     }
     container.innerHTML = html;
