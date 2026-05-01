@@ -999,14 +999,23 @@ def executions_monitor():
                 all_step_ids.append(s.id)
                 step_map[s.id] = s
 
-        exec_batch = {}  # step_id → {status: count}
+        exec_batch = {}  # step_id → {status: count of distinct participants}
+        entered_batch = {}  # step_id → total distinct participants (excluding skipped)
         if all_step_ids:
             for step_id, status, cnt in db.query(
-                Execution.step_id, Execution.status, func.count(Execution.id)
+                Execution.step_id, Execution.status, func.count(func.distinct(Execution.participant_id))
             ).filter(Execution.step_id.in_(all_step_ids)).group_by(
                 Execution.step_id, Execution.status
             ).all():
                 exec_batch.setdefault(step_id, {})[status.value] = cnt
+
+            for step_id, cnt in db.query(
+                Execution.step_id, func.count(func.distinct(Execution.participant_id))
+            ).filter(
+                Execution.step_id.in_(all_step_ids),
+                Execution.status != ExecutionStatus.SKIPPED
+            ).group_by(Execution.step_id).all():
+                entered_batch[step_id] = cnt
 
         # Batch 3: activity counts per step+event (distinct participants) (1 query)
         activity_by_step = {}  # step_id → {event_type: count}
@@ -1161,7 +1170,7 @@ def executions_monitor():
                 completed = exec_map.get('completed', 0)
                 failed = exec_map.get('failed', 0)
                 skipped = exec_map.get('skipped', 0)
-                total_entered = sum(exec_map.values()) - skipped
+                total_entered = entered_batch.get(step.id, 0)
 
                 if scheduled:
                     substates.append({'key': 'scheduled', 'label': 'Scheduled', 'count': scheduled, 'icon': 'bi-clock', 'color': '#ff9800'})
