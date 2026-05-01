@@ -1436,11 +1436,9 @@ def step_participants(step_id):
                 ActivityLog.event_type == substate,
                 ActivityLog.participant_id.isnot(None)
             )
-            if substate != 'landing_opened':
-                # For non-landing events, also filter by step if available
-                rows = rows.filter(
-                    (ActivityLog.step_id == step_id) | (ActivityLog.step_id.is_(None))
-                )
+            rows = rows.filter(
+                (ActivityLog.step_id == step_id) | (ActivityLog.step_id.is_(None))
+            )
             pids = [r[0] for r in rows.distinct().all()]
             if pids:
                 parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
