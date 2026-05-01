@@ -318,66 +318,84 @@ class SchedulerService:
     @staticmethod
     def _schedule_landing_wait(participant, step, config):
         """
-        After sending email with landing, poll for form submission.
-        Checks every 10 minutes. After timeout_days, branches based on config.
+        Mark participant as waiting for landing page submission.
+        Actual polling is handled by the global cron job check_all_landing_waits().
         """
-        timeout_days = config.get('landing_timeout_days', 7)
-        timeout_at = datetime.utcnow() + timedelta(days=timeout_days)
-        if_filled = config.get('landing_if_filled', 'continue')
-        if_filled_step = config.get('landing_if_filled_step', 0)
-        if_timeout = config.get('landing_if_timeout', 'continue')
-        if_timeout_step = config.get('landing_if_timeout_step', 0)
+        logger.info(f"✓ Landing wait registered for participant {participant.id}, "
+                     f"timeout in {config.get('landing_timeout_days', 7)} days")
 
-        def _check_landing(participant_id, step_id, timeout_iso, cfg):
-            from app import create_app
-            app = create_app()
-            with app.app_context():
-                try:
-                    p = _db().get(Participant, participant_id)
-                    s = _db().get(WorkflowStep, step_id)
-                    if not p or not s:
-                        return
+    @staticmethod
+    def check_all_landing_waits():
+        """
+        Global cron job: checks ALL participants waiting for landing page submission.
+        Runs every 10 minutes via APScheduler. Survives server restarts.
+        """
+        from app.models import Participant
+        try:
+            # Find all IN_PROGRESS participants on email steps with wait_for_landing
+            participants = _db().query(Participant).filter_by(
+                status=ParticipantStatus.IN_PROGRESS
+            ).all()
 
-                    timeout_dt = datetime.fromisoformat(timeout_iso)
-                    now = datetime.utcnow()
+            checked = 0
+            acted = 0
 
-                    # Check if form was submitted
-                    if p.collected_data and len(p.collected_data) > 0:
-                        logger.info(f"✓ Landing form submitted by participant {participant_id}")
-                        SchedulerService._handle_landing_branch(p, s, cfg['if_filled'], cfg['if_filled_step'])
-                        return
+            for p in participants:
+                step = p.current_step
+                if not step or step.type.value != 'email':
+                    continue
+                config = step.skip_conditions or {}
+                if not config.get('wait_for_landing'):
+                    continue
 
-                    # Check timeout
-                    if now >= timeout_dt:
-                        logger.info(f"⏰ Landing wait timeout for participant {participant_id}")
-                        SchedulerService._handle_landing_branch(p, s, cfg['if_timeout'], cfg['if_timeout_step'])
-                        return
+                # Skip if participant has scheduled executions (still progressing)
+                has_scheduled = _db().query(Execution).filter_by(
+                    participant_id=p.id,
+                    status=ExecutionStatus.SCHEDULED
+                ).first()
+                if has_scheduled:
+                    continue
 
-                    # Re-schedule check in 10 minutes
-                    import threading
-                    def _delayed():
-                        import time
-                        time.sleep(10 * 60)
-                        _check_landing(participant_id, step_id, timeout_iso, cfg)
-                    t = threading.Thread(target=_delayed, daemon=True)
-                    t.start()
+                checked += 1
+                timeout_days = config.get('landing_timeout_days', 7)
+                if_filled = config.get('landing_if_filled', 'continue')
+                if_filled_step = config.get('landing_if_filled_step', 0)
+                if_timeout = config.get('landing_if_timeout', 'continue')
+                if_timeout_step = config.get('landing_if_timeout_step', 0)
 
-                except Exception as e:
-                    logger.error(f"✗ Landing wait check error: {str(e)}")
+                # Find when email was sent
+                last_exec = _db().query(Execution).filter_by(
+                    participant_id=p.id, step_id=step.id
+                ).filter(
+                    Execution.status.in_([
+                        ExecutionStatus.SENT, ExecutionStatus.DELIVERED,
+                        ExecutionStatus.OPENED, ExecutionStatus.CLICKED
+                    ])
+                ).order_by(Execution.sent_at.desc()).first()
 
-        # Start first check in 10 minutes
-        import threading
-        cfg = {
-            'if_filled': if_filled, 'if_filled_step': if_filled_step,
-            'if_timeout': if_timeout, 'if_timeout_step': if_timeout_step
-        }
-        def _delayed_start():
-            import time
-            time.sleep(10 * 60)
-            _check_landing(participant.id, step.id, timeout_at.isoformat(), cfg)
-        t = threading.Thread(target=_delayed_start, daemon=True)
-        t.start()
-        logger.info(f"✓ Landing wait started for participant {participant.id}, timeout in {timeout_days} days")
+                if not last_exec or not last_exec.sent_at:
+                    continue
+
+                # Check if form was submitted
+                if p.collected_data and len(p.collected_data) > 0:
+                    logger.info(f"✓ Landing form submitted by participant {p.id}")
+                    SchedulerService._handle_landing_branch(p, step, if_filled, if_filled_step)
+                    acted += 1
+                    continue
+
+                # Check timeout
+                timeout_at = last_exec.sent_at + timedelta(days=timeout_days)
+                if datetime.utcnow() >= timeout_at:
+                    logger.info(f"⏰ Landing wait timeout for participant {p.id}")
+                    SchedulerService._handle_landing_branch(p, step, if_timeout, if_timeout_step)
+                    acted += 1
+
+            if checked > 0:
+                logger.info(f"🔄 Landing wait check: {checked} checked, {acted} acted on")
+
+        except Exception as e:
+            logger.error(f"✗ Landing wait cron error: {str(e)}")
+            _db().rollback()
 
     @staticmethod
     def _handle_landing_branch(participant, step, action, jump_target):
@@ -1387,9 +1405,8 @@ class SchedulerService:
                     return {'action': 'timeout_branch', 'branch': if_timeout,
                             'target': if_timeout_step if if_timeout == 'jump' else if_timeout}
 
-            # Still within timeout — restart polling
-            SchedulerService._schedule_landing_wait(p, step, config)
-            return {'action': 'polling_restarted'}
+            # Still within timeout — cron job will pick it up automatically
+            return {'action': 'waiting', 'reason': 'within_timeout'}
 
         # Non-landing step: just schedule next step
         SchedulerService._schedule_next_step(p, step)
@@ -1416,7 +1433,7 @@ class SchedulerService:
         ) if participants else set()
 
         summary = {'total': len(participants), 'completed': 0, 'pending': 0,
-                   'in_progress': 0, 'stuck_landing_wait': 0, 'stuck_other': 0,
+                   'in_progress': 0, 'waiting_landing': 0, 'actionable': 0,
                    'bounced': 0, 'unsubscribed': 0}
         by_step = {}
 
@@ -1434,24 +1451,61 @@ class SchedulerService:
                 summary['unsubscribed'] += 1
                 continue
 
-            # IN_PROGRESS
-            if p.id in scheduled_pids:
-                summary['in_progress'] += 1
-                continue
-
-            # Stuck — determine type
+            # IN_PROGRESS — determine sub-state
             step = p.current_step
             if not step:
-                summary['stuck_other'] += 1
+                summary['in_progress'] += 1
                 continue
 
             config = step.skip_conditions or {}
             is_landing_wait = (step.type.value == 'email' and config.get('wait_for_landing'))
 
-            if is_landing_wait:
-                summary['stuck_landing_wait'] += 1
+            if not is_landing_wait:
+                if p.id in scheduled_pids:
+                    summary['in_progress'] += 1
+                else:
+                    summary['actionable'] += 1
+                    # Group stuck non-landing
+                    step_key = step.id
+                    if step_key not in by_step:
+                        by_step[step_key] = {
+                            'step_id': step.id, 'step_order': step.order,
+                            'step_name': step.name, 'step_type': step.type.value,
+                            'wait_for_landing': False, 'participants': []
+                        }
+                    by_step[step_key]['participants'].append({
+                        'id': p.id,
+                        'name': ((p.first_name or '') + ' ' + (p.last_name or '')).strip() or p.email,
+                        'email': p.email, 'status_label': 'stuck',
+                        'has_form_data': False, 'timeout_passed': False,
+                        'email_sent': False, 'exec_status': None, 'sent_at': None
+                    })
+                continue
+
+            # Landing wait — get execution context
+            last_exec = _db().query(Execution).filter_by(
+                participant_id=p.id, step_id=step.id
+            ).filter(
+                Execution.status.in_([
+                    ExecutionStatus.SENT, ExecutionStatus.DELIVERED,
+                    ExecutionStatus.OPENED, ExecutionStatus.CLICKED
+                ])
+            ).order_by(Execution.sent_at.desc()).first()
+
+            has_form = bool(p.collected_data and len(p.collected_data) > 0)
+            email_sent = bool(last_exec and last_exec.sent_at)
+            timeout_days = config.get('landing_timeout_days', 7)
+            timeout_passed = False
+            if email_sent:
+                timeout_passed = datetime.utcnow() >= (last_exec.sent_at + timedelta(days=timeout_days))
+
+            # Determine sub-state
+            if has_form or timeout_passed:
+                summary['actionable'] += 1
+                status_label = 'form_compilato' if has_form else 'timeout_scaduto'
             else:
-                summary['stuck_other'] += 1
+                summary['waiting_landing'] += 1
+                status_label = 'in_attesa' if email_sent else 'mail_non_inviata'
 
             # Group by step
             step_key = step.id
@@ -1459,32 +1513,18 @@ class SchedulerService:
                 by_step[step_key] = {
                     'step_id': step.id, 'step_order': step.order,
                     'step_name': step.name, 'step_type': step.type.value,
-                    'wait_for_landing': is_landing_wait,
-                    'stuck': []
+                    'wait_for_landing': True, 'participants': []
                 }
 
-            # Get last execution for context
-            last_exec = _db().query(Execution).filter_by(
-                participant_id=p.id, step_id=step.id
-            ).order_by(Execution.sent_at.desc()).first()
-
-            has_form = bool(p.collected_data and len(p.collected_data) > 0)
-            timeout_days = config.get('landing_timeout_days', 7)
-            timeout_passed = False
-            if is_landing_wait and last_exec and last_exec.sent_at:
-                timeout_passed = datetime.utcnow() >= (last_exec.sent_at + timedelta(days=timeout_days))
-
-            email_sent = bool(last_exec and last_exec.sent_at)
-            exec_status = last_exec.status.value if last_exec else None
-
-            by_step[step_key]['stuck'].append({
+            by_step[step_key]['participants'].append({
                 'id': p.id,
                 'name': ((p.first_name or '') + ' ' + (p.last_name or '')).strip() or p.email,
                 'email': p.email,
+                'status_label': status_label,
                 'has_form_data': has_form,
                 'timeout_passed': timeout_passed,
                 'email_sent': email_sent,
-                'exec_status': exec_status,
+                'exec_status': last_exec.status.value if last_exec else None,
                 'sent_at': last_exec.sent_at.isoformat() if email_sent else None
             })
 

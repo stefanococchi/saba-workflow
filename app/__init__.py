@@ -84,6 +84,14 @@ def create_app(config_object=None):
     if not scheduler.running:
         scheduler.configure(timezone=app.config['SCHEDULER_TIMEZONE'])
         scheduler.start()
+
+        # Cron job: controlla landing wait ogni 10 minuti
+        from app.services.scheduler_service import SchedulerService
+        def _landing_wait_cron():
+            with app.app_context():
+                SchedulerService.check_all_landing_waits()
+        scheduler.add_job(_landing_wait_cron, 'interval', minutes=10,
+                          id='landing_wait_cron', replace_existing=True)
     
     # Language switch route
     @app.route('/set-lang/<lang>')

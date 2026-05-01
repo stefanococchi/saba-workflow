@@ -434,18 +434,17 @@ function openReconcile() {
     .then(data => {
         _reconcileData = data;
         var s = data.summary;
-        var totalStuck = s.stuck_landing_wait + s.stuck_other;
 
         var html = '<div class="row g-2 mb-3">';
         html += _rcBadge('Totale', s.total, 'secondary');
         html += _rcBadge('Completati', s.completed, 'success');
         html += _rcBadge('In corso', s.in_progress, 'primary');
-        html += _rcBadge('In attesa', s.pending, 'info');
-        html += _rcBadge('Bloccati', totalStuck, totalStuck > 0 ? 'warning' : 'secondary');
+        html += _rcBadge('Attesa landing', s.waiting_landing, 'info');
+        html += _rcBadge('Da gestire', s.actionable, s.actionable > 0 ? 'warning' : 'secondary');
         html += '</div>';
 
-        if (totalStuck === 0) {
-            html += '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Nessun partecipante bloccato.</div>';
+        if (data.by_step.length === 0) {
+            html += '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Nessun partecipante da gestire.</div>';
             content.innerHTML = html;
             footer.style.display = 'flex';
             document.getElementById('btnReconcileAll').style.display = 'none';
@@ -454,33 +453,51 @@ function openReconcile() {
 
         // Breakdown by step
         data.by_step.forEach(function(stepInfo) {
+            var actionable = stepInfo.participants.filter(function(p) {
+                return p.status_label === 'form_compilato' || p.status_label === 'timeout_scaduto' || p.status_label === 'stuck';
+            });
+            var waiting = stepInfo.participants.filter(function(p) {
+                return p.status_label === 'in_attesa' || p.status_label === 'mail_non_inviata';
+            });
+
             html += '<div class="card mb-2">';
             html += '<div class="card-header py-2 d-flex justify-content-between align-items-center">';
             html += '<span><i class="bi bi-envelope"></i> <strong>Step ' + stepInfo.step_order + ':</strong> ' + stepInfo.step_name;
             if (stepInfo.wait_for_landing) html += ' <span class="badge bg-info">landing wait</span>';
             html += '</span>';
-            html += '<span class="badge bg-warning">' + stepInfo.stuck.length + ' bloccati</span>';
+            html += '<div>';
+            if (waiting.length) html += '<span class="badge bg-secondary me-1">' + waiting.length + ' in attesa</span>';
+            if (actionable.length) html += '<span class="badge bg-warning">' + actionable.length + ' da gestire</span>';
+            html += '</div></div>';
+
+            if (stepInfo.participants.length > 0) {
+                html += '<div class="card-body p-2">';
+                html += '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
+                html += '<thead><tr><th><input type="checkbox" onchange="toggleStepCheck(this,' + stepInfo.step_id + ')"';
+                if (actionable.length) html += ' checked';
+                html += '></th><th>Nome</th><th>Email</th><th>Stato</th></tr></thead><tbody>';
+
+                stepInfo.participants.forEach(function(p) {
+                    var badgeMap = {
+                        'form_compilato': '<span class="badge bg-success">form compilato</span>',
+                        'timeout_scaduto': '<span class="badge bg-danger">timeout scaduto</span>',
+                        'in_attesa': '<span class="badge bg-secondary">in attesa</span>',
+                        'mail_non_inviata': '<span class="badge bg-dark">mail non inviata</span>',
+                        'stuck': '<span class="badge bg-warning">bloccato</span>'
+                    };
+                    var isActionable = p.status_label === 'form_compilato' || p.status_label === 'timeout_scaduto' || p.status_label === 'stuck';
+
+                    html += '<tr>';
+                    html += '<td><input type="checkbox" ' + (isActionable ? 'checked' : '') + ' class="rc-check" data-pid="' + p.id + '" data-step="' + stepInfo.step_id + '"></td>';
+                    html += '<td>' + (p.name || '-') + '</td>';
+                    html += '<td><small>' + (p.email || '-') + '</small></td>';
+                    html += '<td>' + (badgeMap[p.status_label] || p.status_label) + '</td>';
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table></div></div>';
+            }
             html += '</div>';
-            html += '<div class="card-body p-2">';
-            html += '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
-            html += '<thead><tr><th><input type="checkbox" checked onchange="toggleStepCheck(this,' + stepInfo.step_id + ')"></th><th>Nome</th><th>Email</th><th>Stato</th></tr></thead><tbody>';
-
-            stepInfo.stuck.forEach(function(p) {
-                var statusBadge = '';
-                if (!p.email_sent) statusBadge = '<span class="badge bg-dark">mail non inviata</span>';
-                else if (p.has_form_data) statusBadge = '<span class="badge bg-success">form compilato</span>';
-                else if (p.timeout_passed) statusBadge = '<span class="badge bg-danger">timeout scaduto</span>';
-                else statusBadge = '<span class="badge bg-secondary">in attesa</span>';
-
-                html += '<tr>';
-                html += '<td><input type="checkbox" checked class="rc-check" data-pid="' + p.id + '" data-step="' + stepInfo.step_id + '"></td>';
-                html += '<td>' + (p.name || '-') + '</td>';
-                html += '<td><small>' + (p.email || '-') + '</small></td>';
-                html += '<td>' + statusBadge + '</td>';
-                html += '</tr>';
-            });
-
-            html += '</tbody></table></div></div></div>';
         });
 
         content.innerHTML = html;
@@ -533,7 +550,7 @@ function executeReconcile(specificIds) {
             var actionLabel = {
                 'form_filled_branch': '<span class="badge bg-success">Form compilato</span>',
                 'timeout_branch': '<span class="badge bg-danger">Timeout</span>',
-                'polling_restarted': '<span class="badge bg-info">Polling riavviato</span>',
+                'waiting': '<span class="badge bg-info">In attesa (monitorato)</span>',
                 'next_step_scheduled': '<span class="badge bg-primary">Prossimo step</span>',
                 'skipped': '<span class="badge bg-secondary">Saltato</span>',
                 'error': '<span class="badge bg-danger">Errore</span>'
