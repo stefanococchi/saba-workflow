@@ -234,6 +234,51 @@ def start_workflow(workflow_id):
         return jsonify({'error': str(e)}), 500
 
 
+@participant_bp.route('/workflows/<int:workflow_id>/resume-stuck', methods=['POST'])
+def resume_stuck_participants(workflow_id):
+    """Resume IN_PROGRESS participants that have no scheduled executions (e.g. after rollback during pause)."""
+    try:
+        workflow = db.get(Workflow, workflow_id)
+        if not workflow:
+            return jsonify({'error': 'Workflow non trovato'}), 404
+
+        # Find IN_PROGRESS participants without any SCHEDULED execution
+        participants = db.query(Participant).filter_by(
+            workflow_id=workflow_id,
+            status=ParticipantStatus.IN_PROGRESS
+        ).all()
+
+        scheduled_pids = set(
+            r[0] for r in db.query(Execution.participant_id).filter(
+                Execution.participant_id.in_([p.id for p in participants]),
+                Execution.status == ExecutionStatus.SCHEDULED
+            ).all()
+        ) if participants else set()
+
+        resumed = 0
+        for p in participants:
+            if p.id in scheduled_pids:
+                continue
+            step = p.current_step
+            if not step:
+                continue
+            # Skip landing wait steps — cron job handles those
+            config = step.skip_conditions or {}
+            if step.type.value == 'email' and config.get('wait_for_landing'):
+                continue
+
+            SchedulerService.schedule_step(p, step, delay_hours=0)
+            resumed += 1
+
+        db.commit()
+        return jsonify({'resumed': resumed}), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error resuming stuck participants: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @participant_bp.route('/sabaform/events', methods=['GET'])
 def list_sabaform_events():
     """Lista eventi da Saba Form (read-only)"""

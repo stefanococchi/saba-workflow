@@ -295,15 +295,19 @@ function resumeWorkflow() {
     })
     .then(response => response.json())
     .then(data => {
-        // 2. Avvia step per eventuali partecipanti PENDING
-        return fetch(`/api/workflows/${workflowId}/start`, { method: 'POST' });
+        // 2. Avvia PENDING + riprendi IN_PROGRESS bloccati (rollback durante pausa)
+        return Promise.all([
+            fetch(`/api/workflows/${workflowId}/start`, { method: 'POST' }).then(r => r.json()).catch(() => ({})),
+            fetch(`/api/workflows/${workflowId}/resume-stuck`, { method: 'POST' }).then(r => r.json()).catch(() => ({}))
+        ]);
     })
-    .then(response => response.json())
-    .then(data => {
-        const msg = data.scheduled
-            ? `Workflow ripreso. ${data.scheduled} partecipanti avviati.`
-            : 'Workflow ripreso.';
-        alert(msg);
+    .then(results => {
+        var started = (results[0] && results[0].scheduled) || 0;
+        var resumed = (results[1] && results[1].resumed) || 0;
+        var parts = ['Workflow ripreso.'];
+        if (started) parts.push(started + ' partecipanti avviati.');
+        if (resumed) parts.push(resumed + ' partecipanti ripresi.');
+        alert(parts.join(' '));
         location.reload();
     })
     .catch(error => {
