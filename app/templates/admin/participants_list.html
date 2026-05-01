@@ -680,6 +680,32 @@ function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt
 // =============================================
 // ACTIONS
 // =============================================
+function isFileObj(val) { return val && typeof val === 'object' && val.filename; }
+
+function downloadFile(filename, mime, el) {
+    var b64 = el.getAttribute('data-b64');
+    var link = document.createElement('a');
+    link.href = b64;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function renderFileValue(val, mode) {
+    if (!isFileObj(val)) return esc(val);
+    var mime = val.mime || '';
+    if (!val.data) {
+        return '<i class="bi bi-paperclip"></i> ' + esc(val.filename);
+    }
+    if (mode === 'cell') return '<a href="#" onclick="downloadFile(\'' + esc(val.filename) + '\',\'' + esc(val.mime) + '\',this);return false;" data-b64="' + val.data + '" style="text-decoration:none"><i class="bi bi-paperclip"></i> ' + esc(val.filename) + '</a>';
+    var dlBtn = ' <a href="#" onclick="downloadFile(\'' + esc(val.filename) + '\',\'' + esc(val.mime) + '\',this);return false;" data-b64="' + val.data + '" class="btn btn-sm btn-outline-primary mt-1"><i class="bi bi-download"></i> Scarica</a>';
+    if (mime.startsWith('image/')) {
+        return '<div><img src="' + val.data + '" style="max-width:100%;max-height:200px;border-radius:8px;margin-bottom:4px" alt="' + esc(val.filename) + '"><br><small>' + esc(val.filename) + '</small><br>' + dlBtn + '</div>';
+    }
+    return '<div><i class="bi bi-file-earmark"></i> ' + esc(val.filename) + '<br>' + dlBtn + '</div>';
+}
+
 function viewData(id) {
     var p = ALL_PARTICIPANTS.find(function(x) { return x.id === id; });
     var body = document.getElementById('dataModalBody');
@@ -744,7 +770,7 @@ function viewData(id) {
             html += '<dl class="row" style="font-size:14px">';
             for (var k in full.collected_data) {
                 html += '<dt class="col-sm-4" style="color:var(--md-on-surface-variant)">' + esc(k) + '</dt>';
-                html += '<dd class="col-sm-8">' + esc(full.collected_data[k]) + '</dd>';
+                html += '<dd class="col-sm-8">' + renderFileValue(full.collected_data[k], 'modal') + '</dd>';
             }
             html += '</dl>';
         } else {
