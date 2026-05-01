@@ -1003,12 +1003,22 @@ function renderFlowCurrent() {
 
             // Use Status Flow substates as the template — show ALL, even with 0 current
             var baseSubs = step.substates || [];
-            if (baseSubs.length === 0) return;
+            if (baseSubs.length === 0 && psubs.length === 0) return;
 
+            var usedKeys = {};
             baseSubs.forEach(function(ss) {
+                usedKeys[ss.key] = true;
                 var cur = currentMap[ss.key];
                 var label = wf.steps.length > 1 ? ss.label + ' — ' + step.name : ss.label;
                 funnel.push({ key: ss.key + '_' + step.id, origKey: ss.key, label: label, icon: ss.icon, color: ss.color, count: cur ? cur.count : 0, entered: ss.count, stepId: step.id, stepName: step.name });
+            });
+            // Add participant_substates not present in Status Flow (e.g. landing_opened at a step
+            // where Status Flow doesn't track it, but participants are currently there)
+            psubs.forEach(function(ss) {
+                if (!usedKeys[ss.key]) {
+                    var label = wf.steps.length > 1 ? ss.label + ' — ' + step.name : ss.label;
+                    funnel.push({ key: ss.key + '_' + step.id, origKey: ss.key, label: label, icon: ss.icon, color: ss.color, count: ss.count, entered: ss.count, stepId: step.id, stepName: step.name });
+                }
             });
         });
 
