@@ -1172,8 +1172,7 @@ def executions_monitor():
                 skipped = exec_map.get('skipped', 0)
                 total_entered = entered_batch.get(step.id, 0)
 
-                if scheduled:
-                    substates.append({'key': 'scheduled', 'label': 'Scheduled', 'count': scheduled, 'icon': 'bi-clock', 'color': '#ff9800'})
+                # scheduled omitted — internal state, not meaningful to user
                 if sent:
                     substates.append({'key': 'sent', 'label': 'Email Sent', 'count': sent, 'icon': 'bi-envelope-check', 'color': '#2196f3'})
                 if opened:
