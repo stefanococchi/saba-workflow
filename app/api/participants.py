@@ -515,6 +515,93 @@ def rollback_participant(participant_id):
         return jsonify({'error': str(e)}), 500
 
 
+@participant_bp.route('/participants/batch-rollback', methods=['POST'])
+def batch_rollback():
+    """Rollback multiplo: riporta una lista di partecipanti a uno step specifico."""
+    try:
+        data = request.get_json()
+        participant_ids = data.get('participant_ids', [])
+        target_step_order = data.get('step_order')  # None/0 = PENDING
+
+        if not participant_ids:
+            return jsonify({'error': 'Nessun partecipante selezionato'}), 400
+
+        results = []
+        for pid in participant_ids:
+            try:
+                participant = db.get(Participant, pid)
+                if not participant:
+                    results.append({'id': pid, 'status': 'error', 'message': 'Non trovato'})
+                    continue
+
+                SchedulerService.cancel_scheduled_executions(pid)
+
+                if target_step_order is None or target_step_order == 0:
+                    participant.status = ParticipantStatus.PENDING
+                    participant.current_step_id = None
+                    participant.last_interaction = None
+                    db.commit()
+                    log_activity(
+                        workflow_id=participant.workflow_id,
+                        event_type='status_changed',
+                        description=f'Batch rollback → PENDING',
+                        participant_id=pid,
+                        details={'action': 'batch_rollback', 'target': 'pending'}
+                    )
+                    results.append({'id': pid, 'status': 'ok', 'target': 'pending'})
+                else:
+                    target_step = db.query(WorkflowStep).filter_by(
+                        workflow_id=participant.workflow_id,
+                        order=target_step_order
+                    ).first()
+                    if not target_step:
+                        results.append({'id': pid, 'status': 'error', 'message': f'Step {target_step_order} non trovato'})
+                        continue
+
+                    steps_to_clear = db.query(WorkflowStep).filter(
+                        WorkflowStep.workflow_id == participant.workflow_id,
+                        WorkflowStep.order >= target_step_order
+                    ).all()
+                    step_ids = [s.id for s in steps_to_clear]
+                    if step_ids:
+                        db.query(Execution).filter(
+                            Execution.participant_id == pid,
+                            Execution.step_id.in_(step_ids)
+                        ).delete(synchronize_session='fetch')
+
+                    participant.token = TokenService.generate_token(
+                        participant.id, participant.workflow_id,
+                        expires_hours=participant.workflow.token_expiration_hours
+                    )
+                    participant.status = ParticipantStatus.IN_PROGRESS
+                    participant.current_step_id = target_step.id
+                    db.commit()
+
+                    SchedulerService.schedule_step(participant, target_step, delay_hours=0)
+
+                    log_activity(
+                        workflow_id=participant.workflow_id,
+                        event_type='status_changed',
+                        description=f'Batch rollback → step {target_step.order}: {target_step.name}',
+                        participant_id=pid,
+                        step_id=target_step.id,
+                        details={'action': 'batch_rollback', 'target_step': target_step.order}
+                    )
+                    results.append({'id': pid, 'status': 'ok', 'target': f'Step {target_step.order}: {target_step.name}'})
+
+            except Exception as e:
+                db.rollback()
+                results.append({'id': pid, 'status': 'error', 'message': str(e)})
+
+        ok_count = sum(1 for r in results if r['status'] == 'ok')
+        return jsonify({'processed': ok_count, 'total': len(results), 'results': results}), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore batch rollback: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @participant_bp.route('/participants/<int:participant_id>/unsubscribe', methods=['POST'])
 def unsubscribe_participant(participant_id):
     """Cancella partecipante (unsubscribe)"""

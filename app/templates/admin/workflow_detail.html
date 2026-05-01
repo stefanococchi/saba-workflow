@@ -214,10 +214,20 @@
                 </div>
             </div>
             <div class="modal-footer" id="reconcileFooter" style="display:none">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
-                <button type="button" class="btn btn-warning" id="btnReconcileAll" onclick="executeReconcile()">
-                    <i class="bi bi-arrow-repeat"></i> Riconcilia Tutti
-                </button>
+                <div class="d-flex align-items-center gap-2 w-100 flex-wrap">
+                    <span class="text-muted me-auto" id="rcSelectedCount"></span>
+                    <select class="form-select form-select-sm" id="rcAction" style="width:auto;min-width:200px" onchange="updateRcActionBtn()">
+                        <option value="reconcile">Riconcilia (applica branch)</option>
+                        <option value="pending">Rollback → PENDING</option>
+                        {% for step in workflow.steps %}
+                        <option value="{{ step.order }}">Rollback → Step {{ step.order }}: {{ step.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" class="btn btn-warning btn-sm" id="btnRcApply" onclick="applyRcAction()">
+                        <i class="bi bi-check-lg"></i> Applica
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                </div>
             </div>
         </div>
     </div>
@@ -447,7 +457,7 @@ function openReconcile() {
             html += '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Nessun partecipante da gestire.</div>';
             content.innerHTML = html;
             footer.style.display = 'flex';
-            document.getElementById('btnReconcileAll').style.display = 'none';
+            document.getElementById('btnRcApply').style.display = 'none';
             return;
         }
 
@@ -506,7 +516,12 @@ function openReconcile() {
 
         content.innerHTML = html;
         footer.style.display = 'flex';
-        document.getElementById('btnReconcileAll').style.display = '';
+        updateRcSelectedCount();
+        updateRcActionBtn();
+        // Listen for checkbox changes
+        content.addEventListener('change', function(e) {
+            if (e.target.classList.contains('rc-check')) updateRcSelectedCount();
+        });
     })
     .catch(err => {
         content.innerHTML = '<div class="alert alert-danger">Errore: ' + err + '</div>';
@@ -528,20 +543,56 @@ function toggleStepCheck(master, stepId) {
     document.querySelectorAll('.rc-check[data-step="' + stepId + '"]').forEach(function(cb) {
         cb.checked = master.checked;
     });
+    updateRcSelectedCount();
 }
 
-function executeReconcile(specificIds) {
-    var ids = specificIds || [];
-    if (!ids.length) {
-        document.querySelectorAll('.rc-check:checked').forEach(function(cb) {
-            ids.push(parseInt(cb.dataset.pid));
-        });
+function updateRcSelectedCount() {
+    var count = document.querySelectorAll('.rc-check:checked').length;
+    var total = document.querySelectorAll('.rc-check').length;
+    var el = document.getElementById('rcSelectedCount');
+    if (el) el.textContent = count + ' di ' + total + ' selezionati';
+}
+
+function updateRcActionBtn() {
+    var action = document.getElementById('rcAction').value;
+    var btn = document.getElementById('btnRcApply');
+    if (action === 'reconcile') {
+        btn.className = 'btn btn-warning btn-sm';
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Riconcilia';
+    } else {
+        btn.className = 'btn btn-danger btn-sm';
+        btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Rollback';
     }
+}
+
+function _getSelectedIds() {
+    var ids = [];
+    document.querySelectorAll('.rc-check:checked').forEach(function(cb) {
+        ids.push(parseInt(cb.dataset.pid));
+    });
+    return ids;
+}
+
+function applyRcAction() {
+    var ids = _getSelectedIds();
     if (!ids.length) { alert('Nessun partecipante selezionato'); return; }
 
-    var btn = document.getElementById('btnReconcileAll');
+    var action = document.getElementById('rcAction').value;
+
+    if (action === 'reconcile') {
+        _doReconcile(ids);
+    } else {
+        var stepOrder = action === 'pending' ? 0 : parseInt(action);
+        var label = action === 'pending' ? 'PENDING' : 'Step ' + action;
+        if (!confirm('Rollback di ' + ids.length + ' partecipanti a ' + label + '?')) return;
+        _doRollback(ids, stepOrder);
+    }
+}
+
+function _doReconcile(ids) {
+    var btn = document.getElementById('btnRcApply');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Riconciliazione...';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
     fetch(`/api/workflows/${workflowId}/reconcile`, {
         method: 'POST',
@@ -550,36 +601,52 @@ function executeReconcile(specificIds) {
     })
     .then(r => r.json())
     .then(data => {
-        var content = document.getElementById('reconcileContent');
-        var html = '<div class="alert alert-' + (data.reconciled > 0 ? 'success' : 'info') + '">';
-        html += '<i class="bi bi-check-circle"></i> <strong>Riconciliati ' + data.reconciled + ' su ' + data.total + ' partecipanti</strong></div>';
-
-        html += '<div class="table-responsive"><table class="table table-sm"><thead><tr><th>ID</th><th>Azione</th><th>Dettagli</th></tr></thead><tbody>';
-        data.results.forEach(function(r) {
-            var actionLabel = {
-                'form_filled_branch': '<span class="badge bg-success">Form compilato</span>',
-                'timeout_branch': '<span class="badge bg-danger">Timeout</span>',
-                'waiting': '<span class="badge bg-info">In attesa (monitorato)</span>',
-                'next_step_scheduled': '<span class="badge bg-primary">Prossimo step</span>',
-                'skipped': '<span class="badge bg-secondary">Saltato</span>',
-                'error': '<span class="badge bg-danger">Errore</span>'
-            }[r.action] || '<span class="badge bg-secondary">' + r.action + '</span>';
-
-            var detail = r.reason || r.branch || r.target || '';
-            html += '<tr><td>' + r.participant_id + '</td><td>' + actionLabel + '</td><td><small>' + detail + '</small></td></tr>';
-        });
-        html += '</tbody></table></div>';
-
-        content.innerHTML = html;
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Riconcilia Tutti';
-        btn.style.display = 'none';
+        _showRcResults('Riconciliati', data.reconciled, data.total, data.results.map(function(r) {
+            var label = {
+                'form_filled_branch': 'Form compilato → branch',
+                'timeout_branch': 'Timeout → branch',
+                'waiting': 'In attesa (monitorato)',
+                'next_step_scheduled': 'Prossimo step',
+                'skipped': 'Saltato: ' + (r.reason || ''),
+                'error': 'Errore: ' + (r.reason || '')
+            }[r.action] || r.action;
+            return { id: r.participant_id, result: label };
+        }));
     })
-    .catch(err => {
-        alert('Errore: ' + err);
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Riconcilia Tutti';
+    .catch(err => { alert('Errore: ' + err); })
+    .finally(function() { btn.disabled = false; updateRcActionBtn(); });
+}
+
+function _doRollback(ids, stepOrder) {
+    var btn = document.getElementById('btnRcApply');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    fetch('/api/participants/batch-rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participant_ids: ids, step_order: stepOrder })
+    })
+    .then(r => r.json())
+    .then(data => {
+        _showRcResults('Rollback', data.processed, data.total, data.results.map(function(r) {
+            return { id: r.id, result: r.status === 'ok' ? (r.target || 'OK') : ('Errore: ' + r.message) };
+        }));
+    })
+    .catch(err => { alert('Errore: ' + err); })
+    .finally(function() { btn.disabled = false; updateRcActionBtn(); });
+}
+
+function _showRcResults(title, okCount, total, rows) {
+    var content = document.getElementById('reconcileContent');
+    var html = '<div class="alert alert-' + (okCount > 0 ? 'success' : 'info') + '">';
+    html += '<i class="bi bi-check-circle"></i> <strong>' + title + ': ' + okCount + ' su ' + total + '</strong></div>';
+    html += '<div class="table-responsive" style="max-height:400px;overflow-y:auto"><table class="table table-sm"><thead><tr><th>ID</th><th>Risultato</th></tr></thead><tbody>';
+    rows.forEach(function(r) {
+        html += '<tr><td>' + r.id + '</td><td>' + r.result + '</td></tr>';
     });
+    html += '</tbody></table></div>';
+    content.innerHTML = html;
 }
 </script>
 {% endblock %}
