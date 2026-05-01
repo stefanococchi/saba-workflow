@@ -1,8 +1,9 @@
 from flask import Blueprint, request, jsonify
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, WorkflowStatus, Execution, ExecutionStatus, ActivityLog
+from app.models import Workflow, WorkflowStep, Participant, WorkflowStatus, Execution, ExecutionStatus, ActivityLog, ParticipantStatus
 from app.services import TokenService, EmailService
 from app.services.activity_service import log_activity
+from app.services.scheduler_service import SchedulerService
 from datetime import datetime
 import logging
 
@@ -499,4 +500,68 @@ def simulate_workflow(workflow_id):
 
     except Exception as e:
         logger.error(f"Errore simulazione workflow: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@workflow_bp.route('/workflows/<int:workflow_id>/reconcile', methods=['GET'])
+def reconcile_status(workflow_id):
+    """Get participant breakdown for reconciliation."""
+    try:
+        result = SchedulerService.get_reconcile_status(workflow_id)
+        if result is None:
+            return jsonify({'error': 'Workflow non trovato'}), 404
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Errore reconcile status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@workflow_bp.route('/workflows/<int:workflow_id>/reconcile', methods=['POST'])
+def reconcile_execute(workflow_id):
+    """Resume stuck participants with current workflow config."""
+    try:
+        workflow = db.get(Workflow, workflow_id)
+        if not workflow:
+            return jsonify({'error': 'Workflow non trovato'}), 404
+
+        data = request.get_json(silent=True) or {}
+        participant_ids = data.get('participant_ids', [])
+
+        # If no specific IDs, find all stuck participants
+        if not participant_ids:
+            status_data = SchedulerService.get_reconcile_status(workflow_id)
+            for step_info in status_data.get('by_step', []):
+                for sp in step_info.get('stuck', []):
+                    participant_ids.append(sp['id'])
+
+        results = []
+        for pid in participant_ids:
+            try:
+                result = SchedulerService.reconcile_participant(pid)
+                result['participant_id'] = pid
+                results.append(result)
+
+                if result['action'] not in ('skipped',):
+                    p = db.get(Participant, pid)
+                    log_activity(
+                        workflow_id=workflow_id,
+                        event_type='reconciled',
+                        description=f'Partecipante riconciliato: {result["action"]}',
+                        participant_id=pid,
+                        step_id=p.current_step_id if p else None,
+                        details=result
+                    )
+            except Exception as e:
+                results.append({'participant_id': pid, 'action': 'error', 'reason': str(e)})
+
+        reconciled = sum(1 for r in results if r['action'] not in ('skipped', 'error'))
+        return jsonify({
+            'reconciled': reconciled,
+            'total': len(results),
+            'results': results
+        }), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore reconcile: {str(e)}")
         return jsonify({'error': str(e)}), 500

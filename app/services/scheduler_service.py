@@ -1327,7 +1327,169 @@ class SchedulerService:
 
         except Exception as e:
             logger.error(f"✗ Error scheduling next step: {str(e)}")
-    
+
+    @staticmethod
+    def reconcile_participant(participant_id):
+        """
+        Re-evaluate a stuck participant and resume their workflow.
+        Re-reads current config from DB (not cached thread state).
+        Returns dict with action taken.
+        """
+        from app.models import Participant
+        p = _db().get(Participant, participant_id)
+        if not p or p.status != ParticipantStatus.IN_PROGRESS:
+            return {'action': 'skipped', 'reason': 'not_in_progress'}
+
+        # Check if already has scheduled executions (not stuck)
+        has_scheduled = _db().query(Execution).filter_by(
+            participant_id=p.id,
+            status=ExecutionStatus.SCHEDULED
+        ).first()
+        if has_scheduled:
+            return {'action': 'skipped', 'reason': 'already_scheduled'}
+
+        step = p.current_step
+        if not step:
+            return {'action': 'skipped', 'reason': 'no_current_step'}
+
+        config = step.skip_conditions or {}
+
+        # Email step with wait_for_landing
+        if step.type.value == 'email' and config.get('wait_for_landing'):
+            timeout_days = config.get('landing_timeout_days', 7)
+            if_filled = config.get('landing_if_filled', 'continue')
+            if_filled_step = config.get('landing_if_filled_step', 0)
+            if_timeout = config.get('landing_if_timeout', 'continue')
+            if_timeout_step = config.get('landing_if_timeout_step', 0)
+
+            # Find when email was sent
+            last_exec = _db().query(Execution).filter_by(
+                participant_id=p.id,
+                step_id=step.id,
+            ).filter(
+                Execution.status.in_([
+                    ExecutionStatus.SENT, ExecutionStatus.DELIVERED,
+                    ExecutionStatus.OPENED, ExecutionStatus.CLICKED
+                ])
+            ).order_by(Execution.sent_at.desc()).first()
+
+            # Form already submitted?
+            if p.collected_data and len(p.collected_data) > 0:
+                SchedulerService._handle_landing_branch(p, step, if_filled, if_filled_step)
+                return {'action': 'form_filled_branch', 'branch': if_filled,
+                        'target': if_filled_step if if_filled == 'jump' else if_filled}
+
+            # Timeout passed?
+            if last_exec and last_exec.sent_at:
+                timeout_at = last_exec.sent_at + timedelta(days=timeout_days)
+                if datetime.utcnow() >= timeout_at:
+                    SchedulerService._handle_landing_branch(p, step, if_timeout, if_timeout_step)
+                    return {'action': 'timeout_branch', 'branch': if_timeout,
+                            'target': if_timeout_step if if_timeout == 'jump' else if_timeout}
+
+            # Still within timeout — restart polling
+            SchedulerService._schedule_landing_wait(p, step, config)
+            return {'action': 'polling_restarted'}
+
+        # Non-landing step: just schedule next step
+        SchedulerService._schedule_next_step(p, step)
+        return {'action': 'next_step_scheduled'}
+
+    @staticmethod
+    def get_reconcile_status(workflow_id):
+        """
+        Get breakdown of all participants by step and status for reconciliation.
+        """
+        from app.models import Participant, Workflow
+        workflow = _db().get(Workflow, workflow_id)
+        if not workflow:
+            return None
+
+        participants = _db().query(Participant).filter_by(workflow_id=workflow_id).all()
+
+        # Find participants with scheduled executions
+        scheduled_pids = set(
+            r[0] for r in _db().query(Execution.participant_id).filter(
+                Execution.participant_id.in_([p.id for p in participants]),
+                Execution.status == ExecutionStatus.SCHEDULED
+            ).all()
+        ) if participants else set()
+
+        summary = {'total': len(participants), 'completed': 0, 'pending': 0,
+                   'in_progress': 0, 'stuck_landing_wait': 0, 'stuck_other': 0,
+                   'bounced': 0, 'unsubscribed': 0}
+        by_step = {}
+
+        for p in participants:
+            if p.status == ParticipantStatus.COMPLETED:
+                summary['completed'] += 1
+                continue
+            elif p.status == ParticipantStatus.PENDING:
+                summary['pending'] += 1
+                continue
+            elif p.status == ParticipantStatus.BOUNCED:
+                summary['bounced'] += 1
+                continue
+            elif p.status == ParticipantStatus.UNSUBSCRIBED:
+                summary['unsubscribed'] += 1
+                continue
+
+            # IN_PROGRESS
+            if p.id in scheduled_pids:
+                summary['in_progress'] += 1
+                continue
+
+            # Stuck — determine type
+            step = p.current_step
+            if not step:
+                summary['stuck_other'] += 1
+                continue
+
+            config = step.skip_conditions or {}
+            is_landing_wait = (step.type.value == 'email' and config.get('wait_for_landing'))
+
+            if is_landing_wait:
+                summary['stuck_landing_wait'] += 1
+            else:
+                summary['stuck_other'] += 1
+
+            # Group by step
+            step_key = step.id
+            if step_key not in by_step:
+                by_step[step_key] = {
+                    'step_id': step.id, 'step_order': step.order,
+                    'step_name': step.name, 'step_type': step.type.value,
+                    'wait_for_landing': is_landing_wait,
+                    'stuck': []
+                }
+
+            # Get last execution for context
+            last_exec = _db().query(Execution).filter_by(
+                participant_id=p.id, step_id=step.id
+            ).order_by(Execution.sent_at.desc()).first()
+
+            has_form = bool(p.collected_data and len(p.collected_data) > 0)
+            timeout_days = config.get('landing_timeout_days', 7)
+            timeout_passed = False
+            if is_landing_wait and last_exec and last_exec.sent_at:
+                timeout_passed = datetime.utcnow() >= (last_exec.sent_at + timedelta(days=timeout_days))
+
+            by_step[step_key]['stuck'].append({
+                'id': p.id,
+                'name': ((p.first_name or '') + ' ' + (p.last_name or '')).strip() or p.email,
+                'email': p.email,
+                'has_form_data': has_form,
+                'timeout_passed': timeout_passed,
+                'sent_at': last_exec.sent_at.isoformat() if last_exec and last_exec.sent_at else None
+            })
+
+        return {
+            'workflow_id': workflow_id,
+            'workflow_name': workflow.name,
+            'summary': summary,
+            'by_step': sorted(by_step.values(), key=lambda x: x['step_order'])
+        }
+
     @staticmethod
     def cancel_scheduled_executions(participant_id):
         """

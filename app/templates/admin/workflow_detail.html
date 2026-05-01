@@ -183,10 +183,41 @@
                 {% endif %}
 
                 <hr>
-                <button class="btn btn-outline-info w-100" onclick="simulateWorkflow()" id="btnSimulate">
+                <button class="btn btn-outline-info w-100 mb-2" onclick="simulateWorkflow()" id="btnSimulate">
                     <i class="bi bi-eye"></i> Simula Invio
                 </button>
-                <small class="text-muted d-block mt-1">Anteprima email e link landing senza inviare nulla</small>
+                <small class="text-muted d-block mt-1 mb-2">Anteprima email e link landing senza inviare nulla</small>
+
+                {% if workflow.status.value in ('active', 'paused') %}
+                <button class="btn btn-outline-warning w-100" onclick="openReconcile()" id="btnReconcile">
+                    <i class="bi bi-arrow-repeat"></i> Riconcilia
+                </button>
+                <small class="text-muted d-block mt-1">Riprendi partecipanti bloccati</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reconcile Modal -->
+<div class="modal fade" id="reconcileModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-arrow-repeat"></i> Riconcilia Partecipanti</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="reconcileContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-warning" role="status"></div>
+                    <p class="mt-2">Analisi in corso...</p>
+                </div>
+            </div>
+            <div class="modal-footer" id="reconcileFooter" style="display:none">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                <button type="button" class="btn btn-warning" id="btnReconcileAll" onclick="executeReconcile()">
+                    <i class="bi bi-arrow-repeat"></i> Riconcilia Tutti
+                </button>
             </div>
         </div>
     </div>
@@ -377,7 +408,7 @@ function simulateWorkflow() {
 
 function deleteWorkflow() {
     if (!confirm('Eliminare questo workflow? L\'operazione è irreversibile.')) return;
-    
+
     fetch(`/api/workflows/${workflowId}`, { method: 'DELETE' })
         .then(response => response.json())
         .then(data => {
@@ -385,6 +416,143 @@ function deleteWorkflow() {
             window.location.href = '{{ url_for("admin.workflows_list") }}';
         })
         .catch(error => alert('Errore: ' + error));
+}
+
+/* --- Reconcile --- */
+var _reconcileData = null;
+
+function openReconcile() {
+    var modal = new bootstrap.Modal(document.getElementById('reconcileModal'));
+    var content = document.getElementById('reconcileContent');
+    var footer = document.getElementById('reconcileFooter');
+    footer.style.display = 'none';
+    content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-warning"></div><p class="mt-2">Analisi in corso...</p></div>';
+    modal.show();
+
+    fetch(`/api/workflows/${workflowId}/reconcile`)
+    .then(r => r.json())
+    .then(data => {
+        _reconcileData = data;
+        var s = data.summary;
+        var totalStuck = s.stuck_landing_wait + s.stuck_other;
+
+        var html = '<div class="row g-2 mb-3">';
+        html += _rcBadge('Totale', s.total, 'secondary');
+        html += _rcBadge('Completati', s.completed, 'success');
+        html += _rcBadge('In corso', s.in_progress, 'primary');
+        html += _rcBadge('In attesa', s.pending, 'info');
+        html += _rcBadge('Bloccati', totalStuck, totalStuck > 0 ? 'warning' : 'secondary');
+        html += '</div>';
+
+        if (totalStuck === 0) {
+            html += '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Nessun partecipante bloccato.</div>';
+            content.innerHTML = html;
+            footer.style.display = 'flex';
+            document.getElementById('btnReconcileAll').style.display = 'none';
+            return;
+        }
+
+        // Breakdown by step
+        data.by_step.forEach(function(stepInfo) {
+            html += '<div class="card mb-2">';
+            html += '<div class="card-header py-2 d-flex justify-content-between align-items-center">';
+            html += '<span><i class="bi bi-envelope"></i> <strong>Step ' + stepInfo.step_order + ':</strong> ' + stepInfo.step_name;
+            if (stepInfo.wait_for_landing) html += ' <span class="badge bg-info">landing wait</span>';
+            html += '</span>';
+            html += '<span class="badge bg-warning">' + stepInfo.stuck.length + ' bloccati</span>';
+            html += '</div>';
+            html += '<div class="card-body p-2">';
+            html += '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
+            html += '<thead><tr><th><input type="checkbox" checked onchange="toggleStepCheck(this,' + stepInfo.step_id + ')"></th><th>Nome</th><th>Email</th><th>Stato</th></tr></thead><tbody>';
+
+            stepInfo.stuck.forEach(function(p) {
+                var statusBadge = '';
+                if (p.has_form_data) statusBadge = '<span class="badge bg-success">form compilato</span>';
+                else if (p.timeout_passed) statusBadge = '<span class="badge bg-danger">timeout scaduto</span>';
+                else statusBadge = '<span class="badge bg-secondary">in attesa</span>';
+
+                html += '<tr>';
+                html += '<td><input type="checkbox" checked class="rc-check" data-pid="' + p.id + '" data-step="' + stepInfo.step_id + '"></td>';
+                html += '<td>' + (p.name || '-') + '</td>';
+                html += '<td><small>' + (p.email || '-') + '</small></td>';
+                html += '<td>' + statusBadge + '</td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div></div></div>';
+        });
+
+        content.innerHTML = html;
+        footer.style.display = 'flex';
+        document.getElementById('btnReconcileAll').style.display = '';
+    })
+    .catch(err => {
+        content.innerHTML = '<div class="alert alert-danger">Errore: ' + err + '</div>';
+    });
+}
+
+function _rcBadge(label, count, color) {
+    return '<div class="col"><div class="text-center p-2 rounded bg-' + color + ' bg-opacity-10">' +
+        '<div class="fs-4 fw-bold text-' + color + '">' + count + '</div>' +
+        '<small class="text-muted">' + label + '</small></div></div>';
+}
+
+function toggleStepCheck(master, stepId) {
+    document.querySelectorAll('.rc-check[data-step="' + stepId + '"]').forEach(function(cb) {
+        cb.checked = master.checked;
+    });
+}
+
+function executeReconcile(specificIds) {
+    var ids = specificIds || [];
+    if (!ids.length) {
+        document.querySelectorAll('.rc-check:checked').forEach(function(cb) {
+            ids.push(parseInt(cb.dataset.pid));
+        });
+    }
+    if (!ids.length) { alert('Nessun partecipante selezionato'); return; }
+
+    var btn = document.getElementById('btnReconcileAll');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Riconciliazione...';
+
+    fetch(`/api/workflows/${workflowId}/reconcile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participant_ids: ids })
+    })
+    .then(r => r.json())
+    .then(data => {
+        var content = document.getElementById('reconcileContent');
+        var html = '<div class="alert alert-' + (data.reconciled > 0 ? 'success' : 'info') + '">';
+        html += '<i class="bi bi-check-circle"></i> <strong>Riconciliati ' + data.reconciled + ' su ' + data.total + ' partecipanti</strong></div>';
+
+        html += '<div class="table-responsive"><table class="table table-sm"><thead><tr><th>ID</th><th>Azione</th><th>Dettagli</th></tr></thead><tbody>';
+        data.results.forEach(function(r) {
+            var actionLabel = {
+                'form_filled_branch': '<span class="badge bg-success">Form compilato</span>',
+                'timeout_branch': '<span class="badge bg-danger">Timeout</span>',
+                'polling_restarted': '<span class="badge bg-info">Polling riavviato</span>',
+                'next_step_scheduled': '<span class="badge bg-primary">Prossimo step</span>',
+                'skipped': '<span class="badge bg-secondary">Saltato</span>',
+                'error': '<span class="badge bg-danger">Errore</span>'
+            }[r.action] || '<span class="badge bg-secondary">' + r.action + '</span>';
+
+            var detail = r.reason || r.branch || r.target || '';
+            html += '<tr><td>' + r.participant_id + '</td><td>' + actionLabel + '</td><td><small>' + detail + '</small></td></tr>';
+        });
+        html += '</tbody></table></div>';
+
+        content.innerHTML = html;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Riconcilia Tutti';
+        btn.style.display = 'none';
+    })
+    .catch(err => {
+        alert('Errore: ' + err);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Riconcilia Tutti';
+    });
 }
 </script>
 {% endblock %}

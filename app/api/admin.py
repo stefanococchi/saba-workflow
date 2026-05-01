@@ -1733,6 +1733,7 @@ def participant_timeline(participant_id):
                 'landing_opened': 'box-arrow-up-right',
                 'approval_granted': 'check-circle',
                 'approval_rejected': 'x-circle',
+                'reconciled': 'arrow-repeat',
             }
             color_map = {
                 'workflow_started': '#0d6efd',
@@ -1745,6 +1746,7 @@ def participant_timeline(participant_id):
                 'landing_opened': '#ff9800',
                 'approval_granted': '#198754',
                 'approval_rejected': '#dc3545',
+                'reconciled': '#fd7e14',
             }
 
             events.append({
