@@ -35,15 +35,19 @@ def show_landing_page(token):
             return render_template('landing/already_completed.html',
                                  participant=participant)
 
-        # Ottieni step con landing page configurata (query diretta, non loop)
-        current_step = db.query(WorkflowStep).filter(
-            WorkflowStep.workflow_id == participant.workflow_id,
-            (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None))
-        ).order_by(WorkflowStep.order).first()
-
-        # Fallback: step dal token o current_step del partecipante
-        if not current_step and payload.get('step_id'):
+        # Priorità: step_id dal token (identifica quale email ha generato il link)
+        current_step = None
+        if payload.get('step_id'):
             current_step = db.get(WorkflowStep, payload['step_id'])
+
+        # Fallback: primo step con landing page configurata
+        if not current_step:
+            current_step = db.query(WorkflowStep).filter(
+                WorkflowStep.workflow_id == participant.workflow_id,
+                (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None))
+            ).order_by(WorkflowStep.order).first()
+
+        # Ultimo fallback: current_step del partecipante
         if not current_step:
             current_step = participant.current_step
 
@@ -154,11 +158,16 @@ def submit_landing_data(token):
 
         db.commit()
 
-        # Trova lo step landing corrente per avanzare al prossimo (query diretta)
-        current_step = db.query(WorkflowStep).filter(
-            WorkflowStep.workflow_id == participant.workflow_id,
-            (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None)) | (WorkflowStep.landing_page_config.isnot(None))
-        ).order_by(WorkflowStep.order).first()
+        # Trova lo step landing corrente per avanzare al prossimo
+        # Priorità: step_id dal token (identifica quale email ha generato il link)
+        current_step = None
+        if payload.get('step_id'):
+            current_step = db.get(WorkflowStep, payload['step_id'])
+        if not current_step:
+            current_step = db.query(WorkflowStep).filter(
+                WorkflowStep.workflow_id == participant.workflow_id,
+                (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None)) | (WorkflowStep.landing_page_config.isnot(None))
+            ).order_by(WorkflowStep.order).first()
         if not current_step:
             current_step = participant.current_step
 

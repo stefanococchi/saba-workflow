@@ -454,6 +454,14 @@ class SchedulerService:
             skip_cond = step.skip_conditions or {}
             has_landing = step.landing_page_config or skip_cond.get('has_landing') or '{{ landing_url }}' in body or '{{landing_url}}' in body
             if has_landing:
+                # Regenerate token with current step_id so landing page knows which step opened it
+                from flask import current_app
+                exp_hours = participant.workflow.token_expiration_hours or current_app.config.get('JWT_EXPIRATION_HOURS', 72)
+                participant.token = TokenService.generate_token(
+                    participant.id, participant.workflow_id,
+                    step_id=step.id, expires_hours=exp_hours
+                )
+                _db().flush()
                 landing_url = TokenService.generate_landing_url(participant)
             
             # Load attachments if configured
