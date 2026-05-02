@@ -108,12 +108,14 @@ def submit_landing_data(token):
         if not payload:
             return jsonify({'error': 'Token non valido'}), 400
         
-        # Recupera partecipante
-        participant = db.get(Participant, payload['participant_id'])
-        
+        # Recupera partecipante (con lock per evitare race condition da double-click)
+        participant = db.query(Participant).filter_by(
+            id=payload['participant_id']
+        ).with_for_update().first()
+
         if not participant:
             return jsonify({'error': 'Partecipante non trovato'}), 404
-        
+
         # Verifica se già completato
         if participant.status == ParticipantStatus.COMPLETED:
             return jsonify({'error': 'Già completato'}), 400
