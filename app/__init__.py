@@ -19,7 +19,8 @@ def init_db(app):
     
     engine = create_engine(
         app.config['SQLALCHEMY_DATABASE_URI'],
-        echo=app.config['SQLALCHEMY_ECHO']
+        echo=app.config['SQLALCHEMY_ECHO'],
+        pool_pre_ping=True,
     )
     
     db_session = scoped_session(
