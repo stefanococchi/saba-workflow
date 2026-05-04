@@ -35,9 +35,14 @@ class SchedulerService:
             Execution instance
         """
         try:
+            # Guard: non schedulare step per partecipanti già completati
+            if participant.status == ParticipantStatus.COMPLETED:
+                logger.warning(f"⊘ Skipped scheduling: participant {participant.id} already COMPLETED")
+                return None
+
             # Calculate scheduled time
             scheduled_at = None
-            
+
             # Check if this is a wait_until step
             if step.type.value == 'wait_until':
                 scheduled_at = SchedulerService._calculate_wait_until(step)
