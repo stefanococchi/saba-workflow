@@ -364,9 +364,19 @@ def landing_builder(workflow_id, step_id):
             flash('Step non trovato', 'danger')
             return redirect(url_for('admin.workflow_detail', workflow_id=workflow_id))
 
+        # Se lo step non ha config propria ma ha un landing_template_id, carica dal template
+        config = step.landing_gjs_data
+        if not config and step.skip_conditions:
+            tpl_id = step.skip_conditions.get('landing_template_id')
+            if tpl_id:
+                from app.models import LandingTemplate
+                tpl = db.get(LandingTemplate, tpl_id)
+                if tpl:
+                    config = tpl.gjs_data
+
         return render_template('admin/landing_config.html',
                              step=step,
-                             config=step.landing_gjs_data)
+                             config=config)
 
     except Exception as e:
         logger.error(f"Errore landing config: {str(e)}")
