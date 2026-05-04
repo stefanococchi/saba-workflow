@@ -215,6 +215,7 @@ def update_workflow(workflow_id):
             if has_active_executions:
                 # Aggiorna step esistenti in-place senza eliminare
                 old_steps_by_order = {s.order: s for s in workflow.steps}
+                new_orders = {step_data.get('order', 1) for step_data in data['steps']}
                 for step_data in data['steps']:
                     order = step_data.get('order', 1)
                     existing_step = old_steps_by_order.get(order)
@@ -239,6 +240,22 @@ def update_workflow(workflow_id):
                             landing_page_config=step_data.get('landing_page_config')
                         )
                         db.add(step)
+
+                # Elimina step rimossi dall'utente (solo se non hanno execution attive)
+                for order, old_step in old_steps_by_order.items():
+                    if order not in new_orders:
+                        step_has_active = db.query(Execution).filter(
+                            Execution.step_id == old_step.id,
+                            Execution.status.in_(['scheduled', 'sent'])
+                        ).first() is not None
+                        if not step_has_active:
+                            # Scollega partecipanti da questo step
+                            db.query(Participant).filter(
+                                Participant.current_step_id == old_step.id
+                            ).update({Participant.current_step_id: None}, synchronize_session='fetch')
+                            db.delete(old_step)
+                        else:
+                            logger.warning(f"Step {old_step.name} (order={order}) non eliminato: ha execution attive")
             else:
                 # Nessuna execution attiva: ricrea normalmente
                 # Salva dati landing page dai vecchi step (indicizzati per order)
