@@ -1471,18 +1471,13 @@ def get_attachments_info():
 
 @admin_bp.route('/api/step/<int:step_id>/participants')
 def step_participants(step_id):
-    """Return participants for a given step + substate"""
+    """Return participants for a given step + substate (best-state logic)"""
     try:
         substate = request.args.get('substate', '')
         current_only = request.args.get('current_only', '') == '1'
         step = db.get(WorkflowStep, step_id)
         if not step:
             return jsonify({'error': 'Step not found'}), 404
-
-        # Activity-based substates
-        ACTIVITY_SUBSTATES = {'landing_opened', 'form_submitted', 'survey_submitted'}
-        # Execution-based substates
-        EXEC_SUBSTATES = {'scheduled', 'sent', 'delivered', 'opened', 'clicked', 'completed', 'failed', 'skipped'}
 
         participants = []
         if substate == 'current_at':
@@ -1492,43 +1487,88 @@ def step_participants(step_id):
                 Participant.current_step_id == step_id
             ).all()
             participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
-        elif substate in ACTIVITY_SUBSTATES:
-            # Distinct participants from ActivityLog
-            rows = db.query(ActivityLog.participant_id).filter(
-                ActivityLog.workflow_id == step.workflow_id,
-                ActivityLog.event_type == substate,
-                ActivityLog.participant_id.isnot(None)
-            )
-            rows = rows.filter(
-                (ActivityLog.step_id == step_id) | (ActivityLog.step_id.is_(None))
-            )
-            pids = [r[0] for r in rows.distinct().all()]
-            if pids:
-                query = db.query(Participant).filter(Participant.id.in_(pids))
-                if current_only:
-                    query = query.filter(
-                        Participant.current_step_id == step_id,
-                        Participant.status == ParticipantStatus.IN_PROGRESS
-                    )
-                parts = query.all()
-                participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
-        elif substate in EXEC_SUBSTATES:
-            # Map 'sent' to include 'delivered' too
-            statuses = [substate]
-            if substate == 'sent':
-                statuses.append('delivered')
-            pids = [r[0] for r in db.query(Execution.participant_id).filter(
+        elif current_only:
+            # Best-substate logic: matches dashboard "Nello stato" counts exactly.
+            # Each participant counted once at their highest-rank substate.
+            SUBSTATE_RANK = {
+                'failed': 0, 'skipped': 0, 'scheduled': 1,
+                'sent': 2, 'delivered': 2,
+                'opened': 3, 'clicked': 4,
+                'landing_opened': 5, 'form_submitted': 6, 'survey_submitted': 6,
+                'completed': 7
+            }
+
+            # Get all IN_PROGRESS participants currently at this step
+            at_step = db.query(Participant).filter(
+                Participant.workflow_id == step.workflow_id,
+                Participant.current_step_id == step_id,
+                Participant.status == ParticipantStatus.IN_PROGRESS
+            ).all()
+            if not at_step:
+                return jsonify({'participants': [], 'step': step.name, 'substate': substate}), 200
+
+            pid_map = {p.id: p for p in at_step}
+            pids = list(pid_map.keys())
+
+            # Execution substates for these participants at this step
+            best = {}  # pid → best substate key
+            for pid, exec_status in db.query(
+                Execution.participant_id, Execution.status
+            ).filter(
                 Execution.step_id == step_id,
-                Execution.status.in_(statuses)
-            ).distinct().all()]
+                Execution.participant_id.in_(pids)
+            ).all():
+                val = exec_status.value if hasattr(exec_status, 'value') else exec_status
+                rank = SUBSTATE_RANK.get(val, 0)
+                if pid not in best or rank > SUBSTATE_RANK.get(best[pid], 0):
+                    best[pid] = val
+
+            # Activity substates (landing_opened, form_submitted, survey_submitted)
+            for pid, evt in db.query(
+                ActivityLog.participant_id, ActivityLog.event_type
+            ).filter(
+                ActivityLog.participant_id.in_(pids),
+                ActivityLog.event_type.in_(['landing_opened', 'form_submitted', 'survey_submitted']),
+                (ActivityLog.step_id == step_id) | (ActivityLog.step_id.is_(None))
+            ).distinct().all():
+                rank = SUBSTATE_RANK.get(evt, 0)
+                if pid not in best or rank > SUBSTATE_RANK.get(best[pid], 0):
+                    best[pid] = evt
+
+            # Normalize delivered → sent
+            target = substate
+            for pid in best:
+                if best[pid] == 'delivered':
+                    best[pid] = 'sent'
+
+            # Filter to participants whose best substate matches requested
+            matched = [pid_map[pid] for pid, bs in best.items() if bs == target]
+            participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in matched]
+        else:
+            # Historical view (no current_only): return all who ever reached this substate
+            ACTIVITY_SUBSTATES = {'landing_opened', 'form_submitted', 'survey_submitted'}
+            EXEC_SUBSTATES = {'scheduled', 'sent', 'delivered', 'opened', 'clicked', 'completed', 'failed', 'skipped'}
+
+            if substate in ACTIVITY_SUBSTATES:
+                pids = [r[0] for r in db.query(ActivityLog.participant_id).filter(
+                    ActivityLog.workflow_id == step.workflow_id,
+                    ActivityLog.event_type == substate,
+                    ActivityLog.participant_id.isnot(None),
+                    (ActivityLog.step_id == step_id) | (ActivityLog.step_id.is_(None))
+                ).distinct().all()]
+            elif substate in EXEC_SUBSTATES:
+                statuses = [substate]
+                if substate == 'sent':
+                    statuses.append('delivered')
+                pids = [r[0] for r in db.query(Execution.participant_id).filter(
+                    Execution.step_id == step_id,
+                    Execution.status.in_(statuses)
+                ).distinct().all()]
+            else:
+                pids = []
+
             if pids:
-                query = db.query(Participant).filter(Participant.id.in_(pids))
-                if current_only:
-                    query = query.filter(
-                        Participant.current_step_id == step_id,
-                        Participant.status == ParticipantStatus.IN_PROGRESS
-                    )
-                parts = query.all()
+                parts = db.query(Participant).filter(Participant.id.in_(pids)).all()
                 participants = [{'id': p.id, 'name': p.full_name or p.email or f'#{p.id}', 'email': p.email or '', 'status': p.status.value} for p in parts]
 
         return jsonify({'participants': participants, 'step': step.name, 'substate': substate}), 200

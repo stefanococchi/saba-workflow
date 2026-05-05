@@ -303,6 +303,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
 var T = {{ t|tojson }};
 // =============================================
@@ -646,7 +647,7 @@ function sortBy(key) {
 }
 
 function updateCounts() { document.getElementById('countAll').textContent = ALL_TIMELINE.length; }
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 function showError(idx) {
     var r = _filteredRows[idx]; if (!r) return;
@@ -1040,8 +1041,14 @@ function _showParticipantList(title, participants) {
     }
     var STATUS_COLORS = { pending: '#8d6e63', in_progress: '#2196f3', completed: '#4caf50', bounced: '#f44336', unsubscribed: '#9e9e9e' };
     var STATUS_LABELS = { pending: T.pending || 'Pending', in_progress: T.in_progress || 'In Progress', completed: T.completed || 'Completed', bounced: T.bounced || 'Bounced', unsubscribed: T.unsubscribed || 'Unsubscribed' };
-    var html = '<div class="d-flex flex-wrap gap-3 mb-2 pb-2" style="border-bottom:1px solid var(--md-outline-variant);font-size:11px">';
+    // Store for Excel export
+    window._lastParticipantList = participants;
+    window._lastParticipantTitle = title;
+    var html = '<div class="d-flex justify-content-between align-items-center mb-2 pb-2" style="border-bottom:1px solid var(--md-outline-variant)">';
+    html += '<div class="d-flex flex-wrap gap-3" style="font-size:11px">';
     for (var sk in STATUS_COLORS) { html += '<span class="d-inline-flex align-items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:' + STATUS_COLORS[sk] + ';display:inline-block"></span> ' + STATUS_LABELS[sk] + '</span>'; }
+    html += '</div>';
+    html += '<button class="btn btn-sm btn-outline-primary" onclick="_exportParticipantsExcel()" title="Esporta Excel"><i class="bi bi-file-earmark-spreadsheet"></i></button>';
     html += '</div>';
     html += '<div class="list-group list-group-flush">';
     participants.forEach(function(p) {
@@ -1058,6 +1065,23 @@ function _showParticipantList(title, participants) {
     });
     html += '</div>';
     body.innerHTML = html;
+}
+
+function _exportParticipantsExcel() {
+    var data = window._lastParticipantList;
+    var title = window._lastParticipantTitle || 'Partecipanti';
+    if (!data || data.length === 0) return;
+
+    var rows = [['Nome', 'Email']];
+    data.forEach(function(p) { rows.push([p.name || '', p.email || '']); });
+
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    // Auto-fit column widths
+    ws['!cols'] = [{ wch: 30 }, { wch: 35 }];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Partecipanti');
+    var fname = title.replace(/[^a-zA-Z0-9àèéìòùÀÈÉÌÒÙ _-]/g, '_') + '.xlsx';
+    XLSX.writeFile(wb, fname);
 }
 
 function _openInfoModal(title, fetchUrl) {
