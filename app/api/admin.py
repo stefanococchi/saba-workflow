@@ -3,7 +3,7 @@ from app import db_session as db
 from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage, Attachment, User, user_workflows
 from app.api.auth import superuser_required
 from sqlalchemy import func
-from sqlalchemy.orm import joinedload, selectinload, subqueryload
+from sqlalchemy.orm import joinedload, selectinload, subqueryload, aliased
 from datetime import datetime
 import logging
 import uuid
@@ -58,13 +58,31 @@ def dashboard():
         participant_status_labels = [status.value for status, _ in participant_status_query]
         participant_status_data = [count for _, count in participant_status_query]
         
-        # Workflows recenti (filtered by user)
-        recent_workflows = get_visible_workflows().options(
-            selectinload(Workflow.steps),
-            selectinload(Workflow.participants)
-        ).order_by(
-            Workflow.created_at.desc()
-        ).limit(5).all()
+        # Workflows recenti (filtered by user) — count subqueries instead of loading all related objects
+        step_count_sub = db.query(
+            WorkflowStep.workflow_id,
+            func.count(WorkflowStep.id).label('cnt')
+        ).group_by(WorkflowStep.workflow_id).subquery()
+
+        participant_count_sub = db.query(
+            Participant.workflow_id,
+            func.count(Participant.id).label('cnt')
+        ).group_by(Participant.workflow_id).subquery()
+
+        recent_rows = get_visible_workflows(
+            db.query(
+                Workflow,
+                func.coalesce(step_count_sub.c.cnt, 0).label('step_count'),
+                func.coalesce(participant_count_sub.c.cnt, 0).label('participant_count')
+            ).outerjoin(step_count_sub, Workflow.id == step_count_sub.c.workflow_id
+            ).outerjoin(participant_count_sub, Workflow.id == participant_count_sub.c.workflow_id)
+        ).order_by(Workflow.created_at.desc()).limit(5).all()
+
+        recent_workflows = []
+        for wf, sc, pc in recent_rows:
+            wf.step_count = sc
+            wf.participant_count = pc
+            recent_workflows.append(wf)
 
         # Attività recenti (log unificato)
         recent_activities = db.query(ActivityLog).options(
@@ -74,75 +92,10 @@ def dashboard():
             ActivityLog.created_at.desc()
         ).limit(10).all()
 
-        # Engagement — participants with last event (optimized: 3 queries instead of N*2)
-        engagement_workflows = get_visible_workflows().options(
-            selectinload(Workflow.participants)
-        ).filter(Workflow.participants.any()).all()
-
-        # Batch-fetch last activity and last execution per participant via subqueries
-        participant_ids = [p.id for wf in engagement_workflows for p in wf.participants]
-
-        last_activities = {}
-        last_executions = {}
-        if participant_ids:
-            # Latest ActivityLog per participant
-            latest_act_sub = db.query(
-                ActivityLog.participant_id,
-                func.max(ActivityLog.id).label('max_id')
-            ).filter(
-                ActivityLog.participant_id.in_(participant_ids)
-            ).group_by(ActivityLog.participant_id).subquery()
-
-            for a in db.query(ActivityLog).join(
-                latest_act_sub, ActivityLog.id == latest_act_sub.c.max_id
-            ).all():
-                last_activities[a.participant_id] = a
-
-            # Latest Execution per participant
-            latest_exec_sub = db.query(
-                Execution.participant_id,
-                func.max(Execution.id).label('max_id')
-            ).filter(
-                Execution.participant_id.in_(participant_ids)
-            ).group_by(Execution.participant_id).subquery()
-
-            for ex in db.query(Execution).join(
-                latest_exec_sub, Execution.id == latest_exec_sub.c.max_id
-            ).all():
-                last_executions[ex.participant_id] = ex
-
-        engagement_participants = []
-        for wf in engagement_workflows:
-            for p in wf.participants:
-                last_activity = last_activities.get(p.id)
-                last_execution = last_executions.get(p.id)
-
-                last_event = None
-                last_event_time = None
-                if last_activity and last_execution:
-                    if (last_activity.created_at or datetime.min) > (last_execution.created_at or datetime.min):
-                        last_event = last_activity.event_type
-                        last_event_time = last_activity.created_at
-                    else:
-                        last_event = last_execution.status.value if last_execution.status else 'unknown'
-                        last_event_time = last_execution.sent_at or last_execution.created_at
-                elif last_activity:
-                    last_event = last_activity.event_type
-                    last_event_time = last_activity.created_at
-                elif last_execution:
-                    last_event = last_execution.status.value if last_execution.status else 'unknown'
-                    last_event_time = last_execution.sent_at or last_execution.created_at
-
-                engagement_participants.append({
-                    'id': p.id,
-                    'name': p.full_name or p.email,
-                    'email': p.email,
-                    'status': p.status.value,
-                    'workflow_id': wf.id,
-                    'workflow_name': wf.name,
-                    'last_event': last_event,
-                    'last_event_time': last_event_time,
-                })
+        # Engagement workflows (just names for filter dropdown, no participants loaded)
+        engagement_workflows = get_visible_workflows().filter(
+            Workflow.participants.any()
+        ).all()
 
         return render_template('admin/dashboard.html',
                              stats=stats,
@@ -152,8 +105,7 @@ def dashboard():
                              participant_status_data=participant_status_data,
                              recent_workflows=recent_workflows,
                              recent_activities=recent_activities,
-                             engagement_workflows=engagement_workflows,
-                             engagement_participants=engagement_participants)
+                             engagement_workflows=engagement_workflows)
 
     except Exception as e:
         logger.error(f"Errore dashboard: {str(e)}")
@@ -167,8 +119,109 @@ def dashboard():
                              participant_status_data=[],
                              recent_workflows=[],
                              recent_activities=[],
-                             engagement_workflows=[],
-                             engagement_participants=[])
+                             engagement_workflows=[])
+
+
+@admin_bp.route('/api/dashboard/engagement')
+def dashboard_engagement():
+    """AJAX endpoint for engagement tracker — top 50 participants by recent activity"""
+    try:
+        wf_filter = request.args.get('workflow_id', type=int)
+
+        # Get visible workflow IDs
+        visible_wfs = get_visible_workflows().with_entities(Workflow.id).all()
+        visible_ids = [w.id for w in visible_wfs]
+        if not visible_ids:
+            return jsonify({'participants': []})
+
+        base_filter = [Participant.workflow_id.in_(visible_ids)]
+        if wf_filter:
+            base_filter.append(Participant.workflow_id == wf_filter)
+
+        # Subquery: max activity id per participant
+        latest_act = db.query(
+            ActivityLog.participant_id,
+            func.max(ActivityLog.id).label('max_id')
+        ).filter(
+            ActivityLog.participant_id.isnot(None)
+        ).group_by(ActivityLog.participant_id).subquery()
+
+        # Subquery: max execution id per participant
+        latest_exec = db.query(
+            Execution.participant_id,
+            func.max(Execution.id).label('max_id')
+        ).group_by(Execution.participant_id).subquery()
+
+        # Main query: participants with their latest activity and execution
+        ActLog = aliased(ActivityLog)
+        Exec = aliased(Execution)
+
+        rows = db.query(
+            Participant.id,
+            Participant.full_name,
+            Participant.email,
+            Participant.status,
+            Participant.workflow_id,
+            Workflow.name.label('workflow_name'),
+            ActLog.event_type,
+            ActLog.created_at.label('act_time'),
+            Exec.status.label('exec_status'),
+            func.coalesce(Exec.sent_at, Exec.created_at).label('exec_time'),
+        ).join(
+            Workflow, Participant.workflow_id == Workflow.id
+        ).outerjoin(
+            latest_act, Participant.id == latest_act.c.participant_id
+        ).outerjoin(
+            ActLog, ActLog.id == latest_act.c.max_id
+        ).outerjoin(
+            latest_exec, Participant.id == latest_exec.c.participant_id
+        ).outerjoin(
+            Exec, Exec.id == latest_exec.c.max_id
+        ).filter(
+            *base_filter
+        ).order_by(
+            func.greatest(
+                func.coalesce(ActLog.created_at, datetime.min),
+                func.coalesce(Exec.sent_at, Exec.created_at, datetime.min)
+            ).desc()
+        ).limit(50).all()
+
+        participants = []
+        for row in rows:
+            act_time = row.act_time
+            exec_time = row.exec_time
+
+            last_event = None
+            last_event_time = None
+            if act_time and exec_time:
+                if act_time > exec_time:
+                    last_event = row.event_type
+                    last_event_time = act_time.isoformat()
+                else:
+                    last_event = row.exec_status.value if row.exec_status else 'unknown'
+                    last_event_time = exec_time.isoformat()
+            elif act_time:
+                last_event = row.event_type
+                last_event_time = act_time.isoformat()
+            elif exec_time:
+                last_event = row.exec_status.value if row.exec_status else 'unknown'
+                last_event_time = exec_time.isoformat()
+
+            participants.append({
+                'id': row.id,
+                'name': row.full_name or row.email or f'#{row.id}',
+                'email': row.email or '',
+                'status': row.status.value,
+                'workflow_id': row.workflow_id,
+                'workflow_name': row.workflow_name,
+                'last_event': last_event,
+                'last_event_time': last_event_time,
+            })
+
+        return jsonify({'participants': participants})
+    except Exception as e:
+        logger.error(f"Errore engagement: {str(e)}")
+        return jsonify({'participants': [], 'error': str(e)}), 500
 
 
 @admin_bp.route('/workflows')
