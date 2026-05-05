@@ -135,7 +135,7 @@
                 <button class="btn btn-outline-primary btn-sm" onclick="toggleQueryBuilder()">
                     <i class="bi bi-funnel"></i> {{ t.query }}
                 </button>
-                <button class="btn btn-primary btn-sm" onclick="exportAll()">
+                <button class="btn btn-primary btn-sm" onclick="exportXLSX()">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Export Excel
                 </button>
                 <button class="btn btn-sm btn-outline-primary" onclick="exportCompleted()">
@@ -645,11 +645,12 @@ function viewData(id) {
 }
 
 function exportXLSX() {
+    var rows = _filteredRows || ALL_DATA;
     var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
     var header = cols.map(function(c) { return c.label; });
     var data = [header];
 
-    ALL_DATA.forEach(function(p) {
+    rows.forEach(function(p) {
         var row = cols.map(function(c) {
             var val = getFieldValue(p, c.key) || '';
             if (isFileObj(val)) return val.filename || '[file]';
