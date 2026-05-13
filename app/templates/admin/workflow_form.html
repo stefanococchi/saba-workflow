@@ -1654,6 +1654,8 @@ try {
             payment_amount: (_skipCond.payment_amount_cents || 0) / 100,
             payment_currency: _skipCond.payment_currency || 'eur',
             payment_description: _skipCond.payment_description || '',
+            payment_condition_field: _skipCond.payment_condition_field || '',
+            payment_condition_value: _skipCond.payment_condition_value || '',
             payment_if_success: _skipCond.payment_if_success || 'continue',
             payment_if_success_step: _skipCond.payment_if_success_step || 0,
             payment_if_failed: _skipCond.payment_if_failed || 'stop',

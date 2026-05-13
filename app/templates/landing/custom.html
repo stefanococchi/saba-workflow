@@ -17,6 +17,18 @@
         document.addEventListener('submit', function(e) {
             var form = e.target;
             if (!form.classList.contains('saba-landing-form')) return;
+
+            // Check conditional payment: if a condition field is set, only require
+            // payment when the field matches the expected value
+            var _pm = window.__sabaPayment;
+            if (_pm.condition_field) {
+                var fd = new FormData(form);
+                var fv = fd.getAll(_pm.condition_field).join(',');
+                if (String(fv).toLowerCase() !== String(_pm.condition_value).toLowerCase()) {
+                    return; // condition not met — let the normal submit handler run
+                }
+            }
+
             e.preventDefault();
             e.stopImmediatePropagation();
 

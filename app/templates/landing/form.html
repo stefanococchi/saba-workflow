@@ -174,8 +174,18 @@ document.getElementById('landingForm').addEventListener('submit', async (e) => {
 
         var paymentEnabled = {{ (payment_config.enabled if payment_config else False)|tojson }};
         var alreadyPaid = {{ (payment_config.already_paid if payment_config else False)|tojson }};
+        var payCondField = {{ (payment_config.condition_field if payment_config else '')|tojson }};
+        var payCondValue = {{ (payment_config.condition_value if payment_config else '')|tojson }};
 
-        if (paymentEnabled && !alreadyPaid) {
+        // Check if payment condition is met (if configured)
+        var needsPayment = paymentEnabled && !alreadyPaid;
+        if (needsPayment && payCondField) {
+            var fieldVal = data[payCondField] || '';
+            if (Array.isArray(fieldVal)) fieldVal = fieldVal.join(',');
+            needsPayment = String(fieldVal).toLowerCase() === String(payCondValue).toLowerCase();
+        }
+
+        if (needsPayment) {
             // Payment flow: send form data to checkout endpoint
             submitBtn.textContent = 'Reindirizzamento al pagamento...';
             const response = await fetch('/landing/{{ token }}/checkout', {

@@ -1128,6 +1128,20 @@ function _renderStepEditFormInner(step, index, common) {
                             <input type="text" class="form-control form-control-sm" id="editPaymentDescription"
                                    value="${step.config.payment_description || ''}" placeholder="Quota iscrizione">
                         </div>
+                        <div class="mb-2">
+                            <label class="form-label"><i class="bi bi-funnel"></i> Pagamento condizionale (opzionale)</label>
+                            <div class="row">
+                                <div class="col-7">
+                                    <input type="text" class="form-control form-control-sm" id="editPaymentCondField"
+                                           value="${step.config.payment_condition_field || ''}" placeholder="Nome campo (es. extra_night)">
+                                </div>
+                                <div class="col-5">
+                                    <input type="text" class="form-control form-control-sm" id="editPaymentCondValue"
+                                           value="${step.config.payment_condition_value || ''}" placeholder="Valore (es. yes)">
+                                </div>
+                            </div>
+                            <div class="form-text">Se compilato, il pagamento si attiva solo quando il campo ha quel valore. Se vuoto, pagamento sempre richiesto.</div>
+                        </div>
                         <div class="alert alert-info p-2 mt-2" style="font-size:0.8rem;margin-bottom:0">
                             <i class="bi bi-info-circle"></i> Il branching segue le regole "If form submitted" / "If timeout" sopra.
                             Pagamento OK = FILLED, Pagamento fallito/scaduto = TIMEOUT.
@@ -2332,6 +2346,8 @@ function saveStepEdit() {
             step.config.payment_amount = parseFloat(document.getElementById('editPaymentAmount')?.value) || 0;
             step.config.payment_currency = document.getElementById('editPaymentCurrency')?.value || 'eur';
             step.config.payment_description = document.getElementById('editPaymentDescription')?.value || '';
+            step.config.payment_condition_field = document.getElementById('editPaymentCondField')?.value || '';
+            step.config.payment_condition_value = document.getElementById('editPaymentCondValue')?.value || '';
             step.config.payment_if_success = document.getElementById('editPaymentIfSuccess')?.value || 'continue';
             var _paySuccessVal = document.getElementById('editPaymentIfSuccessStep')?.value || '0';
             step.config.payment_if_success_step = _paySuccessVal === 'end' ? 'end' : (parseInt(_paySuccessVal) || 0);
@@ -2822,6 +2838,8 @@ function saveWorkflow() {
                     payment_amount_cents: Math.round((parseFloat(step.config.payment_amount) || 0) * 100),
                     payment_currency: step.config.payment_currency || 'eur',
                     payment_description: step.config.payment_description || '',
+                    payment_condition_field: step.config.payment_condition_field || '',
+                    payment_condition_value: step.config.payment_condition_value || '',
                     payment_if_success: step.config.payment_if_success || 'continue',
                     payment_if_success_step: step.config.payment_if_success_step || 0,
                     payment_if_failed: step.config.payment_if_failed || 'stop',

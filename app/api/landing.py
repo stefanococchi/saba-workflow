@@ -83,6 +83,8 @@ def show_landing_page(token):
                     'currency': sc.get('payment_currency', current_app.config.get('STRIPE_PAYMENT_CURRENCY', 'eur')),
                     'description': sc.get('payment_description', ''),
                     'already_paid': PaymentService.has_successful_payment(participant.id, current_step.id),
+                    'condition_field': sc.get('payment_condition_field', ''),
+                    'condition_value': sc.get('payment_condition_value', ''),
                 }
 
         # Se lo step ha un design custom (HTML pre-generato), usa quello
@@ -154,9 +156,21 @@ def submit_landing_data(token):
         if _guard_step:
             _sc = _guard_step.skip_conditions or {}
             if _sc.get('payment_enabled'):
-                _existing = dict(participant.collected_data or {})
-                if not (_existing.get('_payment', {}).get('status') == 'completed'):
-                    return jsonify({'error': 'Pagamento richiesto prima dell\'invio'}), 402
+                # Check conditional payment: skip guard if condition field doesn't match
+                _needs_payment = True
+                _cond_field = _sc.get('payment_condition_field', '')
+                _cond_value = _sc.get('payment_condition_value', '')
+                if _cond_field:
+                    form_data = request.get_json() or {}
+                    _field_val = form_data.get(_cond_field, '')
+                    if isinstance(_field_val, list):
+                        _field_val = ','.join(_field_val)
+                    _needs_payment = str(_field_val).lower() == str(_cond_value).lower()
+
+                if _needs_payment:
+                    _existing = dict(participant.collected_data or {})
+                    if not (_existing.get('_payment', {}).get('status') == 'completed'):
+                        return jsonify({'error': 'Pagamento richiesto prima dell\'invio'}), 402
 
         # Salva dati
         form_data = request.get_json()
