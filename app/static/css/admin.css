@@ -9,11 +9,11 @@
     --md-primary-container: #FFDEA1;
     --md-on-primary-container: #2B1D00;
 
-    /* Secondary — Olive/Dark Green */
-    --md-secondary: #5C6134;
+    /* Secondary — Warm Gold (aligned with Saba Form active state) */
+    --md-secondary: #7a5a10;
     --md-on-secondary: #FFFFFF;
-    --md-secondary-container: #E1E6AD;
-    --md-on-secondary-container: #1A1E00;
+    --md-secondary-container: #fef0c7;
+    --md-on-secondary-container: #7a5a10;
 
     /* Tertiary — Terracotta/Warm Brown */
     --md-tertiary: #9C5A2E;
@@ -80,9 +80,9 @@ body {
 
 /* ========== NAVBAR (Top App Bar) ========== */
 .navbar {
-    background: var(--md-surface) !important;
-    border-bottom: 1px solid var(--md-outline-variant);
-    box-shadow: none;
+    background: var(--md-surface-container-lowest) !important;
+    border-bottom: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
     height: 64px;
 }
 .navbar-brand {
@@ -118,9 +118,11 @@ body {
     min-width: 140px;
     max-width: 400px;
     flex-shrink: 0;
-    padding: 12px 8px;
-    background: var(--md-surface);
-    border-right: 1px solid var(--md-outline-variant);
+    padding: 12px 0 12px 0;
+    background: #faf8f5;
+    border-right: none;
+    border-radius: 0 24px 24px 0;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.06);
     overflow-y: auto;
     z-index: 100;
 }
@@ -150,9 +152,10 @@ body {
 .sidebar .nav-link {
     font-weight: 500;
     color: var(--md-on-surface-variant);
-    padding: 12px 16px;
-    border-radius: var(--md-shape-full);
+    padding: 9px 20px;
+    border-radius: 0 24px 24px 0;
     margin-bottom: 2px;
+    margin-right: 12px;
     font-size: 0.875rem;
     display: flex;
     align-items: center;
@@ -169,8 +172,8 @@ body {
 }
 
 .sidebar .nav-link:hover {
-    color: var(--md-on-secondary-container);
-    background: var(--md-surface-container-high);
+    color: var(--md-on-surface);
+    background: #f3ede4;
 }
 
 .sidebar .nav-link.active {
@@ -179,16 +182,20 @@ body {
     font-weight: 600;
     border-left: none;
 }
+.sidebar .nav-link.active i {
+    opacity: 1;
+}
 
 .sidebar-heading,
 .sidebar h6 {
-    font-size: 0.6875rem;
+    font-size: 0.58rem;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--md-on-surface-variant);
-    font-weight: 600;
-    padding: 16px 16px 8px;
+    letter-spacing: 0.18em;
+    color: var(--md-primary);
+    font-weight: 700;
+    padding: 14px 18px 6px;
     margin: 0;
+    border-bottom: 1px solid rgba(139,105,20,0.12);
 }
 
 /* Page header */
@@ -207,10 +214,10 @@ main h1.h2 {
 
 /* ========== CARDS (M3 Surface Containers) ========== */
 .card {
-    border: none;
-    border-radius: var(--md-shape-md);
+    border: 1px solid var(--md-outline-variant);
+    border-radius: 20px;
     background: var(--md-surface-container-lowest);
-    box-shadow: var(--md-elevation-1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
     overflow: hidden;
     transition: box-shadow 0.2s;
 }
@@ -241,8 +248,10 @@ main h1.h2 {
 /* ========== STAT CARDS (Dashboard) ========== */
 .stat-card {
     border-left: none;
-    border-radius: var(--md-shape-lg);
+    border: 1px solid var(--md-outline-variant);
+    border-radius: 20px;
     padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
     transition: transform 0.2s, box-shadow 0.2s;
     position: relative;
     overflow: hidden;
@@ -290,7 +299,7 @@ main h1.h2 {
 
 /* ========== BUTTONS (M3 Filled, Tonal, Outlined) ========== */
 .btn {
-    border-radius: var(--md-shape-full);
+    border-radius: var(--md-shape-md);
     font-weight: 500;
     font-size: 0.875rem;
     letter-spacing: 0.1px;
@@ -304,7 +313,7 @@ main h1.h2 {
     color: var(--md-on-primary);
 }
 .btn-primary:hover {
-    background: #7965b3;
+    background: #735610;
     box-shadow: var(--md-elevation-1);
 }
 
@@ -331,7 +340,7 @@ main h1.h2 {
 .btn-outline-primary {
     background: transparent;
     color: var(--md-primary);
-    border: 1px solid var(--md-outline);
+    border: 1.5px solid var(--md-outline-variant);
 }
 .btn-outline-primary:hover {
     background: var(--md-primary-container);
@@ -342,7 +351,7 @@ main h1.h2 {
 .btn-outline-secondary {
     background: transparent;
     color: var(--md-on-surface-variant);
-    border: 1px solid var(--md-outline);
+    border: 1.5px solid var(--md-outline-variant);
 }
 .btn-outline-secondary:hover {
     background: var(--md-surface-container-high);
@@ -352,7 +361,7 @@ main h1.h2 {
 .btn-outline-danger {
     background: transparent;
     color: var(--md-error);
-    border: 1px solid var(--md-outline);
+    border: 1.5px solid var(--md-error);
 }
 .btn-outline-danger:hover {
     background: var(--md-error-container);
@@ -362,7 +371,7 @@ main h1.h2 {
 .btn-outline-info {
     background: transparent;
     color: var(--md-tertiary);
-    border: 1px solid var(--md-outline);
+    border: 1.5px solid var(--md-outline-variant);
 }
 .btn-outline-info:hover {
     background: var(--md-tertiary-container);
@@ -396,12 +405,12 @@ main h1.h2 {
 
 /* ========== STATUS BADGES (M3 Chips) ========== */
 .status-badge {
-    padding: 4px 12px;
+    padding: 2px 10px;
     border-radius: var(--md-shape-sm);
-    font-size: 0.6875rem;
+    font-size: 0.72rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    text-transform: none;
+    letter-spacing: 0;
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -432,8 +441,40 @@ main h1.h2 {
     color: var(--md-on-surface-variant);
 }
 .status-in_progress {
-    background: #C3E7FF;
-    color: #00497B;
+    background: var(--md-tertiary-container);
+    color: var(--md-on-tertiary-container);
+}
+
+/* ========== BOOTSTRAP BADGE M3 OVERRIDES ========== */
+.badge.bg-primary {
+    background: var(--md-primary) !important;
+    color: var(--md-on-primary) !important;
+}
+.badge.bg-secondary {
+    background: var(--md-surface-container-highest) !important;
+    color: var(--md-on-surface-variant) !important;
+}
+.badge.bg-success {
+    background: var(--md-success-container) !important;
+    color: var(--md-success) !important;
+}
+.badge.bg-danger {
+    background: var(--md-error-container) !important;
+    color: var(--md-error) !important;
+}
+.badge.bg-warning {
+    background: var(--md-warning-container) !important;
+    color: var(--md-warning) !important;
+}
+.badge.bg-warning.text-dark {
+    color: var(--md-warning) !important;
+}
+.badge.bg-info {
+    background: var(--md-tertiary-container) !important;
+    color: var(--md-on-tertiary-container) !important;
+}
+.badge.bg-info.text-dark {
+    color: var(--md-on-tertiary-container) !important;
 }
 
 /* ========== TABLES ========== */
@@ -477,19 +518,19 @@ main h1.h2 {
 /* ========== FORMS (M3 Inputs) ========== */
 .form-control,
 .form-select {
-    border: 1px solid var(--md-outline);
-    border-radius: var(--md-shape-xs);
-    padding: 12px 16px;
+    border: 1.5px solid var(--md-outline-variant);
+    border-radius: var(--md-shape-md);
+    padding: 10px 13px;
     font-size: 0.9375rem;
     color: var(--md-on-surface);
     background: var(--md-surface-container-lowest);
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .form-control:focus,
 .form-select:focus {
     border-color: var(--md-primary);
-    box-shadow: 0 0 0 1px var(--md-primary);
+    box-shadow: 0 0 0 3px rgba(139,105,20,0.10);
     background: var(--md-surface-container-lowest);
 }
 
@@ -514,7 +555,7 @@ main h1.h2 {
 /* ========== ALERTS (M3 Banners) ========== */
 .alert {
     border: none;
-    border-radius: var(--md-shape-md);
+    border-radius: var(--md-shape-lg);
     font-size: 0.875rem;
     padding: 16px 20px;
 }
