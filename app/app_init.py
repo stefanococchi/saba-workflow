@@ -70,11 +70,12 @@ def create_app(config_object=None):
     CORS(app)
 
     # Registra blueprints
-    from app.api import workflow_bp, participant_bp, landing_bp, health_bp
+    from app.api import workflow_bp, participant_bp, landing_bp, health_bp, stripe_bp
     app.register_blueprint(health_bp)
     app.register_blueprint(workflow_bp, url_prefix='/api')
     app.register_blueprint(participant_bp, url_prefix='/api')
     app.register_blueprint(landing_bp)
+    app.register_blueprint(stripe_bp)
 
     # Avvia scheduler
     if not scheduler.running:

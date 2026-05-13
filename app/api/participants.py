@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, ParticipantStatus, WorkflowStatus, Execution, ExecutionStatus, ActivityLog
+from app.models import Workflow, WorkflowStep, Participant, ParticipantStatus, WorkflowStatus, Execution, ExecutionStatus, ActivityLog, PaymentLog
 from app.services.activity_service import log_activity
 from app.services import TokenService, SchedulerService
 from app.services.sabaform_service import get_events, get_participants, get_event_by_id
@@ -510,6 +510,8 @@ def rollback_participant(participant_id):
             participant.status = ParticipantStatus.PENDING
             participant.current_step_id = None
             participant.last_interaction = None
+            participant.collected_data = {}
+            participant.completed_at = None
             db.commit()
 
             log_activity(
@@ -545,6 +547,11 @@ def rollback_participant(participant_id):
                     Execution.participant_id == participant_id,
                     Execution.step_id.in_(step_ids)
                 ).delete(synchronize_session='fetch')
+                # Clear payment logs for rolled-back steps
+                db.query(PaymentLog).filter(
+                    PaymentLog.participant_id == participant_id,
+                    PaymentLog.step_id.in_(step_ids)
+                ).delete(synchronize_session='fetch')
 
             # Rigenera token (il vecchio potrebbe essere scaduto)
             participant.token = TokenService.generate_token(
@@ -552,9 +559,11 @@ def rollback_participant(participant_id):
                 expires_hours=participant.workflow.token_expiration_hours
             )
 
-            # Aggiorna partecipante
+            # Aggiorna partecipante — reset collected_data e stato pagamento
             participant.status = ParticipantStatus.IN_PROGRESS
             participant.current_step_id = target_step.id
+            participant.collected_data = {}
+            participant.completed_at = None
             db.commit()
 
             # Schedula lo step target solo se workflow attivo

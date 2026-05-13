@@ -31,6 +31,12 @@ class Config:
     WHATSAPP_TOKEN = os.getenv('WHATSAPP_TOKEN', '')
     WHATSAPP_BUSINESS_ID = os.getenv('WHATSAPP_BUSINESS_ID', '')
 
+    # Stripe Payment
+    STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+    STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')
+    STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+    STRIPE_PAYMENT_CURRENCY = os.getenv('STRIPE_PAYMENT_CURRENCY', 'eur')
+
     # JWT
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
     JWT_EXPIRATION_HOURS = int(os.getenv('JWT_EXPIRATION_HOURS', 72))

@@ -51,6 +51,17 @@ class ExecutionStatus(str, Enum):
     SKIPPED = 'skipped'
 
 
+class PaymentStatus(str, Enum):
+    """Stati pagamento Stripe"""
+    INITIATED = 'initiated'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+    EXPIRED = 'expired'
+    CANCELLED = 'cancelled'
+    REFUNDED = 'refunded'
+    DISPUTED = 'disputed'
+
+
 class Workflow(Base):
     """Workflow principale"""
     __tablename__ = 'workflows'
@@ -341,3 +352,49 @@ class UserAuditLog(Base):
 
     def __repr__(self):
         return f'<UserAuditLog {self.id}: {self.action} {self.entity}>'
+
+
+class PaymentLog(Base):
+    """Audit trail dettagliato per pagamenti Stripe.
+    Separato da ActivityLog per:
+    - Dati finanziari richiedono retention rigorosa
+    - Campi Stripe-specifici per reconciliazione
+    - Queryable per stripe_session_id/event_id per idempotenza webhook
+    """
+    __tablename__ = 'payment_log'
+    __table_args__ = (
+        Index('ix_payment_log_participant_step', 'participant_id', 'step_id'),
+        Index('ix_payment_log_stripe_session', 'stripe_session_id'),
+        Index('ix_payment_log_status', 'status'),
+    )
+
+    id = Column(Integer, primary_key=True)
+    participant_id = Column(Integer, ForeignKey('participants.id', ondelete='CASCADE'), nullable=False, index=True)
+    workflow_id = Column(Integer, ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False, index=True)
+    step_id = Column(Integer, ForeignKey('workflow_steps.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Stripe identifiers
+    stripe_session_id = Column(String(255), nullable=True)
+    stripe_payment_intent_id = Column(String(255), nullable=True)
+    stripe_event_id = Column(String(255), nullable=True, unique=True)
+
+    # Payment details
+    amount_cents = Column(Integer, nullable=False)
+    currency = Column(String(3), nullable=False, default='eur')
+    status = Column(SQLEnum(PaymentStatus, values_callable=lambda e: [s.value for s in e]), nullable=False)
+
+    # Event context
+    stripe_event_type = Column(String(100), nullable=True)
+    error_message = Column(Text, nullable=True)
+    raw_event = Column(JSON, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    # Relationships
+    participant = relationship('Participant')
+    workflow = relationship('Workflow')
+    step = relationship('WorkflowStep')
+
+    def __repr__(self):
+        return f'<PaymentLog {self.id}: {self.status} {self.amount_cents}c {self.currency}>'

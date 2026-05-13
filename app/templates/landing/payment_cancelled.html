@@ -1,0 +1,28 @@
+{% extends "landing/base.html" %}
+
+{% block title %}Pagamento annullato - Saba Workflow{% endblock %}
+
+{% block content %}
+<div style="text-align: center;">
+    <svg width="80" height="80" viewBox="0 0 80 80" style="margin-bottom: 20px;">
+        <circle cx="40" cy="40" r="35" fill="none" stroke="#f90" stroke-width="3"/>
+        <line x1="30" y1="30" x2="50" y2="50" stroke="#f90" stroke-width="3" stroke-linecap="round"/>
+        <line x1="50" y1="30" x2="30" y2="50" stroke="#f90" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+
+    <h1 style="color: #f90;">Pagamento annullato</h1>
+    <p style="font-size: 18px;">Il pagamento non è stato completato.</p>
+    <p>I tuoi dati sono stati salvati. Puoi riprovare quando vuoi.</p>
+
+    <div style="margin-top: 30px;">
+        <a href="/landing/{{ token }}"
+           style="display: inline-block; padding: 14px 32px; background: #8B6914; color: #fff; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px;">
+            Riprova il pagamento
+        </a>
+    </div>
+
+    <p style="margin-top: 30px; color: #999; font-size: 14px;">
+        Se hai problemi con il pagamento, contatta l'organizzatore.
+    </p>
+</div>
+{% endblock %}

@@ -1097,6 +1097,42 @@ function _renderStepEditFormInner(step, index, common) {
                             </div>
                         </div>
                     </div>
+                    <!-- Payment Configuration -->
+                    <hr class="my-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="editPaymentEnabled"
+                               ${step.config.payment_enabled ? 'checked' : ''}
+                               onchange="togglePaymentFields()">
+                        <label class="form-check-label" for="editPaymentEnabled">
+                            <i class="bi bi-credit-card"></i> Richiedi pagamento Stripe
+                        </label>
+                    </div>
+                    <div id="paymentFields" class="mt-2 ms-4" ${step.config.payment_enabled ? '' : 'style="display:none"'}>
+                        <div class="row">
+                            <div class="col-8 mb-2">
+                                <label class="form-label">Importo</label>
+                                <input type="number" class="form-control form-control-sm" id="editPaymentAmount"
+                                       value="${step.config.payment_amount || ''}" step="0.01" min="0.50" placeholder="50.00">
+                            </div>
+                            <div class="col-4 mb-2">
+                                <label class="form-label">Valuta</label>
+                                <select class="form-select form-select-sm" id="editPaymentCurrency">
+                                    <option value="eur" ${(step.config.payment_currency || 'eur') === 'eur' ? 'selected' : ''}>EUR</option>
+                                    <option value="usd" ${step.config.payment_currency === 'usd' ? 'selected' : ''}>USD</option>
+                                    <option value="gbp" ${step.config.payment_currency === 'gbp' ? 'selected' : ''}>GBP</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Descrizione (visibile su Stripe)</label>
+                            <input type="text" class="form-control form-control-sm" id="editPaymentDescription"
+                                   value="${step.config.payment_description || ''}" placeholder="Quota iscrizione">
+                        </div>
+                        <div class="alert alert-info p-2 mt-2" style="font-size:0.8rem;margin-bottom:0">
+                            <i class="bi bi-info-circle"></i> Il branching segue le regole "If form submitted" / "If timeout" sopra.
+                            Pagamento OK = FILLED, Pagamento fallito/scaduto = TIMEOUT.
+                        </div>
+                    </div>
                 </div>
             `;
         case 'wait_until':
@@ -1819,6 +1855,17 @@ function toggleGoalJump(which) {
     row.style.display = sel.value === 'jump' ? '' : 'none';
 }
 
+function togglePaymentFields() {
+    var enabled = document.getElementById('editPaymentEnabled').checked;
+    document.getElementById('paymentFields').style.display = enabled ? '' : 'none';
+}
+
+function togglePaymentJump(which) {
+    var sel = document.getElementById('editPaymentIf' + which);
+    var row = document.getElementById('jumpPayment' + which + 'Row');
+    row.style.display = sel.value === 'jump' ? '' : 'none';
+}
+
 function toggleWaMessageType() {
     var type = document.getElementById('editWaMessageType').value;
     document.getElementById('waTemplateFields').style.display = type === 'template' ? '' : 'none';
@@ -2278,7 +2325,20 @@ function saveStepEdit() {
             step.config.landing_if_timeout_step = _timeoutStepVal === 'end' ? 'end' : (parseInt(_timeoutStepVal) || 0);
             if (!step.config.has_landing) {
                 step.config.wait_for_landing = false;
+                step.config.payment_enabled = false;
             }
+            // Payment config
+            step.config.payment_enabled = document.getElementById('editPaymentEnabled')?.checked || false;
+            step.config.payment_amount = parseFloat(document.getElementById('editPaymentAmount')?.value) || 0;
+            step.config.payment_currency = document.getElementById('editPaymentCurrency')?.value || 'eur';
+            step.config.payment_description = document.getElementById('editPaymentDescription')?.value || '';
+            step.config.payment_if_success = document.getElementById('editPaymentIfSuccess')?.value || 'continue';
+            var _paySuccessVal = document.getElementById('editPaymentIfSuccessStep')?.value || '0';
+            step.config.payment_if_success_step = _paySuccessVal === 'end' ? 'end' : (parseInt(_paySuccessVal) || 0);
+            step.config.payment_if_failed = document.getElementById('editPaymentIfFailed')?.value || 'stop';
+            var _payFailedVal = document.getElementById('editPaymentIfFailedStep')?.value || '0';
+            step.config.payment_if_failed_step = _payFailedVal === 'end' ? 'end' : (parseInt(_payFailedVal) || 0);
+            if (!step.config.has_landing) step.config.payment_enabled = false;
             destroyEmailEditor();
             break;
         case 'delay':
@@ -2603,6 +2663,7 @@ function generateReview() {
                 if (step.config.subject) chips.push('<i class="bi bi-envelope"></i> ' + step.config.subject);
                 if (step.config.recipient === 'custom' && step.config.custom_to) chips.push('<i class="bi bi-at"></i> ' + step.config.custom_to);
                 if (step.config.has_landing) chips.push('<i class="bi bi-card-text"></i> Landing');
+                if (step.config.payment_enabled) chips.push('<i class="bi bi-credit-card"></i> ' + (step.config.payment_amount || 0).toFixed(2) + ' ' + (step.config.payment_currency || 'EUR').toUpperCase());
                 if (step.config.delay_hours) chips.push('<i class="bi bi-clock"></i> ' + step.config.delay_hours + 'h');
                 break;
             case 'condition':
@@ -2755,7 +2816,16 @@ function saveWorkflow() {
                     landing_if_filled: step.config.landing_if_filled || 'continue',
                     landing_if_filled_step: step.config.landing_if_filled_step || 0,
                     landing_if_timeout: step.config.landing_if_timeout || 'continue',
-                    landing_if_timeout_step: step.config.landing_if_timeout_step || 0
+                    landing_if_timeout_step: step.config.landing_if_timeout_step || 0,
+                    // Stripe payment
+                    payment_enabled: !!step.config.payment_enabled,
+                    payment_amount_cents: Math.round((parseFloat(step.config.payment_amount) || 0) * 100),
+                    payment_currency: step.config.payment_currency || 'eur',
+                    payment_description: step.config.payment_description || '',
+                    payment_if_success: step.config.payment_if_success || 'continue',
+                    payment_if_success_step: step.config.payment_if_success_step || 0,
+                    payment_if_failed: step.config.payment_if_failed || 'stop',
+                    payment_if_failed_step: step.config.payment_if_failed_step || 0
                 };
             }
 
@@ -3814,9 +3884,38 @@ function drExecuteStep(idx) {
 }
 
 // Resolve a step result and advance to next
+/**
+ * Determine the default "NEXT" step index for a non-branching step.
+ * Mirrors exactly the canvas connection logic from workflow-canvas-2d.js:
+ *
+ * 1. If step.config.next_step === 'end' → END (finish)
+ * 2. If step.config.next_step is a number → jump to that step order
+ * 3. If step.config.next_step === 'auto' or unset → next step in sequence, or END if last
+ *
+ * For branching steps (condition, goal_check, etc.), nextIdx is set by drSubmitResponse.
+ */
+function drGetDefaultNext(idx) {
+    var step = workflowSteps[idx];
+    var nextStep = (step.config && step.config.next_step) || 'auto';
+
+    if (nextStep === 'end') {
+        return workflowSteps.length; // END
+    }
+
+    if (nextStep !== 'auto' && parseInt(nextStep) > 0) {
+        // Explicit jump to a specific step order
+        var targetOrder = parseInt(nextStep);
+        var targetIdx = workflowSteps.findIndex(function(s) { return s.order === targetOrder; });
+        return targetIdx >= 0 ? targetIdx : workflowSteps.length;
+    }
+
+    // Auto: next in sequence, or END if last
+    return idx + 1 < workflowSteps.length ? idx + 1 : workflowSteps.length;
+}
+
 function drResolveStep(idx, result) {
     var step = workflowSteps[idx];
-    var nextIdx = result.nextIdx !== undefined ? result.nextIdx : idx + 1;
+    var nextIdx = result.nextIdx !== undefined ? result.nextIdx : drGetDefaultNext(idx);
 
     drState.stepStates[idx] = 'done';
     drState.stepResults[idx] = result;
@@ -3824,8 +3923,10 @@ function drResolveStep(idx, result) {
     // Mark skipped steps between current and next (jump)
     if (nextIdx > idx + 1) {
         for (var s = idx + 1; s < nextIdx && s < workflowSteps.length; s++) {
-            drState.stepStates[s] = 'skipped';
-            drLog('skip', 'bi-dash', workflowSteps[s].name + ' — ' + _t('dr_skipped'), _t('dr_branch_skip'));
+            if (drState.stepStates[s] !== 'done') {
+                drState.stepStates[s] = 'skipped';
+                drLog('skip', 'bi-dash', workflowSteps[s].name + ' — ' + _t('dr_skipped'), _t('dr_branch_skip'));
+            }
         }
     }
 
@@ -4236,9 +4337,20 @@ function drRenderLandingForm(result, idx) {
 
     if (!fields || fields.length === 0) {
         // No fields loaded — show simple buttons
+        var _step = workflowSteps[idx];
+        var _hasPayment = _step && _step.config && _step.config.payment_enabled;
         html += '<p style="font-size:12px;color:var(--md-on-surface-variant);margin:12px 0">' + _t('dr_no_fields_found') + '</p>';
         html += '<div class="dr-interactive-actions">';
-        html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-check-lg"></i> ' + _t('dr_form_filled') + '</button>';
+        if (_hasPayment) {
+            var _payAmt = (parseFloat(_step.config.payment_amount) || 0).toFixed(2);
+            var _payCur = (_step.config.payment_currency || 'EUR').toUpperCase();
+            html += '<div style="background:#fff8e1;border-left:4px solid #f9a825;padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:12px">';
+            html += '<i class="bi bi-credit-card"></i> <strong>Pagamento richiesto:</strong> ' + _payAmt + ' ' + _payCur + '</div>';
+            html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-credit-card"></i> Form + Paga OK</button>';
+            html += '<button class="btn btn-sm btn-outline-danger me-2" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-x-circle"></i> Form + Pagamento fallito</button>';
+        } else {
+            html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-check-lg"></i> ' + _t('dr_form_filled') + '</button>';
+        }
         html += '<button class="btn btn-sm btn-outline-secondary me-2" onclick="drSubmitResponse(\'landing\',\'empty\')"><i class="bi bi-x-lg"></i> ' + _t('not_filled') + '</button>';
         html += '<button class="btn btn-sm btn-outline-warning" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>';
         html += '</div>';
@@ -4307,8 +4419,21 @@ function drRenderLandingForm(result, idx) {
     html += '</div>';
 
     // Action buttons
+    var step = workflowSteps[idx];
+    var hasPayment = step && step.config && step.config.payment_enabled;
     html += '<div class="dr-landing-actions">';
-    html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitLandingForm(' + idx + ')"><i class="bi bi-send-fill"></i> ' + _t('dr_submit_form') + '</button>';
+    if (hasPayment) {
+        var payAmount = (parseFloat(step.config.payment_amount) || 0).toFixed(2);
+        var payCurrency = (step.config.payment_currency || 'EUR').toUpperCase();
+        html += '<div style="background:#fff8e1;border-left:4px solid #f9a825;padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:12px">';
+        html += '<i class="bi bi-credit-card"></i> <strong>Pagamento richiesto:</strong> ' + payAmount + ' ' + payCurrency;
+        if (step.config.payment_description) html += ' — ' + step.config.payment_description;
+        html += '</div>';
+        html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitLandingFormWithPayment(' + idx + ',true)"><i class="bi bi-credit-card"></i> Compila form + Paga OK (' + payAmount + ' ' + payCurrency + ')</button>';
+        html += '<button class="btn btn-sm btn-outline-danger me-2" onclick="drSubmitLandingFormWithPayment(' + idx + ',false)"><i class="bi bi-x-circle"></i> Compila form + Pagamento fallito</button>';
+    } else {
+        html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitLandingForm(' + idx + ')"><i class="bi bi-send-fill"></i> ' + _t('dr_submit_form') + '</button>';
+    }
     html += '<button class="btn btn-sm btn-outline-secondary me-2" onclick="drSubmitResponse(\'landing\',\'empty\')"><i class="bi bi-x-lg"></i> ' + _t('dr_does_not_fill') + '</button>';
     html += '<button class="btn btn-sm btn-outline-warning" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>';
     html += '</div>';
@@ -4351,6 +4476,52 @@ function drSubmitLandingForm(stepIdx) {
         Object.keys(formData).length + ' ' + _t('dr_fields') + ': ' + Object.keys(formData).join(', '));
 
     drSubmitResponse('landing', 'filled');
+}
+
+// Submit landing form with payment simulation
+function drSubmitLandingFormWithPayment(stepIdx, paymentOk) {
+    if (!drState) return;
+    var container = document.getElementById('drLandingFields_' + stepIdx);
+    var formData = {};
+
+    if (container) {
+        container.querySelectorAll('input[data-field], textarea[data-field], select[data-field]').forEach(function(el) {
+            var field = el.dataset.field;
+            if (el.type === 'radio') {
+                if (el.checked) formData[field] = el.value;
+            } else if (el.type === 'checkbox') {
+                if (!formData[field]) formData[field] = [];
+                if (el.checked) formData[field].push(el.value);
+            } else {
+                formData[field] = el.value;
+            }
+        });
+        Object.keys(formData).forEach(function(k) {
+            drState.config.collected_data[k] = formData[k];
+        });
+        try {
+            document.getElementById('drCollectedData').value = JSON.stringify(drState.config.collected_data, null, 2);
+        } catch(e) {}
+    }
+
+    var step = workflowSteps[stepIdx];
+    var payAmount = (parseFloat(step.config.payment_amount) || 0).toFixed(2);
+    var payCurrency = (step.config.payment_currency || 'EUR').toUpperCase();
+
+    if (paymentOk) {
+        drState.config.collected_data['_payment'] = {
+            status: 'completed', amount: payAmount, currency: payCurrency, simulated: true
+        };
+        drLog('success', 'bi-credit-card', 'Pagamento simulato: ' + payAmount + ' ' + payCurrency + ' — OK',
+            Object.keys(formData).length + ' campi compilati');
+        drSubmitResponse('landing', 'filled');
+    } else {
+        drState.config.collected_data['_payment'] = {
+            status: 'failed', amount: payAmount, currency: payCurrency, simulated: true
+        };
+        drLog('warning', 'bi-credit-card', 'Pagamento simulato: ' + payAmount + ' ' + payCurrency + ' — FALLITO', '');
+        drSubmitResponse('landing', 'timeout');
+    }
 }
 
 function drLogColor(cls) {

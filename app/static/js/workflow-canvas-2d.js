@@ -487,8 +487,8 @@ function _buildNodeHtml(step, index) {
     }
     if (step.type === 'email' && step.config && step.config.wait_for_landing) {
         outputsHtml += '<div class="df-output-labels">';
-        outputsHtml += '<span class="df-output-label filled">filled</span>';
-        outputsHtml += '<span class="df-output-label timeout">timeout</span>';
+        outputsHtml += '<span class="df-output-label filled">FILLED</span>';
+        outputsHtml += '<span class="df-output-label timeout">TIMEOUT</span>';
         outputsHtml += '</div>';
     }
 
@@ -525,7 +525,7 @@ function _buildNodeHtml(step, index) {
 function _getOutputCount(step) {
     var cfg = _stepTypeConfig[step.type] || {};
     var count = cfg.outputs || 1;
-    // Email with wait_for_landing has 2 outputs
+    // Email with wait_for_landing has 2 outputs (filled + timeout)
     if (step.type === 'email' && step.config && step.config.wait_for_landing) {
         count = 2;
     }

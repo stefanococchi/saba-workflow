@@ -9,11 +9,67 @@
     </style>
 </head>
 <body>
+    <script>
+    window.__sabaPayment = {{ (payment_config or {})|tojson }};
+    // If payment is enabled, intercept ALL form submits in CAPTURE phase
+    // (runs before the inline submit script embedded in custom_html)
+    if (window.__sabaPayment && window.__sabaPayment.enabled && !window.__sabaPayment.already_paid) {
+        document.addEventListener('submit', function(e) {
+            var form = e.target;
+            if (!form.classList.contains('saba-landing-form')) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+
+            if (window.__sabaPaymentSubmitting) return;
+            window.__sabaPaymentSubmitting = true;
+
+            var btn = form.querySelector('[type="submit"]');
+            if (btn) { btn.disabled = true; btn.textContent = 'Reindirizzamento al pagamento...'; }
+
+            var fd = new FormData(form);
+            var data = {};
+            var filePromises = [];
+            fd.forEach(function(v, k) {
+                if (v instanceof File && v.size > 0) {
+                    filePromises.push(new Promise(function(ok, fail) {
+                        var r = new FileReader();
+                        r.onload = function() { data[k] = {filename: v.name, mime: v.type, size: v.size, data: r.result}; ok(); };
+                        r.onerror = fail;
+                        r.readAsDataURL(v);
+                    }));
+                } else if (!(v instanceof File)) {
+                    if (data[k]) { if (!Array.isArray(data[k])) data[k] = [data[k]]; data[k].push(v); }
+                    else data[k] = v;
+                }
+            });
+
+            Promise.all(filePromises).then(function() {
+                return fetch(window.location.pathname + '/checkout', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+            }).then(function(r) {
+                if (r.ok) return r.json();
+                return r.json().then(function(err) { throw new Error(err.error || 'Errore pagamento'); });
+            }).then(function(result) {
+                window.location.href = result.checkout_url;
+            }).catch(function(err) {
+                var em = document.querySelector('.saba-error-msg');
+                if (em) { em.textContent = err.message || 'Errore pagamento'; em.style.display = 'block'; }
+                if (btn) { btn.disabled = false; btn.textContent = 'Riprova'; }
+                window.__sabaPaymentSubmitting = false;
+            });
+        }, true); // CAPTURE phase — runs before bubble-phase listeners
+    }
+    </script>
+
     {{ custom_html | safe }}
 
     <script>
     (function() {
         var _submitting = false;
+        var _payment = window.__sabaPayment || {};
         // Intercetta tutti i form con classe saba-landing-form
         var forms = document.querySelectorAll('.saba-landing-form');
         forms.forEach(function(form) {
@@ -68,30 +124,53 @@
                 try {
                     await Promise.all(filePromises);
 
-                    var response = await fetch('/landing/{{ token }}', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data)
-                    });
-
-                    if (response.ok) {
-                        if (successMsg) {
-                            successMsg.style.display = 'block';
-                            successMsg.scrollIntoView({ behavior: 'smooth' });
+                    if (_payment.enabled && !_payment.already_paid) {
+                        // Payment flow: redirect to Stripe Checkout
+                        if (submitBtn) submitBtn.textContent = 'Reindirizzamento al pagamento...';
+                        var response = await fetch('/landing/{{ token }}/checkout', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                        if (response.ok) {
+                            var result = await response.json();
+                            window.location.href = result.checkout_url;
+                        } else {
+                            var err = await response.json();
+                            if (errorMsg) {
+                                errorMsg.textContent = err.error || 'Errore creazione pagamento.';
+                                errorMsg.style.display = 'block';
+                            }
+                            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Riprova'; }
+                            _submitting = false;
                         }
-                        form.reset();
-                        setTimeout(function() { form.style.display = 'none'; }, 2000);
                     } else {
-                        var err = await response.json();
-                        if (errorMsg) {
-                            errorMsg.textContent = err.error || 'Errore durante il salvataggio.';
-                            errorMsg.style.display = 'block';
+                        // Normal flow: direct submission
+                        var response = await fetch('/landing/{{ token }}', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+
+                        if (response.ok) {
+                            if (successMsg) {
+                                successMsg.style.display = 'block';
+                                successMsg.scrollIntoView({ behavior: 'smooth' });
+                            }
+                            form.reset();
+                            setTimeout(function() { form.style.display = 'none'; }, 2000);
+                        } else {
+                            var err = await response.json();
+                            if (errorMsg) {
+                                errorMsg.textContent = err.error || 'Errore durante il salvataggio.';
+                                errorMsg.style.display = 'block';
+                            }
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = 'Invia';
+                            }
+                            _submitting = false;
                         }
-                        if (submitBtn) {
-                            submitBtn.disabled = false;
-                            submitBtn.textContent = 'Invia';
-                        }
-                        _submitting = false;
                     }
                 } catch (error) {
                     if (errorMsg) {

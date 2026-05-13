@@ -81,7 +81,23 @@
         </div>
     {% endif %}
     
+    {% if payment_config and payment_config.enabled and not payment_config.already_paid %}
+    <div style="background: #fff8e1; border-left: 4px solid #f9a825; padding: 15px; border-radius: 6px; margin-bottom: 16px;">
+        <strong>Pagamento richiesto:</strong>
+        {{ "%.2f"|format(payment_config.amount_cents / 100) }} {{ payment_config.currency|upper }}
+        {% if payment_config.description %}<br><small>{{ payment_config.description }}</small>{% endif %}
+    </div>
+    <button type="submit" id="submitBtn">
+        Paga {{ "%.2f"|format(payment_config.amount_cents / 100) }} {{ payment_config.currency|upper }} e invia
+    </button>
+    {% elif payment_config and payment_config.enabled and payment_config.already_paid %}
+    <div class="success" style="margin-bottom: 16px;">
+        <strong>Pagamento ricevuto!</strong> Puoi procedere con l'invio del form.
+    </div>
     <button type="submit" id="submitBtn">Invia</button>
+    {% else %}
+    <button type="submit" id="submitBtn">Invia</button>
+    {% endif %}
 </form>
 
 <div id="successMessage" class="success" style="display: none;">
@@ -156,24 +172,49 @@ document.getElementById('landingForm').addEventListener('submit', async (e) => {
     try {
         await Promise.all(filePromises);
 
-        const response = await fetch('/landing/{{ token }}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
+        var paymentEnabled = {{ (payment_config.enabled if payment_config else False)|tojson }};
+        var alreadyPaid = {{ (payment_config.already_paid if payment_config else False)|tojson }};
 
-        if (response.ok) {
-            successMsg.style.display = 'block';
-            e.target.reset();
-            successMsg.scrollIntoView({ behavior: 'smooth' });
-            setTimeout(() => { e.target.style.display = 'none'; }, 2000);
+        if (paymentEnabled && !alreadyPaid) {
+            // Payment flow: send form data to checkout endpoint
+            submitBtn.textContent = 'Reindirizzamento al pagamento...';
+            const response = await fetch('/landing/{{ token }}/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (response.ok) {
+                const result = await response.json();
+                window.location.href = result.checkout_url;
+            } else {
+                const error = await response.json();
+                errorMsg.textContent = error.error || 'Errore creazione pagamento.';
+                errorMsg.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Riprova';
+                _submitting = false;
+            }
         } else {
-            const error = await response.json();
-            errorMsg.textContent = error.error || 'Errore durante il salvataggio.';
-            errorMsg.style.display = 'block';
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Invia';
-            _submitting = false;
+            // Normal flow: direct submission
+            const response = await fetch('/landing/{{ token }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                successMsg.style.display = 'block';
+                e.target.reset();
+                successMsg.scrollIntoView({ behavior: 'smooth' });
+                setTimeout(() => { e.target.style.display = 'none'; }, 2000);
+            } else {
+                const error = await response.json();
+                errorMsg.textContent = error.error || 'Errore durante il salvataggio.';
+                errorMsg.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Invia';
+                _submitting = false;
+            }
         }
     } catch (error) {
         errorMsg.textContent = 'Errore di connessione. Riprova.';
