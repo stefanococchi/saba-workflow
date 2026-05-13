@@ -4362,10 +4362,16 @@ function drRenderLandingForm(result, idx) {
         if (_hasPayment) {
             var _payAmt = (parseFloat(_step.config.payment_amount) || 0).toFixed(2);
             var _payCur = (_step.config.payment_currency || 'EUR').toUpperCase();
+            var _hasCond = _step.config.payment_condition_field;
             html += '<div style="background:#fff8e1;border-left:4px solid #f9a825;padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:12px">';
-            html += '<i class="bi bi-credit-card"></i> <strong>Pagamento richiesto:</strong> ' + _payAmt + ' ' + _payCur + '</div>';
+            html += '<i class="bi bi-credit-card"></i> <strong>Pagamento richiesto:</strong> ' + _payAmt + ' ' + _payCur;
+            if (_hasCond) html += '<br><i class="bi bi-funnel"></i> Solo se <strong>' + _step.config.payment_condition_field + '</strong> = <strong>' + _step.config.payment_condition_value + '</strong>';
+            html += '</div>';
             html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-credit-card"></i> Form + Paga OK</button>';
             html += '<button class="btn btn-sm btn-outline-danger me-2" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-x-circle"></i> Form + Pagamento fallito</button>';
+            if (_hasCond) {
+                html += '<button class="btn btn-sm btn-outline-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-send-fill"></i> ' + _step.config.payment_condition_field + '≠' + _step.config.payment_condition_value + ' (no pagamento)</button>';
+            }
         } else {
             html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-check-lg"></i> ' + _t('dr_form_filled') + '</button>';
         }
@@ -4443,12 +4449,17 @@ function drRenderLandingForm(result, idx) {
     if (hasPayment) {
         var payAmount = (parseFloat(step.config.payment_amount) || 0).toFixed(2);
         var payCurrency = (step.config.payment_currency || 'EUR').toUpperCase();
+        var hasCond = step.config.payment_condition_field;
         html += '<div style="background:#fff8e1;border-left:4px solid #f9a825;padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:12px">';
         html += '<i class="bi bi-credit-card"></i> <strong>Pagamento richiesto:</strong> ' + payAmount + ' ' + payCurrency;
         if (step.config.payment_description) html += ' — ' + step.config.payment_description;
+        if (hasCond) html += '<br><i class="bi bi-funnel"></i> Solo se <strong>' + step.config.payment_condition_field + '</strong> = <strong>' + step.config.payment_condition_value + '</strong>';
         html += '</div>';
-        html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitLandingFormWithPayment(' + idx + ',true)"><i class="bi bi-credit-card"></i> Compila form + Paga OK (' + payAmount + ' ' + payCurrency + ')</button>';
-        html += '<button class="btn btn-sm btn-outline-danger me-2" onclick="drSubmitLandingFormWithPayment(' + idx + ',false)"><i class="bi bi-x-circle"></i> Compila form + Pagamento fallito</button>';
+        html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitLandingFormWithPayment(' + idx + ',true)"><i class="bi bi-credit-card"></i> ' + (hasCond ? step.config.payment_condition_field + '=' + step.config.payment_condition_value + ' + ' : '') + 'Paga OK</button>';
+        html += '<button class="btn btn-sm btn-outline-danger me-2" onclick="drSubmitLandingFormWithPayment(' + idx + ',false)"><i class="bi bi-x-circle"></i> ' + (hasCond ? step.config.payment_condition_field + '=' + step.config.payment_condition_value + ' + ' : '') + 'Pagamento fallito</button>';
+        if (hasCond) {
+            html += '<button class="btn btn-sm btn-outline-success me-2" onclick="drSubmitLandingForm(' + idx + ')"><i class="bi bi-send-fill"></i> ' + step.config.payment_condition_field + '≠' + step.config.payment_condition_value + ' (no pagamento)</button>';
+        }
     } else {
         html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitLandingForm(' + idx + ')"><i class="bi bi-send-fill"></i> ' + _t('dr_submit_form') + '</button>';
     }
