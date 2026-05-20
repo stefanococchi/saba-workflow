@@ -93,17 +93,7 @@
 .progress-mini .dot.current { background: var(--md-primary); }
 .progress-mini .dot.err { background: #B3261E; }
 
-/* Detail two-col */
-.detail-two-col { display: grid; grid-template-columns: 280px 1fr; gap: 24px; align-items: start; transition: grid-template-columns 0.25s; }
-.detail-two-col.info-collapsed { grid-template-columns: 48px 1fr; }
-.detail-sidebar-info { position: sticky; top: 84px; overflow: hidden; transition: all 0.25s; }
-.detail-two-col.info-collapsed .detail-sidebar-info .card { display: none; }
-.info-toggle { width: 100%; border: 1px solid var(--md-outline-variant); border-radius: 12px; background: var(--md-surface-container-lowest); padding: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--md-on-surface-variant); font-size: 0.9rem; margin-bottom: 12px; }
-.info-toggle:hover { background: var(--md-surface-container); }
-.info-toggle .toggle-label { margin-left: 6px; font-size: 0.78rem; font-weight: 500; }
-.detail-two-col.info-collapsed .info-toggle .toggle-label { display: none; }
-.detail-two-col.info-collapsed .info-toggle { border-radius: 50%; width: 40px; height: 40px; margin: 0 auto 12px; }
-@media (max-width: 900px) { .detail-two-col { grid-template-columns: 1fr; } }
+/* Detail — info bar is now inline, no two-col needed */
 
 /* Detail items */
 .detail-item label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--md-on-surface-variant); margin-bottom: 4px; font-weight: 600; }
@@ -171,7 +161,51 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 .prat-spinner { display: inline-block; width: 18px; height: 18px; border: 2.5px solid var(--md-outline-variant); border-top-color: var(--md-primary); border-radius: 50%; animation: pratspin 0.7s linear infinite; }
 @keyframes pratspin { to { transform: rotate(360deg); } }
 
-/* Saved practices — uses dropdown, no extra CSS needed */
+/* Elabora 3-column layout */
+.elabora-layout { display: grid; grid-template-columns: 200px 240px 1fr; gap: 16px; min-height: 500px; }
+.elabora-col-agents .card, .elabora-col-practices .card { border-radius: 16px; }
+.elabora-col-detail { min-width: 0; }
+
+.practice-row {
+  padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--md-outline-variant);
+  transition: background 0.1s; font-size: 0.82rem;
+}
+.practice-row:hover { background: var(--md-surface-container-low); }
+.practice-row.active { background: rgba(139,105,20,0.12); }
+.practice-row:last-child { border-bottom: none; }
+.practice-row .pr-id { font-weight: 600; font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.practice-row .pr-meta { font-size: 0.72rem; color: var(--md-on-surface-variant); display: flex; gap: 8px; margin-top: 2px; }
+
+@media (max-width: 1024px) { .elabora-layout { grid-template-columns: 180px 1fr; } .elabora-col-practices { display: none; } }
+@media (max-width: 768px) { .elabora-layout { grid-template-columns: 1fr; } .elabora-col-agents, .elabora-col-practices { display: none; } }
+
+/* Catalog two-column layout */
+.catalog-layout { display: grid; grid-template-columns: 240px 1fr; gap: 20px; min-height: 500px; }
+.catalog-agents-col .card { border-radius: 16px; }
+.catalog-types-col { min-width: 0; }
+
+.agent-row {
+  padding: 10px 16px; cursor: pointer; border-bottom: 1px solid var(--md-outline-variant);
+  display: flex; align-items: center; gap: 10px; transition: background 0.1s; font-size: 0.85rem;
+}
+.agent-row:hover { background: var(--md-surface-container-low); }
+.agent-row.active { background: rgba(139,105,20,0.12); font-weight: 600; color: var(--md-primary); }
+.agent-row:last-child { border-bottom: none; }
+.agent-row .agent-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--md-surface-container); display: flex; align-items: center; justify-content: center; font-size: 1rem; color: var(--md-primary); flex-shrink: 0; }
+.agent-row .agent-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-row .agent-badge { font-size: 0.7rem; background: var(--md-surface-container); padding: 1px 6px; border-radius: 6px; color: var(--md-on-surface-variant); }
+
+.type-row {
+  padding: 12px 16px; border: 1px solid var(--md-outline-variant); border-radius: 12px;
+  margin-bottom: 8px; cursor: pointer; transition: all 0.15s; background: var(--md-surface-container-lowest);
+}
+.type-row:hover { border-color: var(--md-primary); box-shadow: 0 2px 8px rgba(139,105,20,0.1); }
+.type-row .type-name { font-weight: 600; font-size: 0.9rem; }
+.type-row .type-meta { font-size: 0.75rem; color: var(--md-on-surface-variant); display: flex; gap: 12px; margin-top: 4px; }
+.type-row .type-fields { font-size: 0.78rem; color: var(--md-on-surface-variant); margin-top: 6px; }
+.type-row .type-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+@media (max-width: 768px) { .catalog-layout { grid-template-columns: 1fr; } }
 
 /* Clickable extraction fields */
 .extraction-field.clickable { cursor: pointer; transition: all 0.15s; border: 1px solid var(--md-outline-variant); }
@@ -197,113 +231,101 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 </div>
 
 <!-- ============================================ -->
-<!-- TAB 1: ELABORA PRATICA                       -->
+<!-- TAB 1: ELABORA PRATICA (3-column layout)     -->
 <!-- ============================================ -->
 <div class="prat-page active" id="prat-page-elabora">
+  <select id="agentSelect" style="display:none"></select>
+  <div class="elabora-layout">
 
-  <!-- Agent + Practice selector -->
-  <div class="card mb-4">
-    <div class="card-body">
-      <div class="row g-3 align-items-end">
-        <div class="col-md-3">
-          <label class="form-label" style="font-size:0.8rem;font-weight:500">Agente</label>
-          <select id="agentSelect" class="form-select" style="border-radius:12px"></select>
+    <!-- COL 1: Agents -->
+    <div class="elabora-col-agents">
+      <div class="card" style="height:100%">
+        <div class="card-header" style="font-size:0.85rem;font-weight:600">
+          <i class="bi bi-cpu"></i> Agenti
         </div>
-        <div class="col-md-3">
-          <label class="form-label" style="font-size:0.8rem;font-weight:500">Pratiche salvate</label>
-          <div class="d-flex gap-1">
-            <select id="savedPracticeSelect" class="form-select" style="border-radius:12px" onchange="onSavedPracticeSelected(this.value)">
-              <option value="">Nuova pratica...</option>
-            </select>
-            <button class="btn btn-outline-danger" id="btnDeletePractice" onclick="deleteSavedPractice()" style="border-radius:12px;display:none" title="Elimina pratica salvata">
-              <i class="bi bi-trash3"></i>
+        <div id="elaboraAgentsList" style="overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- COL 2: Saved practices for selected agent -->
+    <div class="elabora-col-practices">
+      <div class="card" style="height:100%">
+        <div class="card-header d-flex justify-content-between align-items-center" style="font-size:0.85rem;font-weight:600">
+          <span><i class="bi bi-folder2-open"></i> Pratiche</span>
+          <button class="btn btn-sm btn-primary" onclick="startNewPractice()" style="border-radius:6px;font-size:0.75rem" id="btnNewPractice" disabled>
+            <i class="bi bi-plus-lg"></i> Nuova
+          </button>
+        </div>
+        <div id="elaboraPracticesList" style="overflow-y:auto">
+          <div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.82rem">
+            <i class="bi bi-arrow-left" style="opacity:0.4"></i> Seleziona un agente
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COL 3: Practice detail -->
+    <div class="elabora-col-detail">
+
+      <!-- Empty state -->
+      <div id="elaboraEmpty" class="text-center py-5" style="color:var(--md-on-surface-variant)">
+        <i class="bi bi-file-earmark-check" style="font-size:2.5rem;opacity:0.2;display:block;margin-bottom:10px"></i>
+        <div>Seleziona una pratica o creane una nuova</div>
+      </div>
+
+      <!-- New practice: drop zone + staged files -->
+      <div id="dropZoneContainer" style="display:none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="mb-0" style="font-weight:600"><i class="bi bi-plus-circle" style="opacity:0.5"></i> Nuova pratica</h6>
+          <div class="d-flex gap-2 align-items-center">
+            <input type="text" id="practiceIdInput" class="form-control form-control-sm" style="border-radius:8px;width:200px" placeholder="ID (vuoto = auto)">
+          </div>
+        </div>
+        <div class="drop-zone" id="dropZone">
+          <i class="bi bi-cloud-arrow-up"></i>
+          <div style="font-size:0.95rem;font-weight:500">Trascina qui i documenti</div>
+          <div style="font-size:0.8rem;margin-top:4px">PDF, PNG, JPG</div>
+          <input type="file" id="fileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none">
+        </div>
+
+        <div id="stagedFilesCard" class="card mt-3" style="display:none">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-files"></i> Documenti (<span id="stagedCount">0</span>)</span>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('fileInput').click()" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-plus-lg"></i> Aggiungi</button>
+              <button class="btn btn-sm btn-outline-danger" onclick="clearStagedFiles()" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-trash3"></i> Svuota</button>
+            </div>
+          </div>
+          <div id="stagedFilesList"></div>
+          <div class="card-body border-top d-flex justify-content-end">
+            <button class="btn btn-primary btn-sm" onclick="processAllFiles()" style="border-radius:8px">
+              <i class="bi bi-play-fill"></i> Elabora <span id="stagedCountBtn">0</span> documenti
             </button>
           </div>
         </div>
-        <div class="col-md-3">
-          <label class="form-label" style="font-size:0.8rem;font-weight:500">ID Pratica</label>
-          <input type="text" id="practiceIdInput" class="form-control" style="border-radius:12px" placeholder="PRAT-2026-001 (vuoto = auto)">
-        </div>
-        <div class="col-md-3 d-flex gap-2">
-          <button class="btn btn-primary" onclick="loadPracticeInfo()" style="border-radius:12px">
-            <i class="bi bi-search"></i> Carica
-          </button>
-          <button class="btn btn-outline-secondary" onclick="resetPractice()" style="border-radius:12px">
-            <i class="bi bi-arrow-counterclockwise"></i> Reset
-          </button>
-        </div>
       </div>
-    </div>
-  </div>
 
-  <!-- Drop zone + staged files -->
-  <div id="dropZoneContainer">
-    <div class="drop-zone" id="dropZone">
-      <i class="bi bi-cloud-arrow-up"></i>
-      <div style="font-size:0.95rem;font-weight:500">Trascina qui i documenti da elaborare</div>
-      <div style="font-size:0.8rem;margin-top:4px">PDF, PNG, JPG &mdash; puoi aggiungerne piu' di uno</div>
-      <input type="file" id="fileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none">
-    </div>
-
-    <!-- Staged files list (before processing) -->
-    <div id="stagedFilesCard" class="card mt-3" style="display:none">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-files"></i> Documenti da elaborare (<span id="stagedCount">0</span>)</span>
-        <div class="d-flex gap-2">
-          <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('fileInput').click()" style="border-radius:8px"><i class="bi bi-plus-lg"></i> Aggiungi</button>
-          <button class="btn btn-sm btn-outline-danger" onclick="clearStagedFiles()" style="border-radius:8px"><i class="bi bi-trash3"></i> Svuota</button>
-        </div>
+      <!-- Processing spinner -->
+      <div id="processingSpinner" class="text-center py-5" style="display:none">
+        <div class="prat-spinner" style="width:30px;height:30px;border-width:3px"></div>
+        <div style="margin-top:10px;font-weight:500;font-size:0.85rem" id="processingMsg">Elaborazione...</div>
       </div>
-      <div id="stagedFilesList"></div>
-      <div class="card-body border-top d-flex justify-content-end">
-        <button class="btn btn-primary" onclick="processAllFiles()" style="border-radius:12px;padding:10px 32px">
-          <i class="bi bi-play-fill"></i> Elabora <span id="stagedCountBtn">0</span> documenti
-        </button>
-      </div>
-    </div>
-  </div>
 
-  <!-- Processing spinner -->
-  <div id="processingSpinner" class="text-center py-5" style="display:none">
-    <div class="prat-spinner" style="width:40px;height:40px;border-width:4px"></div>
-    <div style="margin-top:12px;font-weight:500" id="processingMsg">Elaborazione in corso...</div>
-  </div>
-
-  <!-- Results area -->
-  <div id="practiceResults" style="display:none">
-
-    <div class="detail-two-col">
-
-      <!-- LEFT: Info sidebar -->
-      <div class="detail-sidebar-info">
-        <button class="info-toggle" onclick="toggleInfoPanel()">
-          <i class="bi bi-layout-sidebar"></i><span class="toggle-label">Comprimi</span>
-        </button>
-        <div class="card" id="practiceInfoCard">
-          <div class="card-body" style="padding:16px">
-            <div class="detail-item mb-3">
-              <label>ID Pratica</label>
-              <div class="value" id="infoPracticeId">-</div>
-            </div>
-            <div class="detail-item mb-3">
-              <label>Agente</label>
-              <div class="value" id="infoAgent">-</div>
-            </div>
-            <div class="detail-item mb-3">
-              <label>Creata il</label>
-              <div class="value" id="infoCreated">-</div>
-            </div>
-            <div class="detail-item mb-3">
-              <label>Aggiornata il</label>
-              <div class="value" id="infoUpdated">-</div>
-            </div>
-            <div class="detail-item mb-3">
-              <label>Validazione</label>
-              <div id="infoValidation">-</div>
+      <!-- Results area -->
+      <div id="practiceResults" style="display:none">
+        <!-- Practice info bar -->
+        <div class="card mb-3">
+          <div class="card-body py-2 px-3" style="font-size:0.8rem">
+            <div class="d-flex gap-4 align-items-center flex-wrap">
+              <span><strong>ID:</strong> <span id="infoPracticeId">-</span></span>
+              <span id="infoAgent" style="display:none"></span>
+              <span><strong>Creata:</strong> <span id="infoCreated">-</span></span>
+              <span><strong>Aggiornata:</strong> <span id="infoUpdated">-</span></span>
+              <span><strong>Validazione:</strong> <span id="infoValidation">-</span></span>
+              <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deleteSavedPractice()" style="border-radius:6px;font-size:0.72rem"><i class="bi bi-trash3"></i></button>
             </div>
           </div>
         </div>
-      </div>
 
       <!-- RIGHT: Files stepper / results -->
       <div>
@@ -323,76 +345,102 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
         </div>
       </div>
 
-    </div>
-  </div>
-
-</div>
+    </div><!-- end elabora-col-detail -->
+  </div><!-- end elabora-layout -->
+</div><!-- end prat-page-elabora -->
 
 <!-- ============================================ -->
-<!-- TAB 2: CATALOGO                              -->
+<!-- TAB 2: CATALOGO (two-column layout)          -->
 <!-- ============================================ -->
 <div class="prat-page" id="prat-page-catalogo">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <div class="d-flex gap-3 align-items-center">
-      <select id="catalogAgentSelect" class="form-select" style="border-radius:12px;width:300px"></select>
-      <button class="btn btn-primary" onclick="loadCatalog()" style="border-radius:12px">
-        <i class="bi bi-arrow-clockwise"></i> Carica catalogo
-      </button>
-    </div>
-  </div>
+  <div class="catalog-layout">
 
-  <div id="catalogLoading" class="text-center py-5" style="display:none">
-    <div class="prat-spinner" style="width:40px;height:40px;border-width:4px"></div>
-    <div style="margin-top:12px">Caricamento catalogo...</div>
-  </div>
-
-  <div class="catalog-grid" id="catalogGrid"></div>
-
-  <!-- Catalog edit (inline, hidden by default) -->
-  <div id="catalogEditArea" style="display:none">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0">
-        <a href="#" onclick="closeCatalogEdit();return false" style="color:var(--md-on-surface-variant);text-decoration:none"><i class="bi bi-arrow-left"></i></a>
-        Modifica: <span id="editTypeName"></span>
-      </h5>
-      <div class="d-flex gap-2">
-        <button class="btn btn-outline-secondary" onclick="closeCatalogEdit()" style="border-radius:12px">Annulla</button>
-        <button class="btn btn-primary" onclick="saveCatalogEdit()" style="border-radius:12px"><i class="bi bi-check-lg"></i> Salva</button>
+    <!-- LEFT: Agents list -->
+    <div class="catalog-agents-col">
+      <div class="card" style="height:100%">
+        <div class="card-header" style="font-size:0.85rem;font-weight:600">
+          <i class="bi bi-cpu"></i> Agenti
+        </div>
+        <div id="catalogAgentsList" style="overflow-y:auto">
+          <div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.82rem">Caricamento...</div>
+        </div>
       </div>
     </div>
 
-    <!-- Identification -->
-    <div class="card mb-3">
-      <div class="card-header"><i class="bi bi-search"></i> Identificazione</div>
-      <div class="card-body">
-        <div class="row g-3 mb-3">
-          <div class="col-md-3">
-            <label class="form-label" style="font-size:0.8rem">Riconoscimento AI</label>
-            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="editAiEnabled"></div>
+    <!-- RIGHT: Document types + editor -->
+    <div class="catalog-types-col">
+
+      <!-- Empty state -->
+      <div id="catalogEmpty" class="text-center py-5" style="color:var(--md-on-surface-variant)">
+        <i class="bi bi-arrow-left-circle" style="font-size:2.5rem;opacity:0.3;display:block;margin-bottom:10px"></i>
+        Seleziona un agente per vedere i tipi documento
+      </div>
+
+      <!-- Loading -->
+      <div id="catalogLoading" style="display:none" class="text-center py-5">
+        <div class="prat-spinner" style="width:30px;height:30px;border-width:3px"></div>
+        <div style="margin-top:10px;font-size:0.85rem">Caricamento catalogo...</div>
+      </div>
+
+      <!-- Types list -->
+      <div id="catalogTypesArea" style="display:none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="mb-0" id="catalogTypesTitle" style="font-weight:600"></h6>
+          <button class="btn btn-sm btn-primary" onclick="newCatalogType()" style="border-radius:8px">
+            <i class="bi bi-plus-lg"></i> Aggiungi tipo
+          </button>
+        </div>
+        <div id="catalogTypesList"></div>
+      </div>
+
+      <!-- Type editor -->
+      <div id="catalogEditArea" style="display:none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="mb-0">
+            <a href="#" onclick="closeCatalogEdit();return false" style="color:var(--md-on-surface-variant);text-decoration:none"><i class="bi bi-arrow-left"></i></a>
+            <span id="editTypeName"></span>
+          </h6>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="closeCatalogEdit()" style="border-radius:8px">Annulla</button>
+            <button class="btn btn-sm btn-primary" onclick="saveCatalogEdit()" style="border-radius:8px"><i class="bi bi-check-lg"></i> Salva</button>
           </div>
-          <div class="col-md-3">
-            <label class="form-label" style="font-size:0.8rem">Riconoscimento Regex</label>
-            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="editRegexEnabled"></div>
+        </div>
+
+        <!-- Identification -->
+        <div class="card mb-3">
+          <div class="card-header" style="font-size:0.85rem"><i class="bi bi-search"></i> Identificazione</div>
+          <div class="card-body">
+            <div class="row g-3 mb-3">
+              <div class="col-md-3">
+                <label class="form-label" style="font-size:0.78rem">AI</label>
+                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="editAiEnabled"></div>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" style="font-size:0.78rem">Regex</label>
+                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="editRegexEnabled"></div>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" style="font-size:0.78rem">Istruzioni AI</label>
+              <textarea class="prat-textarea" id="editInstructions" rows="2" style="font-size:0.82rem"></textarea>
+            </div>
+            <div>
+              <label class="form-label" style="font-size:0.78rem">Hint</label>
+              <textarea class="prat-textarea" id="editHint" rows="1" style="font-size:0.82rem"></textarea>
+            </div>
           </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label" style="font-size:0.8rem">Istruzioni per l'AI</label>
-          <textarea class="prat-textarea" id="editInstructions" rows="3"></textarea>
-        </div>
-        <div>
-          <label class="form-label" style="font-size:0.8rem">Hint</label>
-          <textarea class="prat-textarea" id="editHint" rows="2"></textarea>
-        </div>
-      </div>
-    </div>
 
-    <!-- Extraction questions -->
-    <div class="card">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-list-check"></i> Domande di estrazione (<span id="editQCount">0</span>)</span>
-        <button class="btn btn-sm btn-outline-primary" onclick="addQuestion()" style="border-radius:12px"><i class="bi bi-plus-lg"></i> Aggiungi</button>
+        <!-- Extraction questions -->
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center" style="font-size:0.85rem">
+            <span><i class="bi bi-list-check"></i> Domande di estrazione (<span id="editQCount">0</span>)</span>
+            <button class="btn btn-sm btn-outline-primary" onclick="addQuestion()" style="border-radius:8px;font-size:0.78rem"><i class="bi bi-plus-lg"></i> Aggiungi</button>
+          </div>
+          <div id="editQuestionsList"></div>
+        </div>
       </div>
-      <div id="editQuestionsList"></div>
+
     </div>
   </div>
 </div>
@@ -438,30 +486,159 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 let agents = [];
 let catalogData = {};
 let editingTypeId = null;
+let selectedCatalogAgentId = null;
+let selectedElaboraAgentId = null;
+let selectedPracticeId = null;
 let sintesiFileHash = null;
 let stagedFiles = []; // Files waiting to be processed
 let processedFileBlobs = {}; // filename → File object, kept for PDF viewer
 
 // ── Init ───────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => { loadAgents(); loadSavedPractices(); });
+document.addEventListener('DOMContentLoaded', () => { loadAgents(); });
 
 async function loadAgents() {
   try {
     const r = await fetch('/api/ao/agents');
     const data = await r.json();
     agents = data.agents || [];
+
+    // Populate practice agent dropdown
     const sel1 = document.getElementById('agentSelect');
-    const sel2 = document.getElementById('catalogAgentSelect');
     sel1.innerHTML = '<option value="">Seleziona agente...</option>';
-    sel2.innerHTML = '<option value="">Seleziona agente...</option>';
     agents.forEach(a => {
       const name = a.name || a.agentName || a.id;
       sel1.innerHTML += `<option value="${a.id}">${name}</option>`;
-      sel2.innerHTML += `<option value="${a.id}">${name}</option>`;
     });
+
+    // Populate agent sidebars
+    renderCatalogAgents();
+    renderElaboraAgents();
   } catch (e) {
     console.error('Errore caricamento agenti:', e);
   }
+}
+
+function renderCatalogAgents() {
+  const list = document.getElementById('catalogAgentsList');
+  if (!agents.length) {
+    list.innerHTML = '<div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.82rem">Nessun agente disponibile</div>';
+    return;
+  }
+  list.innerHTML = '';
+  agents.forEach(a => {
+    const name = a.name || a.agentName || a.id;
+    const isActive = a.id === selectedCatalogAgentId;
+    list.innerHTML += `
+      <div class="agent-row ${isActive ? 'active' : ''}" onclick="selectCatalogAgent('${a.id}')">
+        <div class="agent-icon"><i class="bi bi-cpu"></i></div>
+        <div class="agent-name" title="${name}">${name}</div>
+      </div>`;
+  });
+}
+
+// ── Elabora: agents & practices columns ────────────────────────────
+function renderElaboraAgents() {
+  const list = document.getElementById('elaboraAgentsList');
+  if (!agents.length) {
+    list.innerHTML = '<div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.82rem">Nessun agente</div>';
+    return;
+  }
+  list.innerHTML = '';
+  agents.forEach(a => {
+    const name = a.name || a.agentName || a.id;
+    const isActive = a.id === selectedElaboraAgentId;
+    list.innerHTML += `
+      <div class="agent-row ${isActive ? 'active' : ''}" onclick="selectElaboraAgent('${a.id}')">
+        <div class="agent-icon"><i class="bi bi-cpu"></i></div>
+        <div class="agent-name" title="${name}">${name}</div>
+      </div>`;
+  });
+}
+
+async function selectElaboraAgent(agentId) {
+  selectedElaboraAgentId = agentId;
+  selectedPracticeId = null;
+  // Also set the hidden agentSelect for processAllFiles compatibility
+  document.getElementById('agentSelect').value = agentId;
+  renderElaboraAgents();
+  document.getElementById('btnNewPractice').disabled = false;
+
+  // Show practices for this agent
+  document.getElementById('elaboraEmpty').style.display = '';
+  document.getElementById('dropZoneContainer').style.display = 'none';
+  document.getElementById('practiceResults').style.display = 'none';
+  document.getElementById('processingSpinner').style.display = 'none';
+
+  await loadElaboraPractices(agentId);
+}
+
+async function loadElaboraPractices(agentId) {
+  const list = document.getElementById('elaboraPracticesList');
+  list.innerHTML = '<div class="text-center py-3"><div class="prat-spinner" style="width:18px;height:18px;border-width:2px"></div></div>';
+
+  try {
+    const r = await fetch('/api/ao/results');
+    const data = await r.json();
+    const results = (data.results || []).filter(pr => pr.agent_id === agentId);
+
+    if (results.length === 0) {
+      list.innerHTML = '<div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.8rem">Nessuna pratica</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    for (const pr of results) {
+      const info = pr.result_data || {};
+      const fileCount = info.files ? Object.keys(info.files).length : 0;
+      const date = pr.updated_at ? new Date(pr.updated_at).toLocaleDateString('it') : '';
+      const isActive = pr.practice_id === selectedPracticeId;
+      list.innerHTML += `
+        <div class="practice-row ${isActive ? 'active' : ''}" onclick="selectPractice('${pr.practice_id}')">
+          <div class="pr-id" title="${pr.practice_id}">${pr.practice_id}</div>
+          <div class="pr-meta">
+            <span>${fileCount} file</span>
+            <span>${date}</span>
+          </div>
+        </div>`;
+    }
+  } catch (e) {
+    list.innerHTML = '<div class="text-center py-3" style="color:var(--md-on-surface-variant);font-size:0.8rem">Errore caricamento</div>';
+  }
+}
+
+async function selectPractice(practiceId) {
+  selectedPracticeId = practiceId;
+  document.getElementById('practiceIdInput').value = practiceId;
+
+  // Highlight in list
+  document.querySelectorAll('.practice-row').forEach(r => r.classList.remove('active'));
+  document.querySelectorAll('.practice-row').forEach(r => {
+    if (r.querySelector('.pr-id')?.title === practiceId) r.classList.add('active');
+  });
+
+  // Hide other areas
+  document.getElementById('elaboraEmpty').style.display = 'none';
+  document.getElementById('dropZoneContainer').style.display = 'none';
+
+  // Load from DB
+  const cached = await loadPracticeFromDb(practiceId);
+  if (cached && cached.result_data) {
+    showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+  }
+}
+
+function startNewPractice() {
+  if (!selectedElaboraAgentId) return alert('Seleziona un agente');
+  selectedPracticeId = null;
+  document.getElementById('practiceIdInput').value = '';
+  document.getElementById('elaboraEmpty').style.display = 'none';
+  document.getElementById('practiceResults').style.display = 'none';
+  document.getElementById('dropZoneContainer').style.display = '';
+  stagedFiles = [];
+  renderStagedFiles();
+
+  // Deselect practice rows
+  document.querySelectorAll('.practice-row').forEach(r => r.classList.remove('active'));
 }
 
 // ── Page navigation ────────────────────────────────────────────────
@@ -472,15 +649,8 @@ function showPratPage(id) {
   event.currentTarget.classList.add('active');
 }
 
-function toggleInfoPanel() {
-  const twoCol = document.querySelector('.detail-two-col');
-  const label = document.querySelector('.info-toggle .toggle-label');
-  twoCol.classList.toggle('info-collapsed');
-  label.textContent = twoCol.classList.contains('info-collapsed') ? '' : 'Comprimi';
-}
-
 // ── Practice operations ────────────────────────────────────────────
-function getAgentId() { return document.getElementById('agentSelect').value; }
+function getAgentId() { return selectedElaboraAgentId || document.getElementById('agentSelect').value; }
 function getPracticeId() {
   let id = document.getElementById('practiceIdInput').value.trim();
   if (!id) { id = 'PRAT-' + Date.now(); document.getElementById('practiceIdInput').value = id; }
@@ -717,6 +887,9 @@ async function processAllFiles() {
   } else {
     document.getElementById('infoValidation').innerHTML = '<span class="badge-ok">Completato</span>';
   }
+
+  // Refresh practices list
+  if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
 }
 
 function processAdditionalFiles(files) {
@@ -770,15 +943,17 @@ async function deleteFile(contentHash) {
 }
 
 function resetPractice() {
-  const practiceId = document.getElementById('practiceIdInput').value.trim();
+  selectedPracticeId = null;
   document.getElementById('practiceIdInput').value = '';
   document.getElementById('practiceResults').style.display = 'none';
-  document.getElementById('dropZoneContainer').style.display = '';
-  document.getElementById('validationContainer').style.display = 'none';
+  document.getElementById('dropZoneContainer').style.display = 'none';
+  document.getElementById('elaboraEmpty').style.display = '';
+  const vc = document.getElementById('validationContainer');
+  if (vc) vc.style.display = 'none';
   stagedFiles = [];
   processedFileBlobs = {};
   renderStagedFiles();
-  // Non cancella dal localStorage - i risultati restano disponibili
+  document.querySelectorAll('.practice-row').forEach(r => r.classList.remove('active'));
 }
 
 // ── Render practice result ─────────────────────────────────────────
@@ -786,11 +961,13 @@ function showPracticeResult(result, practiceId) {
   const info = result.output?.info || result.output || result.info || result;
   const hasFiles = info.files && Object.keys(info.files).length > 0;
   document.getElementById('dropZoneContainer').style.display = hasFiles ? 'none' : '';
+  document.getElementById('elaboraEmpty').style.display = 'none';
   document.getElementById('practiceResults').style.display = '';
 
-  // Info sidebar
+  // Info bar
   document.getElementById('infoPracticeId').textContent = info.practiceId || practiceId;
-  document.getElementById('infoAgent').textContent = document.getElementById('agentSelect').selectedOptions[0]?.text || '-';
+  const agentName = agents.find(a => a.id === selectedElaboraAgentId)?.name || '';
+  document.getElementById('infoAgent').textContent = agentName;
   document.getElementById('infoCreated').textContent = info.createdAt ? new Date(info.createdAt).toLocaleString('it') : '-';
   document.getElementById('infoUpdated').textContent = info.updatedAt ? new Date(info.updatedAt).toLocaleString('it') : '-';
 
@@ -943,111 +1120,121 @@ async function loadPracticeFromDb(practiceId) {
   } catch (e) { return null; }
 }
 
-async function loadSavedPractices() {
-  try {
-    const r = await fetch('/api/ao/results');
-    const data = await r.json();
-    const results = data.results || [];
-    const sel = document.getElementById('savedPracticeSelect');
-    sel.innerHTML = '<option value="">Nuova pratica...</option>';
-    for (const pr of results) {
-      const info = pr.result_data || {};
-      const fileCount = info.files ? Object.keys(info.files).length : 0;
-      const date = pr.updated_at ? new Date(pr.updated_at).toLocaleDateString('it') : '';
-      const label = `${pr.practice_id} — ${pr.agent_name || 'agent'} — ${fileCount} file — ${date}`;
-      sel.innerHTML += `<option value="${pr.practice_id}" data-agent="${pr.agent_id}">${label}</option>`;
-    }
-  } catch (e) {
-    console.warn('Errore caricamento pratiche salvate:', e);
-  }
-}
-
-async function onSavedPracticeSelected(practiceId) {
-  document.getElementById('btnDeletePractice').style.display = practiceId ? '' : 'none';
-  if (!practiceId) {
-    resetPractice();
-    return;
-  }
-
-  // Imposta agent e ID pratica
-  const sel = document.getElementById('savedPracticeSelect');
-  const opt = sel.selectedOptions[0];
-  const agentId = opt?.dataset?.agent || '';
-  if (agentId) document.getElementById('agentSelect').value = agentId;
-  document.getElementById('practiceIdInput').value = practiceId;
-
-  // Carica dal DB
-  const cached = await loadPracticeFromDb(practiceId);
-  if (cached && cached.result_data) {
-    showPracticeResult({ output: { info: cached.result_data } }, practiceId);
-  }
-}
-
 async function deleteSavedPractice() {
-  const sel = document.getElementById('savedPracticeSelect');
-  const practiceId = sel.value || document.getElementById('practiceIdInput').value.trim();
+  const practiceId = selectedPracticeId || document.getElementById('practiceIdInput').value.trim();
   if (!practiceId) { alert('Nessuna pratica selezionata'); return; }
   if (!confirm('Eliminare la pratica ' + practiceId + '?')) return;
   try {
     const r = await fetch(`/api/ao/results/${practiceId}`, { method: 'DELETE' });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
-    sel.value = '';
-    document.getElementById('btnDeletePractice').style.display = 'none';
-    resetPractice();
-    await loadSavedPractices();
+    selectedPracticeId = null;
+    document.getElementById('practiceResults').style.display = 'none';
+    document.getElementById('elaboraEmpty').style.display = '';
+    if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
   } catch (e) {
     alert('Errore eliminazione: ' + e.message);
   }
 }
 
 // ── Catalog ────────────────────────────────────────────────────────
-async function loadCatalog() {
-  const agentId = document.getElementById('catalogAgentSelect').value;
-  if (!agentId) return alert('Seleziona un agente');
+async function selectCatalogAgent(agentId) {
+  selectedCatalogAgentId = agentId;
+  renderCatalogAgents();
+  await loadCatalog(agentId);
+}
 
-  document.getElementById('catalogLoading').style.display = '';
-  document.getElementById('catalogGrid').innerHTML = '';
+async function loadCatalog(agentId) {
+  agentId = agentId || selectedCatalogAgentId;
+  if (!agentId) return;
+
+  document.getElementById('catalogEmpty').style.display = 'none';
+  document.getElementById('catalogTypesArea').style.display = 'none';
   document.getElementById('catalogEditArea').style.display = 'none';
+  document.getElementById('catalogLoading').style.display = '';
+
+  const agentName = agents.find(a => a.id === agentId)?.name || agentId;
 
   try {
     const r = await fetch(`/api/ao/catalog/${agentId}`);
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     catalogData = data.output?.catalog || data.output || data.catalog || data;
-    renderCatalog();
+    document.getElementById('catalogTypesTitle').innerHTML = `<i class="bi bi-cpu" style="opacity:0.5"></i> ${agentName}`;
+    renderCatalogTypes();
   } catch (e) {
-    alert('Errore: ' + e.message);
+    document.getElementById('catalogTypesArea').style.display = '';
+    document.getElementById('catalogTypesList').innerHTML = `<div class="text-center py-4" style="color:var(--md-error-color,#B3261E)">Errore: ${e.message}</div>`;
   } finally {
     document.getElementById('catalogLoading').style.display = 'none';
   }
 }
 
-function renderCatalog() {
-  const grid = document.getElementById('catalogGrid');
-  grid.innerHTML = '';
-  for (const [typeId, typeDef] of Object.entries(catalogData)) {
+function renderCatalogTypes() {
+  document.getElementById('catalogTypesArea').style.display = '';
+  const list = document.getElementById('catalogTypesList');
+  const types = Object.entries(catalogData);
+  list.innerHTML = '';
+
+  if (types.length === 0) {
+    list.innerHTML = '<div class="text-center py-4" style="color:var(--md-on-surface-variant)"><i class="bi bi-journal-x" style="font-size:1.5rem;opacity:0.3;display:block;margin-bottom:6px"></i>Nessun tipo documento</div>';
+    return;
+  }
+
+  for (const [typeId, typeDef] of types) {
     const ident = typeDef.identification || {};
     const questions = typeDef.extraction?.questions || [];
     const activeQ = questions.filter(q => !q.disabled).length;
-    const qNames = questions.slice(0, 6).map(q => q.id).join(', ');
+    const qNames = questions.slice(0, 5).map(q => q.id).join(', ');
+    const esc = s => (s||'').replace(/'/g,"\\'");
 
-    grid.innerHTML += `
-      <div class="catalog-card">
-        <div class="doc-type-name">${typeId}</div>
-        <div class="doc-type-meta">
-          <span><i class="bi bi-cpu"></i> AI ${ident.aiEnabled ? 'attivo' : 'off'}</span>
-          <span><i class="bi bi-regex"></i> Regex ${ident.regexEnabled ? 'attivo' : 'off'}</span>
-          <span><i class="bi bi-list-check"></i> ${activeQ} campi</span>
+    list.innerHTML += `
+      <div class="type-row" onclick="openCatalogEdit('${esc(typeId)}')">
+        <div class="type-name">${typeId}</div>
+        <div class="type-meta">
+          <span><i class="bi bi-cpu"></i> AI ${ident.aiEnabled ? 'on' : 'off'}</span>
+          <span><i class="bi bi-regex"></i> Regex ${ident.regexEnabled ? 'on' : 'off'}</span>
+          <span><i class="bi bi-list-check"></i> ${activeQ}/${questions.length} campi attivi</span>
         </div>
-        <div class="questions-preview">${qNames}${questions.length > 6 ? ', ...' : ''}</div>
-        <div class="mt-3 d-flex gap-2">
-          <button class="btn btn-sm btn-outline-primary" onclick="openCatalogEdit('${typeId}')" style="border-radius:8px"><i class="bi bi-pencil"></i> Modifica</button>
+        <div class="type-fields">${qNames}${questions.length > 5 ? ', ...' : ''}</div>
+        <div class="type-actions" onclick="event.stopPropagation()">
+          <button class="btn btn-sm btn-outline-primary" onclick="openCatalogEdit('${esc(typeId)}')" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-pencil"></i> Modifica</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteCatalogType('${esc(typeId)}')" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-trash3"></i> Elimina</button>
         </div>
       </div>`;
   }
-  if (Object.keys(catalogData).length === 0) {
-    grid.innerHTML = '<div class="text-center py-5" style="color:var(--md-on-surface-variant)"><i class="bi bi-journal-x" style="font-size:2rem;opacity:0.3;display:block;margin-bottom:8px"></i>Nessun tipo documento nel catalogo</div>';
+}
+
+function newCatalogType() {
+  const typeId = prompt('ID del nuovo tipo documento (es. visura_catastale):');
+  if (!typeId || !typeId.trim()) return;
+  const id = typeId.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  if (catalogData[id]) return alert('Tipo "' + id + '" gia\' esistente');
+  catalogData[id] = {
+    identification: { aiEnabled: true, regexEnabled: false, instructions: '', hint: '' },
+    extraction: { questions: [] }
+  };
+  openCatalogEdit(id);
+}
+
+async function deleteCatalogType(typeId) {
+  if (!confirm('Eliminare il tipo documento "' + typeId + '" dal catalogo?\n\nQuesta azione verra\' salvata su AO.')) return;
+  delete catalogData[typeId];
+
+  // Salva su AO
+  const agentId = selectedCatalogAgentId;
+  try {
+    const r = await fetch(`/api/ao/catalog/${agentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ catalog: catalogData }),
+    });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    renderCatalogTypes();
+  } catch (e) {
+    alert('Errore eliminazione: ' + e.message);
+    loadCatalog(); // Ricarica per ripristinare
   }
 }
 
@@ -1057,7 +1244,7 @@ function openCatalogEdit(typeId) {
   const ident = def.identification || {};
   const questions = def.extraction?.questions || [];
 
-  document.getElementById('catalogGrid').style.display = 'none';
+  document.getElementById('catalogTypesArea').style.display = 'none';
   document.getElementById('catalogEditArea').style.display = '';
   document.getElementById('editTypeName').textContent = typeId;
   document.getElementById('editAiEnabled').checked = ident.aiEnabled !== false;
@@ -1142,7 +1329,7 @@ function duplicateQuestion(idx) {
 }
 
 async function saveCatalogEdit() {
-  const agentId = document.getElementById('catalogAgentSelect').value;
+  const agentId = selectedCatalogAgentId;
   // Update identification
   catalogData[editingTypeId].identification = {
     ...catalogData[editingTypeId].identification,
@@ -1169,8 +1356,8 @@ async function saveCatalogEdit() {
 
 function closeCatalogEdit() {
   document.getElementById('catalogEditArea').style.display = 'none';
-  document.getElementById('catalogGrid').style.display = '';
   editingTypeId = null;
+  renderCatalogTypes();
 }
 
 // ── Sintesi ────────────────────────────────────────────────────────
@@ -1272,7 +1459,7 @@ async function openPdfAndSearch(fileName, searchText) {
 
   // Se non in memoria, scarica dal DB
   if (!file) {
-    const practiceId = document.getElementById('practiceIdInput').value.trim();
+    const practiceId = selectedPracticeId || document.getElementById('practiceIdInput').value.trim();
     if (!practiceId) return alert('Nessuna pratica selezionata');
 
     try {
