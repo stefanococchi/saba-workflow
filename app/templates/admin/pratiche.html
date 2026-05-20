@@ -162,9 +162,11 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 @keyframes pratspin { to { transform: rotate(360deg); } }
 
 /* Elabora 3-column layout */
-.elabora-layout { display: grid; grid-template-columns: 200px 240px 1fr; gap: 16px; min-height: 500px; }
-.elabora-col-agents .card, .elabora-col-practices .card { border-radius: 16px; }
-.elabora-col-detail { min-width: 0; }
+.elabora-layout { display: flex; gap: 16px; min-height: 500px; }
+.elabora-col-agents { width: 200px; min-width: 120px; max-width: 350px; flex-shrink: 0; overflow: hidden; resize: horizontal; }
+.elabora-col-practices { width: 240px; min-width: 150px; max-width: 400px; flex-shrink: 0; overflow: hidden; resize: horizontal; }
+.elabora-col-agents .card, .elabora-col-practices .card { border-radius: 16px; height: 100%; }
+.elabora-col-detail { flex: 1; min-width: 0; overflow: hidden; }
 
 .practice-row {
   padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--md-outline-variant);
@@ -176,13 +178,14 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 .practice-row .pr-id { font-weight: 600; font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .practice-row .pr-meta { font-size: 0.72rem; color: var(--md-on-surface-variant); display: flex; gap: 8px; margin-top: 2px; }
 
-@media (max-width: 1024px) { .elabora-layout { grid-template-columns: 180px 1fr; } .elabora-col-practices { display: none; } }
-@media (max-width: 768px) { .elabora-layout { grid-template-columns: 1fr; } .elabora-col-agents, .elabora-col-practices { display: none; } }
+@media (max-width: 1024px) { .elabora-col-practices { display: none; } }
+@media (max-width: 768px) { .elabora-col-agents, .elabora-col-practices { display: none; } }
 
 /* Catalog two-column layout */
-.catalog-layout { display: grid; grid-template-columns: 240px 1fr; gap: 20px; min-height: 500px; }
-.catalog-agents-col .card { border-radius: 16px; }
-.catalog-types-col { min-width: 0; }
+.catalog-layout { display: flex; gap: 20px; min-height: 500px; }
+.catalog-agents-col { width: 240px; min-width: 140px; max-width: 400px; flex-shrink: 0; overflow: hidden; resize: horizontal; }
+.catalog-agents-col .card { border-radius: 16px; height: 100%; }
+.catalog-types-col { flex: 1; min-width: 0; overflow: hidden; }
 
 .agent-row {
   padding: 10px 16px; cursor: pointer; border-bottom: 1px solid var(--md-outline-variant);
@@ -205,7 +208,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 .type-row .type-fields { font-size: 0.78rem; color: var(--md-on-surface-variant); margin-top: 6px; }
 .type-row .type-actions { display: flex; gap: 6px; margin-top: 8px; }
 
-@media (max-width: 768px) { .catalog-layout { grid-template-columns: 1fr; } }
+@media (max-width: 768px) { .catalog-agents-col { display: none; } }
 
 /* Clickable extraction fields */
 .extraction-field.clickable { cursor: pointer; transition: all 0.15s; border: 1px solid var(--md-outline-variant); }
