@@ -985,17 +985,19 @@ async function onSavedPracticeSelected(practiceId) {
 
 async function deleteSavedPractice() {
   const sel = document.getElementById('savedPracticeSelect');
-  const practiceId = sel.value;
-  if (!practiceId) return;
+  const practiceId = sel.value || document.getElementById('practiceIdInput').value.trim();
+  if (!practiceId) { alert('Nessuna pratica selezionata'); return; }
   if (!confirm('Eliminare la pratica ' + practiceId + '?')) return;
   try {
-    await fetch(`/api/ao/results/${practiceId}`, { method: 'DELETE' });
+    const r = await fetch(`/api/ao/results/${practiceId}`, { method: 'DELETE' });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
     sel.value = '';
     document.getElementById('btnDeletePractice').style.display = 'none';
     resetPractice();
-    loadSavedPractices();
+    await loadSavedPractices();
   } catch (e) {
-    alert('Errore: ' + e.message);
+    alert('Errore eliminazione: ' + e.message);
   }
 }
 
