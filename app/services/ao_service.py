@@ -13,7 +13,7 @@ from flask import current_app
 
 logger = logging.getLogger("saba-workflow.ao")
 
-_TIMEOUT = 60
+_TIMEOUT = 120
 
 
 def _get_config():
