@@ -28,6 +28,7 @@ class StepType(str, Enum):
     HUMAN_APPROVAL = 'human_approval'
     EXCEL_WRITE = 'excel_write'
     WHATSAPP = 'whatsapp'
+    DOCUMENT_PROCESSING = 'document_processing'
 
 
 class ParticipantStatus(str, Enum):
@@ -398,3 +399,30 @@ class PaymentLog(Base):
 
     def __repr__(self):
         return f'<PaymentLog {self.id}: {self.status} {self.amount_cents}c {self.currency}>'
+
+
+class PracticeResult(Base):
+    """Risultati elaborazione pratiche documentali (Agent Orchestrator)"""
+    __tablename__ = 'practice_results'
+
+    id = Column(Integer, primary_key=True)
+    practice_id = Column(String(255), nullable=False, index=True, unique=True)
+    agent_id = Column(String(255), nullable=False)
+    agent_name = Column(String(255), nullable=True)
+    result_data = Column(JSON, nullable=True)  # info completo da AO (files, validation, etc.)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<PracticeResult {self.practice_id}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'practice_id': self.practice_id,
+            'agent_id': self.agent_id,
+            'agent_name': self.agent_name,
+            'result_data': self.result_data,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }

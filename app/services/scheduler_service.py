@@ -299,6 +299,8 @@ class SchedulerService:
                     success = SchedulerService._execute_whatsapp_step(participant, step, execution)
                 elif step.type.value == 'excel_write':
                     success = SchedulerService._execute_excel_write_step(participant, step, execution)
+                elif step.type.value == 'document_processing':
+                    success = SchedulerService._execute_document_processing_step(participant, step, execution)
                 else:
                     logger.warning(f"⚠ Unsupported step type: {step.type}")
 
@@ -1609,3 +1611,65 @@ class SchedulerService:
         except Exception as e:
             logger.error(f"✗ Error cancelling executions: {str(e)}")
             _db().rollback()
+
+    @staticmethod
+    def _execute_document_processing_step(participant, step, execution):
+        """Invia documenti del partecipante ad Agent Orchestrator per elaborazione."""
+        try:
+            from app.services import ao_service
+
+            config = step.skip_conditions or {}
+            agent_id = config.get('ao_agent_id', '')
+            if not agent_id:
+                execution.error_message = "Agent AO non configurato nello step"
+                return False
+
+            practice_id = f"WF-{step.workflow_id}-P-{participant.id}"
+
+            # Recupera file dal collected_data del partecipante (caricati via landing page)
+            collected = participant.collected_data or {}
+            uploaded_files = collected.get('uploaded_files', [])
+
+            if not uploaded_files:
+                # Nessun file caricato: crea la pratica vuota e segna come in attesa
+                result = ao_service.practice_info(agent_id, practice_id)
+                execution.result_data = {
+                    'practice_id': practice_id,
+                    'status': 'waiting_for_documents',
+                    'result': result,
+                }
+                logger.info(f"📄 Practice {practice_id} created, waiting for documents")
+                return True
+
+            # Processa i file caricati
+            files = {}
+            for idx, file_info in enumerate(uploaded_files):
+                import base64
+                content = base64.b64decode(file_info['data']) if isinstance(file_info.get('data'), str) else file_info.get('data', b'')
+                files[f"file_{idx}"] = (content, file_info.get('mime', 'application/pdf'), file_info.get('name', f'file_{idx}'))
+
+            result = ao_service.practice_process(agent_id, practice_id, files=files)
+
+            # Salva risultati nei collected_data del partecipante
+            output = result.get('output', {})
+            info = output.get('info', output)
+            collected['ao_practice_id'] = practice_id
+            collected['ao_result'] = info
+            collected['ao_validation'] = info.get('validation', {})
+            participant.collected_data = collected
+            _db().flush()
+
+            execution.result_data = {
+                'practice_id': practice_id,
+                'status': 'processed',
+                'validation': info.get('validation', {}),
+                'files_count': len(info.get('files', {})),
+            }
+
+            logger.info(f"📄 Document processing completed for practice {practice_id}, validation: {info.get('validation', {}).get('outcome', 'N/A')}")
+            return True
+
+        except Exception as e:
+            logger.error(f"✗ Document processing error: {str(e)}")
+            execution.error_message = str(e)
+            return False

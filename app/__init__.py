@@ -57,7 +57,7 @@ def create_app(config_object=None):
     CORS(app)
     
     # Registra blueprints
-    from app.api import workflow_bp, participant_bp, landing_bp, health_bp, admin_bp, landing_builder_api_bp
+    from app.api import workflow_bp, participant_bp, landing_bp, health_bp, admin_bp, landing_builder_api_bp, pratiche_bp
     from app.api.auth import auth_bp, login_required, get_current_user
     app.register_blueprint(health_bp)
     app.register_blueprint(workflow_bp, url_prefix='/api')
@@ -80,6 +80,7 @@ def create_app(config_object=None):
     app.register_blueprint(auth_bp)  # Auth (login/logout)
     app.register_blueprint(admin_bp)  # Admin interface
     app.register_blueprint(landing_builder_api_bp, url_prefix='/api')  # Landing builder API
+    app.register_blueprint(pratiche_bp, url_prefix='/api/ao')  # Pratiche documentali API
     
     # Avvia scheduler
     if not scheduler.running:

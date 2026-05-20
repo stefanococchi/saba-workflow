@@ -815,6 +815,8 @@ function renderNodeSubtitle(step) {
             var path = step.config.file_path || '';
             var fname = path.split('/').pop() || 'Not configured';
             return fname + ' · ' + (step.config.columns || []).length + ' col';
+        case 'document_processing':
+            return (step.config.ao_agent_name || 'Agent non configurato') + (step.config.delay_hours ? ' · ' + step.config.delay_hours + 'h' : '');
         default:
             return capitalize(step.type);
     }
@@ -936,6 +938,10 @@ function editStep(index) {
                 }
             });
         }, 100);
+    }
+
+    if (step.type === 'document_processing') {
+        _loadDocProcAgents(step.config.ao_agent_id || step.config.ao_agent_name || '');
     }
 
     // Destroy Summernote when modal closes
@@ -1660,7 +1666,67 @@ function _renderStepEditFormInner(step, index, common) {
                 </div>
             `;
         }
+        case 'document_processing': {
+            return common + `
+                <div class="mb-3">
+                    <label class="form-label">Agente AO</label>
+                    <select class="form-select" id="editDocProcAgent">
+                        <option value="">Caricamento agenti...</option>
+                    </select>
+                    <div class="form-text">L'agente Agent Orchestrator che elaborera i documenti.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Documenti richiesti</label>
+                    <input type="text" class="form-control" id="editDocProcRequiredDocs"
+                           value="${step.config.required_docs || ''}"
+                           placeholder="es. Atto di provenienza, Visura catastale, Documento identita">
+                    <div class="form-text">Lista documenti richiesti al partecipante (separati da virgola). Visualizzati nella landing page.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Ritardo (ore)</label>
+                    <input type="number" class="form-control" id="editDocProcDelay"
+                           value="${step.config.delay_hours || 0}" min="0">
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="editDocProcWaitLanding"
+                           ${step.config.wait_for_landing ? 'checked' : ''}>
+                    <label class="form-check-label" for="editDocProcWaitLanding">Attendi upload documenti su landing page</label>
+                    <div class="form-text">Se attivo, il workflow aspetta che il partecipante carichi i documenti prima di procedere.</div>
+                </div>
+                <div class="alert alert-info">
+                    <small><i class="bi bi-info-circle"></i>
+                    <strong>Come funziona:</strong><br>
+                    1. Il partecipante riceve un link (landing page) dove caricare i documenti richiesti<br>
+                    2. Quando carica i file, vengono inviati all'Agent Orchestrator per elaborazione<br>
+                    3. AO identifica i documenti, estrae dati e valida la conformita<br>
+                    4. I risultati (dati estratti, anomalie) vengono salvati nei dati raccolti del partecipante<br>
+                    5. Puoi usare uno step Condition per verificare l'esito della validazione
+                    </small>
+                </div>
+            `;
+        }
     }
+}
+
+// Load AO agents for document_processing step
+function _loadDocProcAgents(selectedId) {
+    fetch('/api/ao/agents')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var sel = document.getElementById('editDocProcAgent');
+            if (!sel) return;
+            var agents = data.agents || [];
+            sel.innerHTML = '<option value="">Seleziona agente...</option>';
+            agents.forEach(function(a) {
+                var name = a.name || a.agentName || a.id;
+                var selected = (a.id === selectedId || name === selectedId) ? 'selected' : '';
+                sel.innerHTML += '<option value="' + a.id + '" data-name="' + name + '" ' + selected + '>' + name + '</option>';
+            });
+        })
+        .catch(function() {
+            var sel = document.getElementById('editDocProcAgent');
+            if (sel) sel.innerHTML = '<option value="">Errore caricamento agenti</option>';
+        });
 }
 
 var _excelColCounter = 0;
@@ -2443,6 +2509,14 @@ function saveStepEdit() {
                 }
             });
             break;
+        case 'document_processing':
+            var agentSel = document.getElementById('editDocProcAgent');
+            step.config.ao_agent_id = agentSel?.value || '';
+            step.config.ao_agent_name = agentSel?.selectedOptions[0]?.dataset?.name || agentSel?.selectedOptions[0]?.text || '';
+            step.config.required_docs = document.getElementById('editDocProcRequiredDocs')?.value || '';
+            step.config.delay_hours = parseInt(document.getElementById('editDocProcDelay')?.value) || 0;
+            step.config.wait_for_landing = document.getElementById('editDocProcWaitLanding')?.checked || false;
+            break;
     }
 
     // Save next_step for all step types
@@ -2703,6 +2777,10 @@ function generateReview() {
                 break;
             case 'excel_write':
                 chips.push('<i class="bi bi-file-earmark-spreadsheet"></i> ' + (step.config.file_path || '—'));
+                break;
+            case 'document_processing':
+                chips.push('<i class="bi bi-file-earmark-check"></i> ' + (step.config.ao_agent_name || 'Agent non configurato'));
+                if (step.config.required_docs) chips.push('<i class="bi bi-files"></i> ' + step.config.required_docs.split(',').length + ' doc richiesti');
                 break;
         }
 
@@ -3414,14 +3492,16 @@ var DR_TYPE_ICONS = {
     wait_until: 'bi-hourglass-split', goal_check: 'bi-bullseye',
     export_data: 'bi-download', condition: 'bi-signpost-split-fill',
     survey: 'bi-ui-checks', human_approval: 'bi-person-check-fill',
-    excel_write: 'bi-file-earmark-spreadsheet-fill', whatsapp: 'bi-whatsapp'
+    excel_write: 'bi-file-earmark-spreadsheet-fill', whatsapp: 'bi-whatsapp',
+    document_processing: 'bi-file-earmark-check-fill'
 };
 
 var DR_TYPE_COLORS = {
     email: '#8B6914', condition: '#7B61C2', wait_until: '#5C6134',
     human_approval: '#9C5A2E', goal_check: '#386A20', whatsapp: '#25D366',
     survey: '#0277BD', export_data: '#6D4C41', excel_write: '#6D4C41',
-    sms: '#E65100', webhook: '#455A64'
+    sms: '#E65100', webhook: '#455A64',
+    document_processing: '#1565C0'
 };
 
 function switchReviewTab(tab) {
@@ -3867,6 +3947,11 @@ function drExecuteStep(idx) {
                 result.format = step.config.format || step.config.storage || '';
                 result.filePath = step.config.file_path || '';
                 drLog('export', 'bi-download', step.name + ' — ' + _t('dr_export_simulated'), result.format + ' ' + result.filePath);
+                break;
+            case 'document_processing':
+                result.agent = step.config.ao_agent_name || 'N/A';
+                result.requiredDocs = step.config.required_docs || '';
+                drLog('document', 'bi-file-earmark-check', step.name + ' — Elaborazione documenti simulata', 'Agent: ' + result.agent);
                 break;
 
             default:

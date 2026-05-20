@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup - Pratiche &amp; Catalogo</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --md-primary: #8B6914;
+  --md-on-primary: #FFFFFF;
+  --md-secondary: #7a5a10;
+  --md-tertiary: #9C5A2E;
+  --md-error: #B3261E;
+  --md-success: #386A20;
+  --md-warning: #7C5800;
+  --md-surface: #FFFBF5;
+  --md-surface-dim: #E0DCD4;
+  --md-surface-container: #F4F0E8;
+  --md-surface-container-low: #FAF6EE;
+  --md-surface-container-lowest: #FFFFFF;
+  --md-surface-container-high: #EAE6DE;
+  --md-on-surface: #1D1B16;
+  --md-on-surface-variant: #4D4639;
+  --md-outline: #7F7667;
+  --md-outline-variant: #D1C8B8;
+  --md-radius-sm: 8px;
+  --md-radius-md: 12px;
+  --md-radius-lg: 16px;
+  --md-radius-xl: 28px;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+/* === TOP NAV === */
+.topnav {
+  height: 64px;
+  background: var(--md-surface-container-lowest);
+  border-bottom: 1px solid var(--md-outline-variant);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+.topnav .brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--md-primary);
+  margin-right: 12px;
+}
+.topnav .breadcrumb-text {
+  color: var(--md-on-surface-variant);
+  font-size: 0.85rem;
+}
+
+/* === SIDEBAR === */
+.sidebar {
+  width: 220px;
+  position: fixed;
+  top: 64px;
+  left: 0;
+  bottom: 0;
+  background: var(--md-surface-container-lowest);
+  border-right: 1px solid var(--md-outline-variant);
+  padding: 16px 0;
+  overflow-y: auto;
+  transition: width 0.25s ease, padding 0.25s ease;
+}
+.sidebar.collapsed {
+  width: 56px;
+  padding: 16px 0;
+}
+.sidebar.collapsed .nav-link span,
+.sidebar.collapsed .nav-section,
+.sidebar.collapsed .nav-divider { display: none; }
+.sidebar.collapsed .nav-link {
+  justify-content: center;
+  padding: 10px 0;
+  margin-right: 0;
+  border-radius: 12px;
+  margin: 2px 8px;
+}
+.sidebar.collapsed .nav-link i { margin: 0; }
+.sidebar .nav-section {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--md-on-surface-variant);
+  padding: 16px 20px 6px;
+  font-weight: 600;
+}
+.sidebar .nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  color: var(--md-on-surface-variant);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 0 24px 24px 0;
+  margin-right: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sidebar .nav-link:hover {
+  background: rgba(139,105,20,0.08);
+  color: var(--md-on-surface);
+}
+.sidebar .nav-link.active {
+  background: rgba(139,105,20,0.18);
+  color: var(--md-primary);
+  font-weight: 600;
+}
+.sidebar .nav-link i {
+  width: 24px;
+  text-align: center;
+  font-size: 1.1rem;
+}
+.sidebar .nav-divider {
+  height: 1px;
+  background: var(--md-outline-variant);
+  margin: 8px 20px;
+}
+
+/* Sidebar toggle button */
+.sidebar-toggle {
+  position: fixed;
+  top: 74px;
+  left: 208px;
+  z-index: 101;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--md-surface-container-lowest);
+  border: 1px solid var(--md-outline-variant);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--md-on-surface-variant);
+  transition: left 0.25s ease, transform 0.25s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+.sidebar-toggle:hover { background: var(--md-surface-container); }
+.sidebar-toggle.collapsed {
+  left: 44px;
+}
+.sidebar-toggle.collapsed i { transform: rotate(180deg); }
+
+/* === MAIN CONTENT === */
+.main-content {
+  margin-left: 220px;
+  margin-top: 64px;
+  padding: 20px 24px 40px;
+  min-height: calc(100vh - 64px);
+  transition: margin-left 0.25s ease;
+}
+.main-content.sidebar-collapsed {
+  margin-left: 56px;
+}
+
+/* === PAGE HEADER === */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.page-header h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  margin: 0;
+}
+
+/* === CARDS === */
+.card-md {
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 20px;
+  background: var(--md-surface-container-lowest);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.card-md .card-header-md {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-md .card-body-md {
+  padding: 20px;
+}
+
+/* === STAT CARDS === */
+.stat-card {
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 20px;
+  background: var(--md-surface-container-lowest);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+  border-left: 4px solid var(--md-primary);
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+.stat-card .stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--md-on-surface);
+}
+.stat-card .stat-label {
+  font-size: 0.78rem;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.stat-card .stat-icon {
+  font-size: 2.2rem;
+  opacity: 0.3;
+  color: var(--md-primary);
+}
+.stat-card.success { border-left-color: var(--md-success); }
+.stat-card.success .stat-icon { color: var(--md-success); }
+.stat-card.warning { border-left-color: var(--md-warning); }
+.stat-card.warning .stat-icon { color: var(--md-warning); }
+.stat-card.danger { border-left-color: var(--md-error); }
+.stat-card.danger .stat-icon { color: var(--md-error); }
+
+/* === TABLE === */
+.table-md {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table-md thead th {
+  background: var(--md-surface-container);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+  font-weight: 600;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  white-space: nowrap;
+}
+.table-md tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  vertical-align: middle;
+}
+.table-md tbody tr:hover {
+  background: var(--md-surface-container-low);
+  cursor: pointer;
+}
+
+/* === BADGES === */
+.badge-md {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.badge-ok { background: #d4edda; color: #155724; }
+.badge-ko { background: #f8d7da; color: #721c24; }
+.badge-pending { background: #fff3cd; color: #856404; }
+.badge-processing { background: #d1ecf1; color: #0c5460; }
+.badge-draft { background: var(--md-surface-container); color: var(--md-on-surface-variant); }
+
+/* === BUTTONS === */
+.btn-md {
+  border-radius: var(--md-radius-md);
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 10px 24px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s;
+}
+.btn-md-primary {
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+.btn-md-primary:hover {
+  background: var(--md-secondary);
+  box-shadow: 0 2px 8px rgba(139,105,20,0.3);
+}
+.btn-md-outline {
+  background: transparent;
+  border: 1.5px solid var(--md-outline-variant);
+  color: var(--md-on-surface);
+}
+.btn-md-outline:hover {
+  background: var(--md-surface-container);
+}
+.btn-md-sm {
+  padding: 6px 14px;
+  font-size: 0.8rem;
+}
+.btn-md-danger {
+  background: transparent;
+  border: 1.5px solid var(--md-error);
+  color: var(--md-error);
+}
+
+/* === FILTERS === */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.filter-bar select,
+.filter-bar input {
+  border: 1.5px solid var(--md-outline-variant);
+  border-radius: var(--md-radius-md);
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  background: var(--md-surface-container-lowest);
+  color: var(--md-on-surface);
+  font-family: inherit;
+}
+.filter-bar select:focus,
+.filter-bar input:focus {
+  outline: 3px solid rgba(139,105,20,0.2);
+  border-color: var(--md-primary);
+}
+
+/* === DETAIL GRID === */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+.detail-item label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.detail-item .value {
+  font-size: 0.95rem;
+  color: var(--md-on-surface);
+  font-weight: 500;
+}
+
+/* === FILE LIST === */
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  transition: background 0.1s;
+}
+.file-row:hover { background: var(--md-surface-container-low); }
+.file-row:last-child { border-bottom: none; }
+.file-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--md-surface-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: var(--md-primary);
+  flex-shrink: 0;
+}
+.file-info { flex: 1; }
+.file-name { font-weight: 600; font-size: 0.9rem; }
+.file-type { font-size: 0.78rem; color: var(--md-on-surface-variant); }
+.file-badges { display: flex; gap: 6px; }
+.file-actions { display: flex; gap: 8px; }
+
+/* === EXTRACTION DATA === */
+.extraction-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  background: var(--md-surface-container-low);
+  border-radius: var(--md-radius-md);
+  margin: 12px 20px 20px;
+}
+.extraction-field {
+  padding: 10px 14px;
+  background: var(--md-surface-container-lowest);
+  border-radius: var(--md-radius-sm);
+  border: 1px solid var(--md-outline-variant);
+}
+.extraction-field .field-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--md-on-surface-variant);
+  font-weight: 600;
+}
+.extraction-field .field-value {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+/* === VALIDATION === */
+.validation-box {
+  padding: 16px 20px;
+  border-radius: var(--md-radius-md);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.validation-box.ok { background: #d4edda; border: 1px solid #c3e6cb; }
+.validation-box.ko { background: #f8d7da; border: 1px solid #f5c6cb; }
+.validation-box .anomaly {
+  font-size: 0.82rem;
+  padding: 4px 0;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* === SINTESI === */
+.sintesi-panel {
+  background: var(--md-surface-container-low);
+  border-radius: var(--md-radius-lg);
+  padding: 24px;
+  border: 1px solid var(--md-outline-variant);
+}
+.sintesi-text {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--md-on-surface);
+  white-space: pre-wrap;
+}
+
+/* === CATALOG === */
+.catalog-card {
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-radius-lg);
+  background: var(--md-surface-container-lowest);
+  padding: 20px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.catalog-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.catalog-card .doc-type-name {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 8px;
+}
+.catalog-card .doc-type-meta {
+  font-size: 0.78rem;
+  color: var(--md-on-surface-variant);
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.catalog-card .questions-preview {
+  font-size: 0.8rem;
+  color: var(--md-on-surface-variant);
+}
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+/* === TABS === */
+.tabs-md {
+  display: flex;
+  border-bottom: 2px solid var(--md-outline-variant);
+  margin-bottom: 20px;
+}
+.tab-md {
+  padding: 12px 24px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s;
+  font-size: 0.9rem;
+}
+.tab-md:hover { color: var(--md-on-surface); background: rgba(139,105,20,0.04); }
+.tab-md.active {
+  color: var(--md-primary);
+  border-bottom-color: var(--md-primary);
+  font-weight: 600;
+}
+
+/* === MOCKUP NAV === */
+.mockup-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--md-on-surface);
+  color: white;
+  padding: 12px 24px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  font-size: 0.85rem;
+}
+.mockup-nav button {
+  background: var(--md-primary);
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.mockup-nav button:hover { background: var(--md-secondary); }
+.mockup-nav button.outline {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+.mockup-nav .label { opacity: 0.6; margin-right: 8px; }
+
+/* Pages */
+.page { display: none; }
+.page.active { display: block; }
+
+/* Sintesi modal overlay */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 150;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal-box {
+  background: var(--md-surface-container-lowest);
+  border-radius: var(--md-radius-xl);
+  width: 700px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.modal-header {
+  padding: 24px 24px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-header h3 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+.modal-body { padding: 20px 24px 24px; }
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: var(--md-on-surface-variant);
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.modal-close:hover { background: var(--md-surface-container); }
+
+textarea.md-textarea {
+  width: 100%;
+  border: 1.5px solid var(--md-outline-variant);
+  border-radius: var(--md-radius-md);
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  resize: vertical;
+  min-height: 80px;
+  background: var(--md-surface-container-lowest);
+}
+textarea.md-textarea:focus {
+  outline: 3px solid rgba(139,105,20,0.2);
+  border-color: var(--md-primary);
+}
+
+/* workflow link badge */
+.workflow-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--md-surface-container);
+  padding: 2px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--md-primary);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+body { padding-bottom: 60px; }
+
+/* === STEPPER === */
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.step-item {
+  display: flex;
+  gap: 0;
+  min-height: 60px;
+}
+.step-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 48px;
+  flex-shrink: 0;
+}
+.step-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  z-index: 1;
+  border: 3px solid var(--md-outline-variant);
+  background: var(--md-surface-container-lowest);
+  color: var(--md-on-surface-variant);
+  transition: all 0.2s;
+}
+.step-dot.completed {
+  background: var(--md-success);
+  border-color: var(--md-success);
+  color: white;
+}
+.step-dot.active {
+  background: var(--md-primary);
+  border-color: var(--md-primary);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(139,105,20,0.15);
+}
+.step-dot.error {
+  background: var(--md-error);
+  border-color: var(--md-error);
+  color: white;
+}
+.step-dot.waiting {
+  border-color: var(--md-outline-variant);
+  background: var(--md-surface-container);
+  color: var(--md-on-surface-variant);
+}
+.step-line {
+  flex: 1;
+  width: 3px;
+  background: var(--md-outline-variant);
+  min-height: 20px;
+}
+.step-line.completed { background: var(--md-success); }
+.step-line.active { background: linear-gradient(to bottom, var(--md-primary), var(--md-outline-variant)); }
+
+.step-content {
+  flex: 1;
+  padding: 4px 0 24px 16px;
+  min-width: 0;
+}
+.step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.step-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--md-on-surface);
+}
+.step-subtitle {
+  font-size: 0.78rem;
+  color: var(--md-on-surface-variant);
+  margin-top: 2px;
+}
+.step-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.step-body {
+  margin-top: 12px;
+}
+.step-body.collapsed { display: none; }
+
+/* Step action bar */
+.step-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--md-outline-variant);
+  margin-top: 16px;
+}
+.step-actions .left { display: flex; gap: 8px; }
+.step-actions .right { display: flex; gap: 8px; }
+
+/* Progress bar mini */
+.progress-mini {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.progress-mini .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--md-outline-variant);
+}
+.progress-mini .dot.done { background: var(--md-success); }
+.progress-mini .dot.current { background: var(--md-primary); }
+.progress-mini .dot.err { background: var(--md-error); }
+
+/* Two-col layout for detail */
+.detail-two-col {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: start;
+  transition: grid-template-columns 0.25s ease;
+}
+.detail-two-col.info-collapsed {
+  grid-template-columns: 48px 1fr;
+}
+.detail-sidebar-info {
+  position: sticky;
+  top: 84px;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+.detail-sidebar-info .card-md { transition: opacity 0.2s ease; }
+.detail-two-col.info-collapsed .detail-sidebar-info .card-md .card-body-md .detail-item,
+.detail-two-col.info-collapsed .detail-sidebar-info .card-md .card-body-md .progress-mini span {
+  display: none;
+}
+.info-toggle {
+  width: 100%;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 12px;
+  background: var(--md-surface-container-lowest);
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--md-on-surface-variant);
+  font-size: 0.9rem;
+  transition: all 0.15s;
+  margin-bottom: 12px;
+}
+.info-toggle:hover { background: var(--md-surface-container); }
+.info-toggle .toggle-label { margin-left: 6px; font-size: 0.78rem; font-weight: 500; }
+.detail-two-col.info-collapsed .info-toggle .toggle-label { display: none; }
+.detail-two-col.info-collapsed .info-toggle { border-radius: 50%; width: 40px; height: 40px; margin: 0 auto 12px; }
+.detail-two-col.info-collapsed .detail-sidebar-info .card-md { display: none; }
+
+@media (max-width: 900px) {
+  .detail-two-col { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<div class="topnav">
+  <span class="brand">Saba Workflow</span>
+  <span class="breadcrumb-text" id="breadcrumb">/ Pratiche</span>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar" id="sidebar">
+  <div class="nav-section">Principale</div>
+  <a class="nav-link" href="#"><i class="bi bi-grid-1x2"></i><span> Dashboard</span></a>
+  <a class="nav-link" href="#"><i class="bi bi-diagram-3"></i><span> Workflow</span></a>
+  <a class="nav-link" href="#"><i class="bi bi-people"></i><span> Partecipanti</span></a>
+  <a class="nav-link" href="#"><i class="bi bi-play-circle"></i><span> Esecuzioni</span></a>
+  <a class="nav-link" href="#"><i class="bi bi-collection"></i><span> Dati raccolti</span></a>
+  <a class="nav-link" href="#"><i class="bi bi-clock-history"></i><span> Activity log</span></a>
+  <div class="nav-divider"></div>
+  <div class="nav-section">Documenti</div>
+  <a class="nav-link active" onclick="showPage('pratiche-list')" id="nav-pratiche"><i class="bi bi-folder2-open"></i><span> Pratiche</span></a>
+  <a class="nav-link" onclick="showPage('catalogo')" id="nav-catalogo"><i class="bi bi-journal-bookmark"></i><span> Catalogo</span></a>
+</div>
+<button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Comprimi menu">
+  <i class="bi bi-chevron-left"></i>
+</button>
+
+<!-- ============================================ -->
+<!-- PAGE 1: PRATICHE LIST                        -->
+<!-- ============================================ -->
+<div class="main-content">
+<div class="page active" id="page-pratiche-list">
+  <div class="page-header">
+    <h1><i class="bi bi-folder2-open" style="opacity:0.5"></i> Pratiche</h1>
+    <button class="btn-md btn-md-primary" onclick="showPage('pratiche-detail')">
+      <i class="bi bi-plus-lg"></i> Nuova pratica
+    </button>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="stat-card">
+        <div><div class="stat-value">47</div><div class="stat-label">Totale pratiche</div></div>
+        <i class="bi bi-folder2-open stat-icon"></i>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-card success">
+        <div><div class="stat-value">38</div><div class="stat-label">Validate OK</div></div>
+        <i class="bi bi-check-circle stat-icon"></i>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-card danger">
+        <div><div class="stat-value">5</div><div class="stat-label">Con anomalie</div></div>
+        <i class="bi bi-exclamation-triangle stat-icon"></i>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-card warning">
+        <div><div class="stat-value">4</div><div class="stat-label">In elaborazione</div></div>
+        <i class="bi bi-hourglass-split stat-icon"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters + Table -->
+  <div class="card-md">
+    <div class="card-body-md">
+      <div class="filter-bar">
+        <input type="text" placeholder="Cerca pratica..." style="width:220px">
+        <select>
+          <option>Tutti gli stati</option>
+          <option>Validata OK</option>
+          <option>Con anomalie</option>
+          <option>In elaborazione</option>
+        </select>
+        <select>
+          <option>Tutti i workflow</option>
+          <option>Onboarding notarile</option>
+          <option>Anti-riciclaggio</option>
+          <option>Conformita titoli</option>
+        </select>
+        <select>
+          <option>Ultimo mese</option>
+          <option>Ultima settimana</option>
+          <option>Ultimi 3 mesi</option>
+          <option>Tutto</option>
+        </select>
+      </div>
+
+      <table class="table-md">
+        <thead>
+          <tr>
+            <th>ID Pratica</th>
+            <th>Workflow</th>
+            <th>Partecipante</th>
+            <th>Avanzamento</th>
+            <th>Stato</th>
+            <th>Data</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr onclick="showPage('pratiche-detail')">
+            <td><strong>PRAT-2026-0047</strong></td>
+            <td><span class="workflow-link"><i class="bi bi-diagram-3"></i> Onboarding notarile</span></td>
+            <td>Mario Rossi</td>
+            <td><div class="progress-mini"><div class="dot done"></div><div class="dot err"></div><div class="dot"></div><div class="dot"></div><span style="font-size:0.75rem;color:var(--md-on-surface-variant);margin-left:4px">2/4</span></div></td>
+            <td><span class="badge-md badge-ko">Anomalie</span></td>
+            <td>20 mag 2026</td>
+            <td>
+              <button class="btn-md btn-md-outline btn-md-sm" onclick="event.stopPropagation(); showPage('pratiche-detail')"><i class="bi bi-eye"></i></button>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>PRAT-2026-0046</strong></td>
+            <td><span class="workflow-link"><i class="bi bi-diagram-3"></i> Anti-riciclaggio</span></td>
+            <td>Laura Bianchi</td>
+            <td><div class="progress-mini"><div class="dot done"></div><div class="dot done"></div><div class="dot err"></div><div class="dot"></div><span style="font-size:0.75rem;color:var(--md-on-surface-variant);margin-left:4px">3/4</span></div></td>
+            <td><span class="badge-md badge-ko">Anomalie</span></td>
+            <td>19 mag 2026</td>
+            <td>
+              <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-eye"></i></button>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>PRAT-2026-0045</strong></td>
+            <td><span class="workflow-link"><i class="bi bi-diagram-3"></i> Conformita titoli</span></td>
+            <td>Giuseppe Verdi</td>
+            <td><div class="progress-mini"><div class="dot done"></div><div class="dot current"></div><div class="dot"></div><span style="font-size:0.75rem;color:var(--md-on-surface-variant);margin-left:4px">2/3</span></div></td>
+            <td><span class="badge-md badge-processing">In elaborazione</span></td>
+            <td>19 mag 2026</td>
+            <td>
+              <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-eye"></i></button>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>PRAT-2026-0044</strong></td>
+            <td><span class="workflow-link"><i class="bi bi-diagram-3"></i> Onboarding notarile</span></td>
+            <td>Anna Neri</td>
+            <td><div class="progress-mini"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><span style="font-size:0.75rem;color:var(--md-on-surface-variant);margin-left:4px">4/4</span></div></td>
+            <td><span class="badge-md badge-ok">Completata</span></td>
+            <td>18 mag 2026</td>
+            <td>
+              <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-eye"></i></button>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>PRAT-2026-0043</strong></td>
+            <td><span class="workflow-link"><i class="bi bi-diagram-3"></i> Anti-riciclaggio</span></td>
+            <td>Marco Colombo</td>
+            <td><div class="progress-mini"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><span style="font-size:0.75rem;color:var(--md-on-surface-variant);margin-left:4px">3/3</span></div></td>
+            <td><span class="badge-md badge-ok">Completata</span></td>
+            <td>17 mag 2026</td>
+            <td>
+              <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-eye"></i></button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- PAGE 2: PRATICA DETAIL (STEPPER)             -->
+<!-- ============================================ -->
+<div class="page" id="page-pratiche-detail">
+  <div class="page-header">
+    <h1>
+      <a onclick="showPage('pratiche-list')" style="cursor:pointer;color:var(--md-on-surface-variant);text-decoration:none">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      PRAT-2026-0047
+      <span style="font-size:0.8rem;font-weight:400;color:var(--md-on-surface-variant);margin-left:12px">Passaggio 2 di 4</span>
+    </h1>
+  </div>
+
+  <div class="detail-two-col">
+
+    <!-- LEFT: Practice info sidebar -->
+    <div class="detail-sidebar-info">
+      <button class="info-toggle" onclick="toggleInfoPanel()" title="Comprimi pannello info">
+        <i class="bi bi-layout-sidebar" id="info-toggle-icon"></i><span class="toggle-label">Comprimi</span>
+      </button>
+      <div class="card-md" style="margin-bottom:16px">
+        <div class="card-body-md" style="padding:16px">
+          <div class="detail-item" style="margin-bottom:12px">
+            <label>Workflow</label>
+            <div class="value"><span class="workflow-link"><i class="bi bi-diagram-3"></i> Onboarding notarile</span></div>
+          </div>
+          <div class="detail-item" style="margin-bottom:12px">
+            <label>Partecipante</label>
+            <div class="value">Mario Rossi</div>
+            <div style="font-size:0.78rem;color:var(--md-on-surface-variant)">mario.rossi@email.it</div>
+          </div>
+          <div class="detail-item" style="margin-bottom:12px">
+            <label>Creata il</label>
+            <div class="value">20 mag 2026, 09:14</div>
+          </div>
+          <div class="detail-item" style="margin-bottom:12px">
+            <label>Avanzamento</label>
+            <div class="progress-mini" style="margin-top:4px">
+              <div class="dot done"></div>
+              <div class="dot current"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <span style="font-size:0.78rem;color:var(--md-on-surface-variant);margin-left:6px">2 / 4</span>
+            </div>
+          </div>
+          <div class="detail-item">
+            <label>Stato complessivo</label>
+            <span class="badge-md badge-processing"><i class="bi bi-hourglass-split"></i> In corso</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Stepper -->
+    <div>
+      <div class="stepper">
+
+        <!-- ====== STEP 1: COMPLETATO ====== -->
+        <div class="step-item">
+          <div class="step-rail">
+            <div class="step-dot completed"><i class="bi bi-check-lg"></i></div>
+            <div class="step-line completed"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-header" onclick="toggleStep('step1')">
+              <div>
+                <div class="step-title">1. Verifica identita</div>
+                <div class="step-subtitle">Agente: verifica_identita_v2 &mdash; Completato il 20 mag, 09:16</div>
+              </div>
+              <div class="step-header-right">
+                <span class="badge-md badge-ok">Superato</span>
+                <i class="bi bi-chevron-down" id="step1-chevron" style="transition:transform 0.2s;transform:rotate(-90deg)"></i>
+              </div>
+            </div>
+            <div class="step-body collapsed" id="step1-body">
+              <!-- Validation -->
+              <div class="validation-box ok" style="margin-bottom:12px">
+                <i class="bi bi-check-circle-fill" style="font-size:1.2rem;color:#155724"></i>
+                <div>
+                  <strong>Identita verificata</strong>
+                  <div style="font-size:0.8rem;color:#155724;margin-top:2px">Documento valido, dati coerenti con i dati anagrafici del partecipante.</div>
+                </div>
+              </div>
+              <!-- File -->
+              <div class="card-md" style="margin-bottom:0">
+                <div>
+                  <div class="file-row">
+                    <div class="file-icon"><i class="bi bi-file-earmark-image"></i></div>
+                    <div class="file-info">
+                      <div class="file-name">carta_identita_rossi.jpg</div>
+                      <div class="file-type">Documento d'identita</div>
+                    </div>
+                    <div class="file-badges">
+                      <span class="badge-md badge-ok"><i class="bi bi-check2"></i> Estratto</span>
+                    </div>
+                    <div class="file-actions">
+                      <button class="btn-md btn-md-outline btn-md-sm" onclick="event.stopPropagation();toggleExtraction('s1ext1')"><i class="bi bi-table"></i> Dati</button>
+                      <button class="btn-md btn-md-outline btn-md-sm" onclick="event.stopPropagation();openSintesi()"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+                    </div>
+                  </div>
+                  <div class="extraction-grid" id="s1ext1" style="display:none">
+                    <div class="extraction-field">
+                      <div class="field-label">Nome completo</div>
+                      <div class="field-value">Mario Rossi</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Codice fiscale</div>
+                      <div class="field-value">RSSMRA85M01H501Z</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Data nascita</div>
+                      <div class="field-value">01/08/1985</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Scadenza documento</div>
+                      <div class="field-value">15/03/2031</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== STEP 2: ATTIVO (con anomalie) ====== -->
+        <div class="step-item">
+          <div class="step-rail">
+            <div class="step-dot error"><i class="bi bi-exclamation-lg"></i></div>
+            <div class="step-line active"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-header" onclick="toggleStep('step2')">
+              <div>
+                <div class="step-title">2. Conformita titoli</div>
+                <div class="step-subtitle">Agente: conformita_titoli_v3 &mdash; Elaborato il 20 mag, 09:18</div>
+              </div>
+              <div class="step-header-right">
+                <span class="badge-md badge-ko">2 anomalie</span>
+                <i class="bi bi-chevron-down" id="step2-chevron" style="transition:transform 0.2s"></i>
+              </div>
+            </div>
+            <div class="step-body" id="step2-body">
+              <!-- Validation with issues -->
+              <div class="validation-box ko" style="margin-bottom:12px">
+                <i class="bi bi-exclamation-triangle-fill" style="font-size:1.2rem;color:#721c24"></i>
+                <div style="flex:1">
+                  <strong>Anomalie rilevate</strong>
+                  <div class="anomaly" style="margin-top:6px">
+                    <span class="badge-md" style="background:#f8d7da;color:#721c24;font-size:0.72rem">ERRORE</span>
+                    Manca dichiarazione di provenienza fondi
+                  </div>
+                  <div class="anomaly">
+                    <span class="badge-md" style="background:#fff3cd;color:#856404;font-size:0.72rem">WARNING</span>
+                    Percentuale proprieta non sommata a 100%
+                  </div>
+                </div>
+              </div>
+
+              <!-- Files -->
+              <div class="card-md" style="margin-bottom:0">
+                <div>
+                  <!-- File 1 -->
+                  <div class="file-row">
+                    <div class="file-icon"><i class="bi bi-file-earmark-pdf"></i></div>
+                    <div class="file-info">
+                      <div class="file-name">atto_compravendita_rossi.pdf</div>
+                      <div class="file-type">Atto di compravendita</div>
+                    </div>
+                    <div class="file-badges">
+                      <span class="badge-md badge-ok"><i class="bi bi-check2"></i> Estratto</span>
+                    </div>
+                    <div class="file-actions">
+                      <button class="btn-md btn-md-outline btn-md-sm" onclick="event.stopPropagation();toggleExtraction('s2ext1')"><i class="bi bi-table"></i> Dati</button>
+                      <button class="btn-md btn-md-outline btn-md-sm" onclick="event.stopPropagation();openSintesi()"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+                      <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-arrow-repeat"></i></button>
+                    </div>
+                  </div>
+                  <div class="extraction-grid" id="s2ext1" style="display:none">
+                    <div class="extraction-field">
+                      <div class="field-label">Indirizzo immobile</div>
+                      <div class="field-value">Via Roma 42, 50123 Firenze (FI)</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Prezzo vendita</div>
+                      <div class="field-value">&euro; 285.000,00</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Venditore</div>
+                      <div class="field-value">Luigi Bianchi (CF: BNCLGU80A01D612X)</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Acquirente</div>
+                      <div class="field-value">Mario Rossi (CF: RSSMRA85M01H501Z)</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Proprieta</div>
+                      <div class="field-value" style="color:var(--md-error);font-weight:600">50% (manca il restante)</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Notaio</div>
+                      <div class="field-value">Dott. Francesco Moretti - Rep. 4521</div>
+                    </div>
+                  </div>
+
+                  <!-- File 2 -->
+                  <div class="file-row">
+                    <div class="file-icon"><i class="bi bi-file-earmark-pdf"></i></div>
+                    <div class="file-info">
+                      <div class="file-name">visura_catastale.pdf</div>
+                      <div class="file-type">Visura catastale</div>
+                    </div>
+                    <div class="file-badges">
+                      <span class="badge-md badge-ok"><i class="bi bi-check2"></i> Estratto</span>
+                    </div>
+                    <div class="file-actions">
+                      <button class="btn-md btn-md-outline btn-md-sm" onclick="event.stopPropagation();toggleExtraction('s2ext2')"><i class="bi bi-table"></i> Dati</button>
+                      <button class="btn-md btn-md-outline btn-md-sm" onclick="event.stopPropagation();openSintesi()"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+                      <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-arrow-repeat"></i></button>
+                    </div>
+                  </div>
+                  <div class="extraction-grid" id="s2ext2" style="display:none">
+                    <div class="extraction-field">
+                      <div class="field-label">Foglio</div>
+                      <div class="field-value">123</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Particella</div>
+                      <div class="field-value">456</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Subalterno</div>
+                      <div class="field-value">7</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Categoria</div>
+                      <div class="field-value">A/2 - Abitazione civile</div>
+                    </div>
+                    <div class="extraction-field">
+                      <div class="field-label">Rendita catastale</div>
+                      <div class="field-value">&euro; 892,50</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action bar -->
+              <div class="step-actions">
+                <div class="left">
+                  <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-arrow-repeat"></i> Rielabora passaggio</button>
+                  <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-upload"></i> Carica altri file</button>
+                </div>
+                <div class="right">
+                  <button class="btn-md btn-md-outline btn-md-sm" style="color:var(--md-warning);border-color:var(--md-warning)"><i class="bi bi-skip-forward"></i> Ignora anomalie e prosegui</button>
+                  <button class="btn-md btn-md-primary btn-md-sm" disabled style="opacity:0.5"><i class="bi bi-check-lg"></i> Approva e prosegui</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== STEP 3: IN ATTESA ====== -->
+        <div class="step-item">
+          <div class="step-rail">
+            <div class="step-dot waiting">3</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-header" onclick="toggleStep('step3')">
+              <div>
+                <div class="step-title" style="color:var(--md-on-surface-variant)">3. Antiriciclaggio</div>
+                <div class="step-subtitle">Agente: anti_riciclaggio_v2 &mdash; In attesa del passaggio precedente</div>
+              </div>
+              <div class="step-header-right">
+                <span class="badge-md badge-draft">In attesa</span>
+                <i class="bi bi-chevron-down" id="step3-chevron" style="transition:transform 0.2s;transform:rotate(-90deg)"></i>
+              </div>
+            </div>
+            <div class="step-body collapsed" id="step3-body">
+              <div style="padding:24px;text-align:center;color:var(--md-on-surface-variant)">
+                <i class="bi bi-hourglass" style="font-size:2rem;opacity:0.3;display:block;margin-bottom:8px"></i>
+                <div style="font-size:0.85rem">Questo passaggio verra avviato dopo l'approvazione del passaggio 2.</div>
+                <div style="font-size:0.8rem;margin-top:4px">Documenti richiesti: dichiarazione antiriciclaggio, certificato di residenza</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== STEP 4: IN ATTESA ====== -->
+        <div class="step-item">
+          <div class="step-rail">
+            <div class="step-dot waiting">4</div>
+          </div>
+          <div class="step-content">
+            <div class="step-header" onclick="toggleStep('step4')">
+              <div>
+                <div class="step-title" style="color:var(--md-on-surface-variant)">4. Validazione finale e sintesi</div>
+                <div class="step-subtitle">Cross-check di tutti i passaggi + generazione sintesi completa</div>
+              </div>
+              <div class="step-header-right">
+                <span class="badge-md badge-draft">In attesa</span>
+                <i class="bi bi-chevron-down" id="step4-chevron" style="transition:transform 0.2s;transform:rotate(-90deg)"></i>
+              </div>
+            </div>
+            <div class="step-body collapsed" id="step4-body">
+              <div style="padding:24px;text-align:center;color:var(--md-on-surface-variant)">
+                <i class="bi bi-shield-check" style="font-size:2rem;opacity:0.3;display:block;margin-bottom:8px"></i>
+                <div style="font-size:0.85rem">Validazione finale: cross-check automatico di tutti i dati estratti nei passaggi precedenti.</div>
+                <div style="font-size:0.8rem;margin-top:4px">Al termine verra generata una sintesi completa della pratica.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- end stepper -->
+    </div><!-- end right col -->
+  </div><!-- end two-col -->
+</div>
+
+<!-- ============================================ -->
+<!-- PAGE 3: CATALOGO                             -->
+<!-- ============================================ -->
+<div class="page" id="page-catalogo">
+  <div class="page-header">
+    <h1><i class="bi bi-journal-bookmark" style="opacity:0.5"></i> Catalogo documenti</h1>
+    <div style="display:flex;gap:8px">
+      <select class="btn-md btn-md-outline" style="font-family:inherit;cursor:pointer">
+        <option>Agente: conformita_titoli_v3</option>
+        <option>Agente: anti_riciclaggio_v2</option>
+        <option>Agente: onboarding_notarile</option>
+      </select>
+      <button class="btn-md btn-md-primary">
+        <i class="bi bi-plus-lg"></i> Aggiungi tipo documento
+      </button>
+    </div>
+  </div>
+
+  <div class="catalog-grid">
+    <!-- Card 1 -->
+    <div class="catalog-card">
+      <div class="doc-type-name">Atto di compravendita</div>
+      <div class="doc-type-meta">
+        <span><i class="bi bi-cpu"></i> AI attivo</span>
+        <span><i class="bi bi-regex"></i> Regex disattivato</span>
+        <span><i class="bi bi-list-check"></i> 8 campi</span>
+      </div>
+      <div class="questions-preview">
+        Indirizzo immobile, Prezzo vendita, Venditore, Acquirente, Data rogito, Notaio, Repertorio, Tipo atto
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn-md btn-md-outline btn-md-sm" onclick="openCatalogEdit()"><i class="bi bi-pencil"></i> Modifica</button>
+        <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i> Elimina</button>
+      </div>
+    </div>
+
+    <!-- Card 2 -->
+    <div class="catalog-card">
+      <div class="doc-type-name">Visura catastale</div>
+      <div class="doc-type-meta">
+        <span><i class="bi bi-cpu"></i> AI attivo</span>
+        <span><i class="bi bi-regex"></i> Regex attivo</span>
+        <span><i class="bi bi-list-check"></i> 6 campi</span>
+      </div>
+      <div class="questions-preview">
+        Foglio, Particella, Subalterno, Categoria, Rendita catastale, Consistenza
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-pencil"></i> Modifica</button>
+        <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i> Elimina</button>
+      </div>
+    </div>
+
+    <!-- Card 3 -->
+    <div class="catalog-card">
+      <div class="doc-type-name">Documento d'identita</div>
+      <div class="doc-type-meta">
+        <span><i class="bi bi-cpu"></i> AI attivo</span>
+        <span><i class="bi bi-regex"></i> Regex disattivato</span>
+        <span><i class="bi bi-list-check"></i> 5 campi</span>
+      </div>
+      <div class="questions-preview">
+        Nome completo, Codice fiscale, Data nascita, Luogo nascita, Scadenza documento
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-pencil"></i> Modifica</button>
+        <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i> Elimina</button>
+      </div>
+    </div>
+
+    <!-- Card 4 -->
+    <div class="catalog-card">
+      <div class="doc-type-name">Certificato di residenza</div>
+      <div class="doc-type-meta">
+        <span><i class="bi bi-cpu"></i> AI attivo</span>
+        <span><i class="bi bi-regex"></i> Regex attivo</span>
+        <span><i class="bi bi-list-check"></i> 4 campi</span>
+      </div>
+      <div class="questions-preview">
+        Comune, Indirizzo residenza, Data certificato, Intestatario
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-pencil"></i> Modifica</button>
+        <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i> Elimina</button>
+      </div>
+    </div>
+
+    <!-- Card 5 -->
+    <div class="catalog-card">
+      <div class="doc-type-name">Dichiarazione antiriciclaggio</div>
+      <div class="doc-type-meta">
+        <span><i class="bi bi-cpu"></i> AI attivo</span>
+        <span><i class="bi bi-regex"></i> Regex disattivato</span>
+        <span><i class="bi bi-list-check"></i> 7 campi</span>
+      </div>
+      <div class="questions-preview">
+        Dichiarante, Provenienza fondi, Importo, PEP, Beneficiario effettivo, Scopo operazione, Data
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-pencil"></i> Modifica</button>
+        <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i> Elimina</button>
+      </div>
+    </div>
+
+    <!-- Card 6 -->
+    <div class="catalog-card">
+      <div class="doc-type-name">Planimetria catastale</div>
+      <div class="doc-type-meta">
+        <span><i class="bi bi-cpu"></i> AI attivo</span>
+        <span><i class="bi bi-regex"></i> Regex disattivato</span>
+        <span><i class="bi bi-list-check"></i> 4 campi</span>
+      </div>
+      <div class="questions-preview">
+        Scala, Superficie, Numero vani, Conformita catastale
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-pencil"></i> Modifica</button>
+        <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i> Elimina</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- PAGE 4: CATALOGO EDIT (inline)               -->
+<!-- ============================================ -->
+<div class="page" id="page-catalogo-edit">
+  <div class="page-header">
+    <h1>
+      <a onclick="showPage('catalogo')" style="cursor:pointer;color:var(--md-on-surface-variant);text-decoration:none">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      Modifica: Atto di compravendita
+    </h1>
+    <div style="display:flex;gap:8px">
+      <button class="btn-md btn-md-outline" onclick="showPage('catalogo')">Annulla</button>
+      <button class="btn-md btn-md-primary" onclick="showPage('catalogo')"><i class="bi bi-check-lg"></i> Salva</button>
+    </div>
+  </div>
+
+  <!-- Identification -->
+  <div class="card-md">
+    <div class="card-header-md"><i class="bi bi-search"></i> Identificazione</div>
+    <div class="card-body-md">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label style="font-size:0.8rem;font-weight:500;color:var(--md-on-surface-variant)">Riconoscimento AI</label>
+          <div style="margin-top:6px">
+            <span style="background:#d4edda;color:#155724;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">Attivo</span>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label style="font-size:0.8rem;font-weight:500;color:var(--md-on-surface-variant)">Riconoscimento Regex</label>
+          <div style="margin-top:6px">
+            <span style="background:var(--md-surface-container);color:var(--md-on-surface-variant);padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">Disattivato</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <label style="font-size:0.8rem;font-weight:500;color:var(--md-on-surface-variant);display:block;margin-bottom:6px">Istruzioni per l'AI</label>
+        <textarea class="md-textarea" rows="3">Identifica questo documento come un atto di compravendita immobiliare. Cerca riferimenti a "rogito", "compravendita", "parte venditrice", "parte acquirente", numeri di repertorio notarile.</textarea>
+      </div>
+      <div style="margin-top:12px">
+        <label style="font-size:0.8rem;font-weight:500;color:var(--md-on-surface-variant);display:block;margin-bottom:6px">Hint</label>
+        <textarea class="md-textarea" rows="2">Documento tipicamente firmato dal notaio, con timbri e riferimenti catastali.</textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Extraction questions -->
+  <div class="card-md">
+    <div class="card-header-md" style="justify-content:space-between">
+      <span><i class="bi bi-list-check"></i> Domande di estrazione (8)</span>
+      <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-plus-lg"></i> Aggiungi domanda</button>
+    </div>
+    <div>
+      <!-- Q1 -->
+      <div class="file-row" style="gap:12px">
+        <i class="bi bi-grip-vertical" style="color:var(--md-outline);cursor:grab;font-size:1.1rem"></i>
+        <div style="flex:1">
+          <div style="display:flex;gap:12px;align-items:center;margin-bottom:6px">
+            <code style="background:var(--md-surface-container);padding:2px 8px;border-radius:4px;font-size:0.78rem">property_address</code>
+            <span style="background:#d1ecf1;color:#0c5460;padding:1px 8px;border-radius:4px;font-size:0.72rem;font-weight:600">string</span>
+          </div>
+          <div style="font-size:0.85rem;color:var(--md-on-surface)">Qual e l'indirizzo completo dell'immobile oggetto della compravendita?</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-pencil"></i></button>
+          <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-copy"></i></button>
+          <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+      <!-- Q2 -->
+      <div class="file-row" style="gap:12px">
+        <i class="bi bi-grip-vertical" style="color:var(--md-outline);cursor:grab;font-size:1.1rem"></i>
+        <div style="flex:1">
+          <div style="display:flex;gap:12px;align-items:center;margin-bottom:6px">
+            <code style="background:var(--md-surface-container);padding:2px 8px;border-radius:4px;font-size:0.78rem">sale_price</code>
+            <span style="background:#fff3cd;color:#856404;padding:1px 8px;border-radius:4px;font-size:0.72rem;font-weight:600">number</span>
+          </div>
+          <div style="font-size:0.85rem;color:var(--md-on-surface)">Qual e il prezzo di vendita indicato nell'atto?</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-pencil"></i></button>
+          <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-copy"></i></button>
+          <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+      <!-- Q3 -->
+      <div class="file-row" style="gap:12px">
+        <i class="bi bi-grip-vertical" style="color:var(--md-outline);cursor:grab;font-size:1.1rem"></i>
+        <div style="flex:1">
+          <div style="display:flex;gap:12px;align-items:center;margin-bottom:6px">
+            <code style="background:var(--md-surface-container);padding:2px 8px;border-radius:4px;font-size:0.78rem">seller_info</code>
+            <span style="background:#d1ecf1;color:#0c5460;padding:1px 8px;border-radius:4px;font-size:0.72rem;font-weight:600">json</span>
+          </div>
+          <div style="font-size:0.85rem;color:var(--md-on-surface)">Estrai nome, cognome e codice fiscale della parte venditrice.</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-pencil"></i></button>
+          <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-copy"></i></button>
+          <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+      <!-- Q4 -->
+      <div class="file-row" style="gap:12px">
+        <i class="bi bi-grip-vertical" style="color:var(--md-outline);cursor:grab;font-size:1.1rem"></i>
+        <div style="flex:1">
+          <div style="display:flex;gap:12px;align-items:center;margin-bottom:6px">
+            <code style="background:var(--md-surface-container);padding:2px 8px;border-radius:4px;font-size:0.78rem">buyer_info</code>
+            <span style="background:#d1ecf1;color:#0c5460;padding:1px 8px;border-radius:4px;font-size:0.72rem;font-weight:600">json</span>
+            <span style="font-size:0.7rem;color:var(--md-on-surface-variant)"><i class="bi bi-link-45deg"></i> dipende da: seller_info</span>
+          </div>
+          <div style="font-size:0.85rem;color:var(--md-on-surface)">Estrai nome, cognome e codice fiscale della parte acquirente.</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-pencil"></i></button>
+          <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-copy"></i></button>
+          <button class="btn-md btn-md-danger btn-md-sm"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+      <!-- more rows hint -->
+      <div style="padding:12px 20px;text-align:center;color:var(--md-on-surface-variant);font-size:0.82rem">
+        <i class="bi bi-three-dots"></i> + 4 altre domande (data rogito, notaio, repertorio, tipo atto)
+      </div>
+    </div>
+  </div>
+</div>
+
+</div> <!-- end main-content -->
+
+<!-- ============================================ -->
+<!-- MODAL: SINTESI DOCUMENTO                     -->
+<!-- ============================================ -->
+<div class="modal-overlay" id="modal-sintesi">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3><i class="bi bi-file-earmark-text"></i> Genera sintesi documento</h3>
+      <button class="modal-close" onclick="closeSintesi()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <!-- File selector -->
+      <label style="font-size:0.8rem;font-weight:500;color:var(--md-on-surface-variant);display:block;margin-bottom:6px">Documento</label>
+      <select style="width:100%;border:1.5px solid var(--md-outline-variant);border-radius:12px;padding:10px 14px;font-family:inherit;font-size:0.85rem;margin-bottom:16px">
+        <option>atto_compravendita_rossi.pdf</option>
+        <option>visura_catastale.pdf</option>
+        <option>carta_identita_rossi.jpg</option>
+      </select>
+
+      <!-- Prompt -->
+      <label style="font-size:0.8rem;font-weight:500;color:var(--md-on-surface-variant);display:block;margin-bottom:6px">Prompt di sintesi</label>
+      <textarea class="md-textarea" rows="3" id="sintesi-prompt">Genera una sintesi strutturata di questo atto notarile, evidenziando: parti coinvolte, oggetto, prezzo, condizioni particolari, e eventuali vincoli o servitu.</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;margin-bottom:16px">
+        <button class="btn-md btn-md-outline btn-md-sm"><i class="bi bi-magic"></i> Migliora prompt</button>
+        <select style="border:1.5px solid var(--md-outline-variant);border-radius:12px;padding:6px 12px;font-size:0.8rem;font-family:inherit">
+          <option>Gemini Flash</option>
+          <option>GPT-4o Mini</option>
+        </select>
+      </div>
+
+      <!-- Result preview -->
+      <div class="sintesi-panel">
+        <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--md-on-surface-variant);font-weight:600;margin-bottom:12px">Risultato sintesi</div>
+        <div class="sintesi-text"><strong>SINTESI ATTO DI COMPRAVENDITA</strong>
+Rep. 4521 - Notaio Dott. Francesco Moretti
+
+<strong>Parti:</strong>
+- Venditore: Luigi Bianchi (CF: BNCLGU80A01D612X)
+- Acquirente: Mario Rossi (CF: RSSMRA85M01H501Z)
+
+<strong>Oggetto:</strong>
+Immobile sito in Via Roma 42, 50123 Firenze (FI)
+Cat. A/2, Foglio 123, Part. 456, Sub. 7
+Superficie: 95 mq, 5.5 vani
+
+<strong>Prezzo:</strong> EUR 285.000,00
+Modalita: bonifico bancario in sede di rogito
+
+<strong>Condizioni particolari:</strong>
+- Immobile libero da ipoteche e gravami
+- Consegna entro 30 giorni dal rogito
+- Garanzia per vizi occulti ex art. 1490 c.c.
+
+<strong>Vincoli:</strong> Nessun vincolo o servitu rilevata.</div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+        <button class="btn-md btn-md-outline" onclick="closeSintesi()">Chiudi</button>
+        <button class="btn-md btn-md-primary"><i class="bi bi-play-fill"></i> Genera</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM NAV (mockup navigation) -->
+<div class="mockup-nav">
+  <span class="label">MOCKUP NAVIGAZIONE:</span>
+  <button onclick="showPage('pratiche-list')">Lista pratiche</button>
+  <button onclick="showPage('pratiche-detail')">Dettaglio pratica</button>
+  <button onclick="showPage('catalogo')">Catalogo</button>
+  <button onclick="showPage('catalogo-edit')">Modifica catalogo</button>
+  <button class="outline" onclick="openSintesi()">Sintesi (modale)</button>
+</div>
+
+<script>
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+
+  // Update sidebar
+  document.querySelectorAll('.sidebar .nav-link').forEach(n => n.classList.remove('active'));
+  if (id.startsWith('catalogo')) {
+    document.getElementById('nav-catalogo').classList.add('active');
+    document.getElementById('breadcrumb').textContent = '/ Catalogo';
+  } else {
+    document.getElementById('nav-pratiche').classList.add('active');
+    document.getElementById('breadcrumb').textContent = id === 'pratiche-detail' ? '/ Pratiche / PRAT-2026-0047' : '/ Pratiche';
+  }
+  closeSintesi();
+}
+
+function toggleExtraction(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'grid' : 'none';
+}
+
+function toggleStep(id) {
+  const body = document.getElementById(id + '-body');
+  const chevron = document.getElementById(id + '-chevron');
+  if (body.classList.contains('collapsed')) {
+    body.classList.remove('collapsed');
+    if (chevron) chevron.style.transform = 'rotate(0deg)';
+  } else {
+    body.classList.add('collapsed');
+    if (chevron) chevron.style.transform = 'rotate(-90deg)';
+  }
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const toggle = document.getElementById('sidebar-toggle');
+  const main = document.querySelector('.main-content');
+  sidebar.classList.toggle('collapsed');
+  toggle.classList.toggle('collapsed');
+  main.classList.toggle('sidebar-collapsed');
+}
+
+function toggleInfoPanel() {
+  const twoCol = document.querySelector('.detail-two-col');
+  const label = document.querySelector('.info-toggle .toggle-label');
+  twoCol.classList.toggle('info-collapsed');
+  if (twoCol.classList.contains('info-collapsed')) {
+    if (label) label.textContent = '';
+  } else {
+    if (label) label.textContent = 'Comprimi';
+  }
+}
+
+function openSintesi() {
+  document.getElementById('modal-sintesi').classList.add('active');
+}
+function closeSintesi() {
+  document.getElementById('modal-sintesi').classList.remove('active');
+}
+
+function openCatalogEdit() {
+  showPage('catalogo-edit');
+}
+</script>
+</body>
+</html>

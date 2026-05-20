@@ -1,0 +1,1390 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ t.get('pratiche', 'Pratiche') }} - Saba Workflow{% endblock %}
+
+{% block extra_css %}
+<style>
+/* === PRATICHE-SPECIFIC STYLES === */
+
+/* Stat cards */
+.prat-stat {
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 20px;
+  background: var(--md-surface-container-lowest);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-left: 4px solid var(--md-primary);
+}
+.prat-stat .stat-value { font-size: 1.8rem; font-weight: 700; }
+.prat-stat .stat-label { font-size: 0.78rem; color: var(--md-on-surface-variant); text-transform: uppercase; letter-spacing: 0.5px; }
+.prat-stat .stat-icon { font-size: 2.2rem; opacity: 0.3; color: var(--md-primary); }
+.prat-stat.success { border-left-color: var(--md-success-color, #386A20); }
+.prat-stat.success .stat-icon { color: var(--md-success-color, #386A20); }
+.prat-stat.warning { border-left-color: var(--md-warning-color, #7C5800); }
+.prat-stat.warning .stat-icon { color: var(--md-warning-color, #7C5800); }
+.prat-stat.danger { border-left-color: var(--md-error-color, #B3261E); }
+.prat-stat.danger .stat-icon { color: var(--md-error-color, #B3261E); }
+
+/* Filter bar */
+.prat-filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.prat-filters select, .prat-filters input {
+  border: 1.5px solid var(--md-outline-variant); border-radius: 12px; padding: 8px 14px;
+  font-size: 0.85rem; background: var(--md-surface-container-lowest); font-family: inherit;
+}
+
+/* File rows */
+.file-row { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--md-outline-variant); transition: background 0.1s; }
+.file-row:hover { background: var(--md-surface-container-low); }
+.file-row:last-child { border-bottom: none; }
+.file-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--md-surface-container); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: var(--md-primary); flex-shrink: 0; }
+.file-info { flex: 1; }
+.file-name { font-weight: 600; font-size: 0.9rem; }
+.file-type { font-size: 0.78rem; color: var(--md-on-surface-variant); }
+.file-badges { display: flex; gap: 6px; }
+.file-actions { display: flex; gap: 8px; }
+
+/* Extraction grid */
+.extraction-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
+  padding: 16px; background: var(--md-surface-container-low); border-radius: 12px; margin: 12px 20px 20px;
+}
+.extraction-field { padding: 10px 14px; background: var(--md-surface-container-lowest); border-radius: 8px; border: 1px solid var(--md-outline-variant); }
+.extraction-field .field-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.4px; color: var(--md-on-surface-variant); font-weight: 600; }
+.extraction-field .field-value { font-size: 0.9rem; font-weight: 500; margin-top: 2px; }
+
+/* Validation */
+.validation-box { padding: 16px 20px; border-radius: 12px; display: flex; align-items: flex-start; gap: 12px; }
+.validation-box.ok { background: #d4edda; border: 1px solid #c3e6cb; }
+.validation-box.ko { background: #f8d7da; border: 1px solid #f5c6cb; }
+
+/* Stepper */
+.stepper { display: flex; flex-direction: column; }
+.step-item { display: flex; min-height: 60px; }
+.step-rail { display: flex; flex-direction: column; align-items: center; width: 48px; flex-shrink: 0; }
+.step-dot {
+  width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.85rem; flex-shrink: 0; z-index: 1;
+  border: 3px solid var(--md-outline-variant); background: var(--md-surface-container-lowest); color: var(--md-on-surface-variant);
+}
+.step-dot.completed { background: #386A20; border-color: #386A20; color: white; }
+.step-dot.active { background: var(--md-primary); border-color: var(--md-primary); color: white; box-shadow: 0 0 0 4px rgba(139,105,20,0.15); }
+.step-dot.error { background: #B3261E; border-color: #B3261E; color: white; }
+.step-dot.waiting { background: var(--md-surface-container); }
+.step-line { flex: 1; width: 3px; background: var(--md-outline-variant); min-height: 20px; }
+.step-line.completed { background: #386A20; }
+.step-line.active { background: linear-gradient(to bottom, var(--md-primary), var(--md-outline-variant)); }
+.step-content { flex: 1; padding: 4px 0 24px 16px; min-width: 0; }
+.step-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; cursor: pointer; }
+.step-title { font-weight: 600; font-size: 0.95rem; }
+.step-subtitle { font-size: 0.78rem; color: var(--md-on-surface-variant); margin-top: 2px; }
+.step-header-right { display: flex; align-items: center; gap: 8px; }
+.step-body { margin-top: 12px; }
+.step-body.collapsed { display: none; }
+.step-actions { display: flex; align-items: center; justify-content: space-between; padding: 16px 0 0; border-top: 1px solid var(--md-outline-variant); margin-top: 16px; }
+.step-actions .left, .step-actions .right { display: flex; gap: 8px; }
+
+/* Progress dots */
+.progress-mini { display: flex; gap: 4px; align-items: center; }
+.progress-mini .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--md-outline-variant); }
+.progress-mini .dot.done { background: #386A20; }
+.progress-mini .dot.current { background: var(--md-primary); }
+.progress-mini .dot.err { background: #B3261E; }
+
+/* Detail two-col */
+.detail-two-col { display: grid; grid-template-columns: 280px 1fr; gap: 24px; align-items: start; transition: grid-template-columns 0.25s; }
+.detail-two-col.info-collapsed { grid-template-columns: 48px 1fr; }
+.detail-sidebar-info { position: sticky; top: 84px; overflow: hidden; transition: all 0.25s; }
+.detail-two-col.info-collapsed .detail-sidebar-info .card { display: none; }
+.info-toggle { width: 100%; border: 1px solid var(--md-outline-variant); border-radius: 12px; background: var(--md-surface-container-lowest); padding: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--md-on-surface-variant); font-size: 0.9rem; margin-bottom: 12px; }
+.info-toggle:hover { background: var(--md-surface-container); }
+.info-toggle .toggle-label { margin-left: 6px; font-size: 0.78rem; font-weight: 500; }
+.detail-two-col.info-collapsed .info-toggle .toggle-label { display: none; }
+.detail-two-col.info-collapsed .info-toggle { border-radius: 50%; width: 40px; height: 40px; margin: 0 auto 12px; }
+@media (max-width: 900px) { .detail-two-col { grid-template-columns: 1fr; } }
+
+/* Detail items */
+.detail-item label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--md-on-surface-variant); margin-bottom: 4px; font-weight: 600; }
+.detail-item .value { font-size: 0.95rem; font-weight: 500; }
+
+/* Badges */
+.badge-ok { background: #d4edda; color: #155724; padding: 2px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+.badge-ko { background: #f8d7da; color: #721c24; padding: 2px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+.badge-pending { background: #fff3cd; color: #856404; padding: 2px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+.badge-processing { background: #d1ecf1; color: #0c5460; padding: 2px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+.badge-draft { background: var(--md-surface-container); color: var(--md-on-surface-variant); padding: 2px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+
+/* Workflow link */
+.workflow-link { display: inline-flex; align-items: center; gap: 4px; background: var(--md-surface-container); padding: 2px 10px; border-radius: 8px; font-size: 0.8rem; color: var(--md-primary); font-weight: 500; text-decoration: none; }
+
+/* Catalog */
+.catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.catalog-card { border: 1px solid var(--md-outline-variant); border-radius: 16px; background: var(--md-surface-container-lowest); padding: 20px; transition: transform 0.15s, box-shadow 0.15s; }
+.catalog-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.catalog-card .doc-type-name { font-weight: 700; font-size: 1rem; margin-bottom: 8px; }
+.catalog-card .doc-type-meta { font-size: 0.78rem; color: var(--md-on-surface-variant); display: flex; gap: 16px; margin-bottom: 12px; }
+.catalog-card .questions-preview { font-size: 0.8rem; color: var(--md-on-surface-variant); }
+
+/* Sintesi modal */
+.prat-modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1060; align-items: center; justify-content: center; }
+.prat-modal-overlay.active { display: flex; }
+.prat-modal-box { background: var(--md-surface-container-lowest); border-radius: 28px; width: 700px; max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+.prat-modal-header { padding: 24px 24px 0; display: flex; justify-content: space-between; align-items: center; }
+.prat-modal-header h3 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+.prat-modal-body { padding: 20px 24px 24px; }
+.prat-modal-close { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--md-on-surface-variant); padding: 4px 8px; border-radius: 8px; }
+
+.sintesi-panel { background: var(--md-surface-container-low); border-radius: 16px; padding: 24px; border: 1px solid var(--md-outline-variant); }
+.sintesi-text { font-size: 0.9rem; line-height: 1.7; white-space: pre-wrap; }
+
+textarea.prat-textarea {
+  width: 100%; border: 1.5px solid var(--md-outline-variant); border-radius: 12px;
+  padding: 12px 14px; font-family: inherit; font-size: 0.85rem; resize: vertical; min-height: 80px;
+  background: var(--md-surface-container-lowest);
+}
+textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-color: var(--md-primary); }
+
+/* Drag-drop zone */
+.drop-zone {
+  border: 2px dashed var(--md-outline-variant); border-radius: 16px; padding: 40px 20px;
+  text-align: center; color: var(--md-on-surface-variant); transition: all 0.2s; cursor: pointer;
+}
+.drop-zone.dragover { border-color: var(--md-primary); background: rgba(139,105,20,0.05); }
+.drop-zone i { font-size: 2.5rem; opacity: 0.4; display: block; margin-bottom: 8px; }
+
+/* Pages */
+.prat-page { display: none; }
+.prat-page.active { display: block; }
+
+/* Tabs */
+.prat-tabs { display: flex; border-bottom: 2px solid var(--md-outline-variant); margin-bottom: 20px; }
+.prat-tab {
+  padding: 12px 24px; font-weight: 500; color: var(--md-on-surface-variant); cursor: pointer;
+  border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.15s; font-size: 0.9rem;
+}
+.prat-tab:hover { color: var(--md-on-surface); background: rgba(139,105,20,0.04); }
+.prat-tab.active { color: var(--md-primary); border-bottom-color: var(--md-primary); font-weight: 600; }
+
+/* Spinner */
+.prat-spinner { display: inline-block; width: 18px; height: 18px; border: 2.5px solid var(--md-outline-variant); border-top-color: var(--md-primary); border-radius: 50%; animation: pratspin 0.7s linear infinite; }
+@keyframes pratspin { to { transform: rotate(360deg); } }
+
+/* Saved practices — uses dropdown, no extra CSS needed */
+
+/* Clickable extraction fields */
+.extraction-field.clickable { cursor: pointer; transition: all 0.15s; border: 1px solid var(--md-outline-variant); }
+.extraction-field.clickable:hover {
+  border-color: var(--md-primary); background: rgba(139,105,20,0.06);
+  box-shadow: 0 2px 8px rgba(139,105,20,0.12);
+}
+.extraction-field.clickable .field-label::after {
+  content: ' \f5a5'; font-family: 'bootstrap-icons'; font-size: 0.65rem; opacity: 0.4; margin-left: 4px;
+}
+.extraction-field.clickable:hover .field-label::after { opacity: 1; color: var(--md-primary); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ============================================ -->
+<!-- TABS: Pratiche | Catalogo                    -->
+<!-- ============================================ -->
+<div class="prat-tabs">
+  <div class="prat-tab active" onclick="showPratPage('elabora')"><i class="bi bi-folder2-open"></i> Elabora pratica</div>
+  <div class="prat-tab" onclick="showPratPage('catalogo')"><i class="bi bi-journal-bookmark"></i> Catalogo</div>
+</div>
+
+<!-- ============================================ -->
+<!-- TAB 1: ELABORA PRATICA                       -->
+<!-- ============================================ -->
+<div class="prat-page active" id="prat-page-elabora">
+
+  <!-- Agent + Practice selector -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:0.8rem;font-weight:500">Agente</label>
+          <select id="agentSelect" class="form-select" style="border-radius:12px"></select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:0.8rem;font-weight:500">Pratiche salvate</label>
+          <select id="savedPracticeSelect" class="form-select" style="border-radius:12px" onchange="onSavedPracticeSelected(this.value)">
+            <option value="">Nuova pratica...</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:0.8rem;font-weight:500">ID Pratica</label>
+          <input type="text" id="practiceIdInput" class="form-control" style="border-radius:12px" placeholder="PRAT-2026-001 (vuoto = auto)">
+        </div>
+        <div class="col-md-3 d-flex gap-2">
+          <button class="btn btn-primary" onclick="loadPracticeInfo()" style="border-radius:12px">
+            <i class="bi bi-search"></i> Carica
+          </button>
+          <button class="btn btn-outline-secondary" onclick="resetPractice()" style="border-radius:12px">
+            <i class="bi bi-arrow-counterclockwise"></i> Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drop zone + staged files -->
+  <div id="dropZoneContainer">
+    <div class="drop-zone" id="dropZone">
+      <i class="bi bi-cloud-arrow-up"></i>
+      <div style="font-size:0.95rem;font-weight:500">Trascina qui i documenti da elaborare</div>
+      <div style="font-size:0.8rem;margin-top:4px">PDF, PNG, JPG &mdash; puoi aggiungerne piu' di uno</div>
+      <input type="file" id="fileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none">
+    </div>
+
+    <!-- Staged files list (before processing) -->
+    <div id="stagedFilesCard" class="card mt-3" style="display:none">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-files"></i> Documenti da elaborare (<span id="stagedCount">0</span>)</span>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('fileInput').click()" style="border-radius:8px"><i class="bi bi-plus-lg"></i> Aggiungi</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="clearStagedFiles()" style="border-radius:8px"><i class="bi bi-trash3"></i> Svuota</button>
+        </div>
+      </div>
+      <div id="stagedFilesList"></div>
+      <div class="card-body border-top d-flex justify-content-end">
+        <button class="btn btn-primary" onclick="processAllFiles()" style="border-radius:12px;padding:10px 32px">
+          <i class="bi bi-play-fill"></i> Elabora <span id="stagedCountBtn">0</span> documenti
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Processing spinner -->
+  <div id="processingSpinner" class="text-center py-5" style="display:none">
+    <div class="prat-spinner" style="width:40px;height:40px;border-width:4px"></div>
+    <div style="margin-top:12px;font-weight:500" id="processingMsg">Elaborazione in corso...</div>
+  </div>
+
+  <!-- Results area -->
+  <div id="practiceResults" style="display:none">
+
+    <div class="detail-two-col">
+
+      <!-- LEFT: Info sidebar -->
+      <div class="detail-sidebar-info">
+        <button class="info-toggle" onclick="toggleInfoPanel()">
+          <i class="bi bi-layout-sidebar"></i><span class="toggle-label">Comprimi</span>
+        </button>
+        <div class="card" id="practiceInfoCard">
+          <div class="card-body" style="padding:16px">
+            <div class="detail-item mb-3">
+              <label>ID Pratica</label>
+              <div class="value" id="infoPracticeId">-</div>
+            </div>
+            <div class="detail-item mb-3">
+              <label>Agente</label>
+              <div class="value" id="infoAgent">-</div>
+            </div>
+            <div class="detail-item mb-3">
+              <label>Creata il</label>
+              <div class="value" id="infoCreated">-</div>
+            </div>
+            <div class="detail-item mb-3">
+              <label>Aggiornata il</label>
+              <div class="value" id="infoUpdated">-</div>
+            </div>
+            <div class="detail-item mb-3">
+              <label>Validazione</label>
+              <div id="infoValidation">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Files stepper / results -->
+      <div>
+        <!-- Validation box -->
+        <div id="validationContainer" style="display:none;margin-bottom:16px"></div>
+
+        <!-- Files list -->
+        <div class="card" id="filesCard">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-files"></i> Documenti</span>
+            <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('addFileInput').click()" style="border-radius:12px">
+              <i class="bi bi-plus-lg"></i> Aggiungi file
+            </button>
+            <input type="file" id="addFileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="processAdditionalFiles(this.files)">
+          </div>
+          <div id="filesList"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================ -->
+<!-- TAB 2: CATALOGO                              -->
+<!-- ============================================ -->
+<div class="prat-page" id="prat-page-catalogo">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex gap-3 align-items-center">
+      <select id="catalogAgentSelect" class="form-select" style="border-radius:12px;width:300px"></select>
+      <button class="btn btn-primary" onclick="loadCatalog()" style="border-radius:12px">
+        <i class="bi bi-arrow-clockwise"></i> Carica catalogo
+      </button>
+    </div>
+  </div>
+
+  <div id="catalogLoading" class="text-center py-5" style="display:none">
+    <div class="prat-spinner" style="width:40px;height:40px;border-width:4px"></div>
+    <div style="margin-top:12px">Caricamento catalogo...</div>
+  </div>
+
+  <div class="catalog-grid" id="catalogGrid"></div>
+
+  <!-- Catalog edit (inline, hidden by default) -->
+  <div id="catalogEditArea" style="display:none">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0">
+        <a href="#" onclick="closeCatalogEdit();return false" style="color:var(--md-on-surface-variant);text-decoration:none"><i class="bi bi-arrow-left"></i></a>
+        Modifica: <span id="editTypeName"></span>
+      </h5>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" onclick="closeCatalogEdit()" style="border-radius:12px">Annulla</button>
+        <button class="btn btn-primary" onclick="saveCatalogEdit()" style="border-radius:12px"><i class="bi bi-check-lg"></i> Salva</button>
+      </div>
+    </div>
+
+    <!-- Identification -->
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-search"></i> Identificazione</div>
+      <div class="card-body">
+        <div class="row g-3 mb-3">
+          <div class="col-md-3">
+            <label class="form-label" style="font-size:0.8rem">Riconoscimento AI</label>
+            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="editAiEnabled"></div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" style="font-size:0.8rem">Riconoscimento Regex</label>
+            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="editRegexEnabled"></div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" style="font-size:0.8rem">Istruzioni per l'AI</label>
+          <textarea class="prat-textarea" id="editInstructions" rows="3"></textarea>
+        </div>
+        <div>
+          <label class="form-label" style="font-size:0.8rem">Hint</label>
+          <textarea class="prat-textarea" id="editHint" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Extraction questions -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-check"></i> Domande di estrazione (<span id="editQCount">0</span>)</span>
+        <button class="btn btn-sm btn-outline-primary" onclick="addQuestion()" style="border-radius:12px"><i class="bi bi-plus-lg"></i> Aggiungi</button>
+      </div>
+      <div id="editQuestionsList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL: SINTESI DOCUMENTO                     -->
+<!-- ============================================ -->
+<div class="prat-modal-overlay" id="modalSintesi">
+  <div class="prat-modal-box">
+    <div class="prat-modal-header">
+      <h3><i class="bi bi-file-earmark-text"></i> Genera sintesi documento</h3>
+      <button class="prat-modal-close" onclick="closeSintesi()">&times;</button>
+    </div>
+    <div class="prat-modal-body">
+      <label class="form-label" style="font-size:0.8rem">Prompt di sintesi</label>
+      <textarea class="prat-textarea" id="sintesiPrompt" rows="3" placeholder="Descrivi cosa vuoi estrarre o sintetizzare dal documento..."></textarea>
+      <div class="d-flex gap-2 mt-2 mb-3">
+        <button class="btn btn-sm btn-outline-secondary" onclick="assistPrompt()" style="border-radius:12px"><i class="bi bi-magic"></i> Migliora prompt</button>
+        <select id="sintesiModel" class="form-select form-select-sm" style="border-radius:12px;width:180px">
+          <option value="gemini-2.5-flash">Gemini Flash</option>
+          <option value="gpt-4o-mini">GPT-4o Mini</option>
+        </select>
+      </div>
+      <div class="sintesi-panel" id="sintesiResult" style="display:none">
+        <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--md-on-surface-variant);font-weight:600;margin-bottom:12px">Risultato sintesi</div>
+        <div class="sintesi-text" id="sintesiText"></div>
+      </div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn btn-outline-secondary" onclick="closeSintesi()" style="border-radius:12px">Chiudi</button>
+        <button class="btn btn-primary" onclick="generateSintesi()" id="sintesiGenBtn" style="border-radius:12px"><i class="bi bi-play-fill"></i> Genera</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PDF Viewer opens in separate window -->
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let agents = [];
+let catalogData = {};
+let editingTypeId = null;
+let sintesiFileHash = null;
+let stagedFiles = []; // Files waiting to be processed
+let processedFileBlobs = {}; // filename → File object, kept for PDF viewer
+
+// ── Init ───────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => { loadAgents(); loadSavedPractices(); });
+
+async function loadAgents() {
+  try {
+    const r = await fetch('/api/ao/agents');
+    const data = await r.json();
+    agents = data.agents || [];
+    const sel1 = document.getElementById('agentSelect');
+    const sel2 = document.getElementById('catalogAgentSelect');
+    sel1.innerHTML = '<option value="">Seleziona agente...</option>';
+    sel2.innerHTML = '<option value="">Seleziona agente...</option>';
+    agents.forEach(a => {
+      const name = a.name || a.agentName || a.id;
+      sel1.innerHTML += `<option value="${a.id}">${name}</option>`;
+      sel2.innerHTML += `<option value="${a.id}">${name}</option>`;
+    });
+  } catch (e) {
+    console.error('Errore caricamento agenti:', e);
+  }
+}
+
+// ── Page navigation ────────────────────────────────────────────────
+function showPratPage(id) {
+  document.querySelectorAll('.prat-page').forEach(p => p.classList.remove('active'));
+  document.getElementById('prat-page-' + id).classList.add('active');
+  document.querySelectorAll('.prat-tab').forEach(t => t.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
+function toggleInfoPanel() {
+  const twoCol = document.querySelector('.detail-two-col');
+  const label = document.querySelector('.info-toggle .toggle-label');
+  twoCol.classList.toggle('info-collapsed');
+  label.textContent = twoCol.classList.contains('info-collapsed') ? '' : 'Comprimi';
+}
+
+// ── Practice operations ────────────────────────────────────────────
+function getAgentId() { return document.getElementById('agentSelect').value; }
+function getPracticeId() {
+  let id = document.getElementById('practiceIdInput').value.trim();
+  if (!id) { id = 'PRAT-' + Date.now(); document.getElementById('practiceIdInput').value = id; }
+  return id;
+}
+
+async function loadPracticeInfo() {
+  const agentId = getAgentId();
+  const practiceId = getPracticeId();
+  if (!agentId) return alert('Seleziona un agente');
+
+  // Prima prova dal database
+  const cached = await loadPracticeFromDb(practiceId);
+  if (cached && cached.result_data) {
+    const info = cached.result_data;
+    const hasFiles = info.files && Object.keys(info.files).length > 0;
+    if (hasFiles) {
+      showPracticeResult({ output: { info } }, practiceId);
+      return;
+    }
+  }
+
+  // Altrimenti chiedi ad AO
+  showProcessing('Caricamento pratica...');
+  try {
+    const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/info`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    // Salva in localStorage se ha file
+    const info = data.output?.info || data.output || data.info || data;
+    if (info.files && Object.keys(info.files).length > 0) {
+      savePracticeToDb(practiceId, agentId, info);
+    }
+
+    showPracticeResult(data, practiceId);
+  } catch (e) {
+    alert('Errore: ' + e.message);
+  } finally {
+    hideProcessing();
+  }
+}
+
+function stageFiles(files) {
+  if (!files || files.length === 0) return;
+  for (let i = 0; i < files.length; i++) stagedFiles.push(files[i]);
+  renderStagedFiles();
+}
+
+function renderStagedFiles() {
+  const card = document.getElementById('stagedFilesCard');
+  const list = document.getElementById('stagedFilesList');
+  document.getElementById('stagedCount').textContent = stagedFiles.length;
+  document.getElementById('stagedCountBtn').textContent = stagedFiles.length;
+
+  if (stagedFiles.length === 0) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = '';
+  list.innerHTML = '';
+  stagedFiles.forEach((f, i) => {
+    const ext = f.name.split('.').pop().toLowerCase();
+    const icon = ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-image';
+    const sizeMb = (f.size / 1024 / 1024).toFixed(1);
+    list.innerHTML += `
+      <div class="file-row">
+        <div class="file-icon"><i class="bi ${icon}"></i></div>
+        <div class="file-info">
+          <div class="file-name">${f.name}</div>
+          <div class="file-type">${sizeMb} MB &mdash; ${f.type}</div>
+        </div>
+        <div class="file-actions">
+          <button class="btn btn-sm btn-outline-danger" onclick="removeStagedFile(${i})" style="border-radius:8px"><i class="bi bi-x-lg"></i></button>
+        </div>
+      </div>`;
+  });
+}
+
+function removeStagedFile(idx) {
+  stagedFiles.splice(idx, 1);
+  renderStagedFiles();
+}
+
+function clearStagedFiles() {
+  stagedFiles = [];
+  renderStagedFiles();
+}
+
+async function processAllFiles() {
+  const agentId = getAgentId();
+  const practiceId = getPracticeId();
+  if (!agentId) return alert('Seleziona un agente');
+  if (stagedFiles.length === 0) return alert('Nessun file da elaborare');
+
+  const totalFiles = stagedFiles.length;
+
+  // Prepara UI
+  document.getElementById('dropZoneContainer').style.display = 'none';
+  document.getElementById('practiceResults').style.display = '';
+  document.getElementById('infoPracticeId').textContent = practiceId;
+  document.getElementById('infoAgent').textContent = document.getElementById('agentSelect').selectedOptions[0]?.text || '-';
+  document.getElementById('infoCreated').textContent = '-';
+  document.getElementById('infoUpdated').textContent = '-';
+  document.getElementById('infoValidation').innerHTML = '<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> 0/' + totalFiles + '</span>';
+  document.getElementById('validationContainer').style.display = 'none';
+
+  // Mostra lista file in coda con stato
+  let queueHtml = '';
+  for (let i = 0; i < totalFiles; i++) {
+    const f = stagedFiles[i];
+    const ext = f.name.split('.').pop().toLowerCase();
+    const icon = ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-image';
+    queueHtml += `
+      <div class="file-row" id="queue-file-${i}">
+        <div class="file-icon"><i class="bi ${icon}"></i></div>
+        <div class="file-info">
+          <div class="file-name">${f.name}</div>
+          <div class="file-type" id="queue-status-${i}">In coda...</div>
+        </div>
+        <div class="file-badges" id="queue-badges-${i}">
+          <span class="badge-draft"><i class="bi bi-hourglass"></i> In attesa</span>
+        </div>
+      </div>
+      <div id="queue-extraction-${i}" style="display:none"></div>`;
+  }
+  document.getElementById('filesList').innerHTML = queueHtml;
+
+  // Processa un file alla volta
+  const filesToProcess = [...stagedFiles];
+  stagedFiles = [];
+  renderStagedFiles();
+
+  // Salva i blob per il PDF viewer
+  for (const f of filesToProcess) processedFileBlobs[f.name] = f;
+
+  let lastInfo = null;
+  for (let i = 0; i < filesToProcess.length; i++) {
+    const f = filesToProcess[i];
+
+    // Aggiorna stato: in elaborazione
+    document.getElementById('queue-status-' + i).textContent = 'Elaborazione in corso...';
+    document.getElementById('queue-badges-' + i).innerHTML = '<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> Elaborazione...</span>';
+    document.getElementById('infoValidation').innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${i + 1}/${totalFiles}</span>`;
+
+    try {
+      const fd = new FormData();
+      fd.append('file_0', f);
+
+      const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/process`, { method: 'POST', body: fd });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+
+      // Estrai info sul file appena elaborato
+      const info = data.output?.info || data.output || data.info || data;
+      lastInfo = info;
+      savePracticeToDb(practiceId, agentId, info);
+      const files = info.files || {};
+
+      // Trova il file appena aggiunto
+      let thisFile = null;
+      for (const [h, ff] of Object.entries(files)) {
+        if (ff.fileName === f.name || !thisFile) thisFile = ff;
+      }
+
+      if (thisFile) {
+        const idState = thisFile.state?.identification || 'completed';
+        const exState = thisFile.state?.extraction || 'completed';
+        const docType = thisFile.identification?.documentId || thisFile.identification?.documentTypeId || '';
+
+        const idBadge = idState === 'completed' ? '<span class="badge-ok"><i class="bi bi-check2"></i> Identificato</span>' : '<span class="badge-pending">' + idState + '</span>';
+        const exBadge = exState === 'completed' ? '<span class="badge-ok"><i class="bi bi-check2"></i> Estratto</span>' : '<span class="badge-pending">' + exState + '</span>';
+        document.getElementById('queue-badges-' + i).innerHTML = idBadge + ' ' + exBadge;
+        document.getElementById('queue-status-' + i).textContent = docType || 'Elaborato';
+
+        // Mostra dati estratti aperti
+        if (thisFile.extraction?.data && Object.keys(thisFile.extraction.data).length > 0) {
+          const extEl = document.getElementById('queue-extraction-' + i);
+          extEl.className = 'extraction-grid';
+          extEl.style.display = 'grid';
+          extEl.innerHTML = renderExtraction(thisFile.extraction.data, f.name);
+
+          const row = document.getElementById('queue-file-' + i);
+          let actionsDiv = row.querySelector('.file-actions');
+          if (!actionsDiv) { actionsDiv = document.createElement('div'); actionsDiv.className = 'file-actions'; row.appendChild(actionsDiv); }
+          actionsDiv.innerHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="toggleExtraction('queue-extraction-${i}')" style="border-radius:8px"><i class="bi bi-table"></i> Nascondi</button>`;
+        }
+      } else {
+        document.getElementById('queue-status-' + i).textContent = 'Elaborato';
+        document.getElementById('queue-badges-' + i).innerHTML = '<span class="badge-ok"><i class="bi bi-check2"></i> OK</span>';
+      }
+
+    } catch (e) {
+      document.getElementById('queue-status-' + i).textContent = 'Errore: ' + e.message;
+      document.getElementById('queue-badges-' + i).innerHTML = '<span class="badge-ko"><i class="bi bi-x-lg"></i> Errore</span>';
+    }
+  }
+
+  // Fine: aggiorna sidebar con ultimo risultato (senza ricaricare i file)
+  if (lastInfo) {
+    document.getElementById('infoCreated').textContent = lastInfo.createdAt ? new Date(lastInfo.createdAt).toLocaleString('it') : '-';
+    document.getElementById('infoUpdated').textContent = lastInfo.updatedAt ? new Date(lastInfo.updatedAt).toLocaleString('it') : '-';
+
+    // Mostra validazione se presente
+    const validation = lastInfo.validation;
+    if (validation) {
+      const outcome = validation.outcome;
+      const anomalyList = (validation.anomalies || []).filter(a => a && (typeof a === 'string' || Object.keys(a).length > 0));
+      const hasOutcome = outcome !== null && outcome !== undefined;
+      const isOk = !outcome || outcome === 'OK' || outcome === 'PASS' || outcome === 'valid' || String(outcome).toUpperCase().includes('OK') || String(outcome).toUpperCase().includes('PASS') || String(outcome).toUpperCase().includes('VALID');
+
+      if (!hasOutcome && anomalyList.length === 0) {
+        document.getElementById('infoValidation').innerHTML = '<span class="badge-ok">Completato</span>';
+      } else if (isOk) {
+        document.getElementById('infoValidation').innerHTML = '<span class="badge-ok">OK</span>';
+      } else {
+        document.getElementById('infoValidation').innerHTML = `<span class="badge-ko">${anomalyList.length} anomali${anomalyList.length === 1 ? 'a' : 'e'}</span>`;
+        // Mostra dettaglio anomalie
+        const valContainer = document.getElementById('validationContainer');
+        const anomaliesHtml = anomalyList.map(a => {
+          if (typeof a === 'string') a = { message: a, severity: 'warning' };
+          const sev = (a.severity || 'warning').toLowerCase();
+          const sevClass = sev === 'error' ? 'badge-ko' : sev === 'info' ? 'badge-draft' : 'badge-pending';
+          const msg = a.message || a.description || a.code || JSON.stringify(a);
+          return `<div style="font-size:0.85rem;padding:8px 0;display:flex;gap:8px;align-items:flex-start;border-bottom:1px solid rgba(0,0,0,0.06)">
+            <span class="${sevClass}" style="font-size:0.72rem;flex-shrink:0;margin-top:2px">${sev.toUpperCase()}</span><div>${msg}</div></div>`;
+        }).join('');
+        valContainer.innerHTML = `<div class="validation-box ko"><i class="bi bi-exclamation-triangle-fill" style="font-size:1.4rem;color:#721c24;flex-shrink:0;margin-top:2px"></i><div style="flex:1"><strong style="font-size:1rem">Anomalie rilevate (${anomalyList.length})</strong><div style="margin-top:8px">${anomaliesHtml}</div></div></div>`;
+        valContainer.style.display = '';
+      }
+    } else {
+      document.getElementById('infoValidation').innerHTML = '<span class="badge-ok">Completato</span>';
+    }
+  } else {
+    document.getElementById('infoValidation').innerHTML = '<span class="badge-ok">Completato</span>';
+  }
+}
+
+function processAdditionalFiles(files) {
+  const agentId = getAgentId();
+  const practiceId = getPracticeId();
+  if (!agentId) return alert('Seleziona un agente');
+  if (!files || files.length === 0) return;
+
+  showProcessing('Aggiunta file in corso...');
+  const fd = new FormData();
+  for (let i = 0; i < files.length; i++) fd.append('file_' + i, files[i]);
+
+  fetch(`/api/ao/practice/${agentId}/${practiceId}/process`, { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      showPracticeResult(data, practiceId);
+    })
+    .catch(e => alert('Errore: ' + e.message))
+    .finally(() => hideProcessing());
+}
+
+async function reprocessFile(contentHash) {
+  const agentId = getAgentId();
+  const practiceId = getPracticeId();
+  showProcessing('Rielaborazione file...');
+  try {
+    const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/file/${contentHash}/reprocess`, { method: 'POST' });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    showPracticeResult(data, practiceId);
+  } catch (e) {
+    alert('Errore: ' + e.message);
+  } finally {
+    hideProcessing();
+  }
+}
+
+async function deleteFile(contentHash) {
+  if (!confirm('Eliminare questo file dalla pratica?')) return;
+  const agentId = getAgentId();
+  const practiceId = getPracticeId();
+  try {
+    const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/file/${contentHash}`, { method: 'DELETE' });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    showPracticeResult(data, practiceId);
+  } catch (e) {
+    alert('Errore: ' + e.message);
+  }
+}
+
+function resetPractice() {
+  const practiceId = document.getElementById('practiceIdInput').value.trim();
+  document.getElementById('practiceIdInput').value = '';
+  document.getElementById('practiceResults').style.display = 'none';
+  document.getElementById('dropZoneContainer').style.display = '';
+  document.getElementById('validationContainer').style.display = 'none';
+  stagedFiles = [];
+  processedFileBlobs = {};
+  renderStagedFiles();
+  // Non cancella dal localStorage - i risultati restano disponibili
+}
+
+// ── Render practice result ─────────────────────────────────────────
+function showPracticeResult(result, practiceId) {
+  const info = result.output?.info || result.output || result.info || result;
+  const hasFiles = info.files && Object.keys(info.files).length > 0;
+  document.getElementById('dropZoneContainer').style.display = hasFiles ? 'none' : '';
+  document.getElementById('practiceResults').style.display = '';
+
+  // Info sidebar
+  document.getElementById('infoPracticeId').textContent = info.practiceId || practiceId;
+  document.getElementById('infoAgent').textContent = document.getElementById('agentSelect').selectedOptions[0]?.text || '-';
+  document.getElementById('infoCreated').textContent = info.createdAt ? new Date(info.createdAt).toLocaleString('it') : '-';
+  document.getElementById('infoUpdated').textContent = info.updatedAt ? new Date(info.updatedAt).toLocaleString('it') : '-';
+
+  // Validation
+  const validation = info.validation;
+  const valContainer = document.getElementById('validationContainer');
+  const infoVal = document.getElementById('infoValidation');
+  if (validation) {
+    const outcome = validation.outcome;
+    const anomalyList = (validation.anomalies || []).filter(a => a && (typeof a === 'string' || Object.keys(a).length > 0));
+    const hasOutcome = outcome !== null && outcome !== undefined;
+    const isOk = !outcome || outcome === 'OK' || outcome === 'PASS' || outcome === 'valid' || String(outcome).toUpperCase().includes('OK') || String(outcome).toUpperCase().includes('PASS') || String(outcome).toUpperCase().includes('VALID');
+    const hasFailed = hasOutcome && !isOk;
+
+    if (!hasOutcome && anomalyList.length === 0) {
+      // Validazione non ancora eseguita
+      infoVal.innerHTML = '<span class="badge-draft">In attesa</span>';
+      valContainer.style.display = 'none';
+    } else if (isOk && anomalyList.length === 0) {
+      // Tutto OK
+      infoVal.innerHTML = '<span class="badge-ok">OK</span>';
+      valContainer.innerHTML = `<div class="validation-box ok"><i class="bi bi-check-circle-fill" style="font-size:1.2rem;color:#155724"></i><div><strong>Validazione superata</strong></div></div>`;
+      valContainer.style.display = '';
+    } else {
+      // Anomalie presenti o outcome negativo
+      const allAnomalies = [...anomalyList];
+      if (hasFailed && anomalyList.length === 0) {
+        allAnomalies.push({ severity: 'error', message: outcome });
+      }
+
+      infoVal.innerHTML = `<span class="badge-ko">${allAnomalies.length} anomali${allAnomalies.length === 1 ? 'a' : 'e'}</span>`;
+
+      const anomaliesHtml = allAnomalies.map(a => {
+        if (typeof a === 'string') a = { message: a, severity: 'warning' };
+        const sev = (a.severity || a.level || 'warning').toLowerCase();
+        const sevClass = sev === 'error' ? 'badge-ko' : sev === 'info' ? 'badge-draft' : 'badge-pending';
+        const msg = a.message || a.description || a.text || a.detail || JSON.stringify(a);
+        const code = a.code ? `<code style="font-size:0.72rem;background:var(--md-surface-container);padding:1px 6px;border-radius:4px;margin-left:4px">${a.code}</code>` : '';
+        return `<div style="font-size:0.85rem;padding:8px 0;display:flex;gap:8px;align-items:flex-start;border-bottom:1px solid rgba(0,0,0,0.06)">
+          <span class="${sevClass}" style="font-size:0.72rem;flex-shrink:0;margin-top:2px">${sev.toUpperCase()}</span>
+          <div>${msg}${code}</div>
+        </div>`;
+      }).join('');
+
+      valContainer.innerHTML = `<div class="validation-box ko">
+        <i class="bi bi-exclamation-triangle-fill" style="font-size:1.4rem;color:#721c24;flex-shrink:0;margin-top:2px"></i>
+        <div style="flex:1">
+          <strong style="font-size:1rem">Anomalie rilevate (${allAnomalies.length})</strong>
+          <div style="margin-top:8px">${anomaliesHtml}</div>
+        </div>
+      </div>`;
+      valContainer.style.display = '';
+    }
+  } else {
+    valContainer.style.display = 'none';
+    infoVal.innerHTML = '<span class="badge-draft">N/A</span>';
+  }
+
+  // Files
+  const files = info.files || {};
+  const filesList = document.getElementById('filesList');
+  let filesHtml = '';
+  for (const [hash, file] of Object.entries(files)) {
+    const idState = file.state?.identification || 'pending';
+    const exState = file.state?.extraction || 'pending';
+    const idBadge = idState === 'completed' ? '<span class="badge-ok"><i class="bi bi-check2"></i> Identificato</span>' : '<span class="badge-pending">' + idState + '</span>';
+    const exBadge = exState === 'completed' ? '<span class="badge-ok"><i class="bi bi-check2"></i> Estratto</span>' : '<span class="badge-pending">' + exState + '</span>';
+    const docType = file.identification?.documentId || file.identification?.documentTypeId || '';
+    const ext = (file.fileName || '').split('.').pop().toLowerCase();
+    const icon = ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-image';
+
+    filesHtml += `
+      <div class="file-row">
+        <div class="file-icon"><i class="bi ${icon}"></i></div>
+        <div class="file-info">
+          <div class="file-name">${file.fileName || hash}</div>
+          <div class="file-type">${docType}</div>
+        </div>
+        <div class="file-badges">${idBadge} ${exBadge}</div>
+        <div class="file-actions">
+          <button class="btn btn-sm btn-outline-secondary" onclick="toggleExtraction('ext-${hash}')" style="border-radius:8px"><i class="bi bi-table"></i> Dati</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="openSintesiForFile('${hash}')" style="border-radius:8px"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="reprocessFile('${hash}')" style="border-radius:8px"><i class="bi bi-arrow-repeat"></i></button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteFile('${hash}')" style="border-radius:8px"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>`;
+
+    // Extraction data
+    if (file.extraction?.data && Object.keys(file.extraction.data).length > 0) {
+      filesHtml += `<div class="extraction-grid" id="ext-${hash}" style="display:none">`;
+      filesHtml += renderExtraction(file.extraction.data, file.fileName);
+      filesHtml += '</div>';
+    }
+  }
+  if (!filesHtml) filesHtml = '<div class="text-center py-4" style="color:var(--md-on-surface-variant)">Nessun file nella pratica</div>';
+  filesList.innerHTML = filesHtml;
+}
+
+function _escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function renderExtraction(data, fileName) {
+  let html = '';
+  const fn = fileName || '';
+  for (const [key, val] of Object.entries(data)) {
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      html += `<div class="extraction-field" style="grid-column:1/-1"><div class="field-label">${key}</div>`;
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:6px">';
+      for (const [k2, v2] of Object.entries(val)) {
+        html += `<div class="extraction-field clickable" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(v2).substring(0,100))}" style="padding:6px 8px;margin:0">
+          <span style="font-size:0.7rem;color:var(--md-on-surface-variant)">${k2}:</span> <span style="font-size:0.85rem;font-weight:500">${v2}</span></div>`;
+      }
+      html += '</div></div>';
+    } else if (Array.isArray(val)) {
+      html += `<div class="extraction-field clickable" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(val[0]||'').substring(0,100))}" style="grid-column:1/-1"><div class="field-label">${key}</div><div class="field-value">${val.join(', ')}</div></div>`;
+    } else {
+      const hasPdf = fn && val;
+      html += `<div class="extraction-field${hasPdf ? ' clickable' : ''}" ${hasPdf ? `data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(val).substring(0,100))}"` : ''}><div class="field-label">${key}</div><div class="field-value">${val ?? '-'}</div></div>`;
+    }
+  }
+  return html;
+}
+
+function toggleExtraction(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'grid' : 'none';
+}
+
+// ── Persistence (DB) ───────────────────────────────────────────────
+function savePracticeToDb(practiceId, agentId, resultInfo) {
+  const agentName = document.getElementById('agentSelect').selectedOptions[0]?.text || '';
+  fetch(`/api/ao/results/${practiceId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent_id: agentId, agent_name: agentName, result_data: resultInfo }),
+  }).catch(e => console.warn('Salvataggio pratica fallito:', e));
+}
+
+async function loadPracticeFromDb(practiceId) {
+  try {
+    const r = await fetch(`/api/ao/results/${practiceId}`);
+    const data = await r.json();
+    if (data.found && data.data?.result_data) return data.data;
+    return null;
+  } catch (e) { return null; }
+}
+
+async function loadSavedPractices() {
+  try {
+    const r = await fetch('/api/ao/results');
+    const data = await r.json();
+    const results = data.results || [];
+    const sel = document.getElementById('savedPracticeSelect');
+    sel.innerHTML = '<option value="">Nuova pratica...</option>';
+    for (const pr of results) {
+      const info = pr.result_data || {};
+      const fileCount = info.files ? Object.keys(info.files).length : 0;
+      const date = pr.updated_at ? new Date(pr.updated_at).toLocaleDateString('it') : '';
+      const label = `${pr.practice_id} — ${pr.agent_name || 'agent'} — ${fileCount} file — ${date}`;
+      sel.innerHTML += `<option value="${pr.practice_id}" data-agent="${pr.agent_id}">${label}</option>`;
+    }
+  } catch (e) {
+    console.warn('Errore caricamento pratiche salvate:', e);
+  }
+}
+
+async function onSavedPracticeSelected(practiceId) {
+  if (!practiceId) {
+    resetPractice();
+    return;
+  }
+
+  // Imposta agent e ID pratica
+  const sel = document.getElementById('savedPracticeSelect');
+  const opt = sel.selectedOptions[0];
+  const agentId = opt?.dataset?.agent || '';
+  if (agentId) document.getElementById('agentSelect').value = agentId;
+  document.getElementById('practiceIdInput').value = practiceId;
+
+  // Carica dal DB
+  const cached = await loadPracticeFromDb(practiceId);
+  if (cached && cached.result_data) {
+    showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+  }
+}
+
+// ── Catalog ────────────────────────────────────────────────────────
+async function loadCatalog() {
+  const agentId = document.getElementById('catalogAgentSelect').value;
+  if (!agentId) return alert('Seleziona un agente');
+
+  document.getElementById('catalogLoading').style.display = '';
+  document.getElementById('catalogGrid').innerHTML = '';
+  document.getElementById('catalogEditArea').style.display = 'none';
+
+  try {
+    const r = await fetch(`/api/ao/catalog/${agentId}`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    catalogData = data.output?.catalog || data.output || data.catalog || data;
+    renderCatalog();
+  } catch (e) {
+    alert('Errore: ' + e.message);
+  } finally {
+    document.getElementById('catalogLoading').style.display = 'none';
+  }
+}
+
+function renderCatalog() {
+  const grid = document.getElementById('catalogGrid');
+  grid.innerHTML = '';
+  for (const [typeId, typeDef] of Object.entries(catalogData)) {
+    const ident = typeDef.identification || {};
+    const questions = typeDef.extraction?.questions || [];
+    const activeQ = questions.filter(q => !q.disabled).length;
+    const qNames = questions.slice(0, 6).map(q => q.id).join(', ');
+
+    grid.innerHTML += `
+      <div class="catalog-card">
+        <div class="doc-type-name">${typeId}</div>
+        <div class="doc-type-meta">
+          <span><i class="bi bi-cpu"></i> AI ${ident.aiEnabled ? 'attivo' : 'off'}</span>
+          <span><i class="bi bi-regex"></i> Regex ${ident.regexEnabled ? 'attivo' : 'off'}</span>
+          <span><i class="bi bi-list-check"></i> ${activeQ} campi</span>
+        </div>
+        <div class="questions-preview">${qNames}${questions.length > 6 ? ', ...' : ''}</div>
+        <div class="mt-3 d-flex gap-2">
+          <button class="btn btn-sm btn-outline-primary" onclick="openCatalogEdit('${typeId}')" style="border-radius:8px"><i class="bi bi-pencil"></i> Modifica</button>
+        </div>
+      </div>`;
+  }
+  if (Object.keys(catalogData).length === 0) {
+    grid.innerHTML = '<div class="text-center py-5" style="color:var(--md-on-surface-variant)"><i class="bi bi-journal-x" style="font-size:2rem;opacity:0.3;display:block;margin-bottom:8px"></i>Nessun tipo documento nel catalogo</div>';
+  }
+}
+
+function openCatalogEdit(typeId) {
+  editingTypeId = typeId;
+  const def = catalogData[typeId];
+  const ident = def.identification || {};
+  const questions = def.extraction?.questions || [];
+
+  document.getElementById('catalogGrid').style.display = 'none';
+  document.getElementById('catalogEditArea').style.display = '';
+  document.getElementById('editTypeName').textContent = typeId;
+  document.getElementById('editAiEnabled').checked = ident.aiEnabled !== false;
+  document.getElementById('editRegexEnabled').checked = !!ident.regexEnabled;
+  document.getElementById('editInstructions').value = ident.instructions || '';
+  document.getElementById('editHint').value = ident.hint || '';
+
+  renderQuestions(questions);
+}
+
+function renderQuestions(questions) {
+  const list = document.getElementById('editQuestionsList');
+  document.getElementById('editQCount').textContent = questions.length;
+  list.innerHTML = '';
+  questions.forEach((q, i) => {
+    const fmtColors = { string: '#d1ecf1;color:#0c5460', number: '#fff3cd;color:#856404', json: '#d1ecf1;color:#0c5460', boolean: '#e2e3e5;color:#383d41' };
+    const fmtStyle = fmtColors[q.outputFormat] || fmtColors.string;
+    list.innerHTML += `
+      <div class="file-row" style="gap:12px" data-idx="${i}">
+        <i class="bi bi-grip-vertical" style="color:var(--md-outline);cursor:grab;font-size:1.1rem"></i>
+        <div style="flex:1">
+          <div class="d-flex gap-2 align-items-center mb-1">
+            <code style="background:var(--md-surface-container);padding:2px 8px;border-radius:4px;font-size:0.78rem">${q.id}</code>
+            <span style="background:${fmtStyle};padding:1px 8px;border-radius:4px;font-size:0.72rem;font-weight:600">${q.outputFormat || 'string'}</span>
+            ${q.disabled ? '<span style="font-size:0.7rem;color:var(--md-on-surface-variant)">DISABILITATO</span>' : ''}
+            ${q.useResponseFromQuestions?.length ? '<span style="font-size:0.7rem;color:var(--md-on-surface-variant)"><i class="bi bi-link-45deg"></i> ' + q.useResponseFromQuestions.join(', ') + '</span>' : ''}
+          </div>
+          <div style="font-size:0.85rem">${q.question}</div>
+        </div>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm btn-outline-danger" onclick="removeQuestion(${i})" style="border-radius:8px"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>`;
+  });
+}
+
+function addQuestion() {
+  const questions = catalogData[editingTypeId]?.extraction?.questions || [];
+  questions.push({ id: 'new_field', question: 'Nuova domanda', outputFormat: 'string', disabled: false, useResponseFromQuestions: [], tools: [] });
+  if (!catalogData[editingTypeId].extraction) catalogData[editingTypeId].extraction = {};
+  catalogData[editingTypeId].extraction.questions = questions;
+  renderQuestions(questions);
+}
+
+function removeQuestion(idx) {
+  const questions = catalogData[editingTypeId].extraction.questions;
+  questions.splice(idx, 1);
+  renderQuestions(questions);
+}
+
+async function saveCatalogEdit() {
+  const agentId = document.getElementById('catalogAgentSelect').value;
+  // Update identification
+  catalogData[editingTypeId].identification = {
+    ...catalogData[editingTypeId].identification,
+    aiEnabled: document.getElementById('editAiEnabled').checked,
+    regexEnabled: document.getElementById('editRegexEnabled').checked,
+    instructions: document.getElementById('editInstructions').value,
+    hint: document.getElementById('editHint').value,
+  };
+
+  try {
+    const r = await fetch(`/api/ao/catalog/${agentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ catalog: catalogData }),
+    });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    closeCatalogEdit();
+    loadCatalog();
+  } catch (e) {
+    alert('Errore salvataggio: ' + e.message);
+  }
+}
+
+function closeCatalogEdit() {
+  document.getElementById('catalogEditArea').style.display = 'none';
+  document.getElementById('catalogGrid').style.display = '';
+  editingTypeId = null;
+}
+
+// ── Sintesi ────────────────────────────────────────────────────────
+function openSintesiForFile(hash) {
+  sintesiFileHash = hash;
+  document.getElementById('sintesiResult').style.display = 'none';
+  document.getElementById('modalSintesi').classList.add('active');
+}
+
+function closeSintesi() {
+  document.getElementById('modalSintesi').classList.remove('active');
+}
+
+async function generateSintesi() {
+  const agentId = getAgentId();
+  const prompt = document.getElementById('sintesiPrompt').value;
+  const model = document.getElementById('sintesiModel').value;
+  if (!prompt.trim()) return alert('Inserisci un prompt');
+
+  const btn = document.getElementById('sintesiGenBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="prat-spinner"></span> Generazione...';
+
+  try {
+    // For now, use the practice file data - in production this would need actual file content
+    const fd = new FormData();
+    fd.append('agent_id', agentId);
+    fd.append('prompt', prompt);
+    fd.append('model', model);
+    // File would need to be attached - for now show the endpoint is wired
+    const r = await fetch('/api/ao/sintesi/generate', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    const summary = data.output?.summary || data.output?.text || JSON.stringify(data.output, null, 2);
+    document.getElementById('sintesiText').textContent = summary;
+    document.getElementById('sintesiResult').style.display = '';
+  } catch (e) {
+    alert('Errore sintesi: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-fill"></i> Genera';
+  }
+}
+
+async function assistPrompt() {
+  const agentId = getAgentId();
+  const draft = document.getElementById('sintesiPrompt').value;
+  const model = document.getElementById('sintesiModel').value;
+  if (!draft.trim()) return;
+
+  try {
+    const r = await fetch('/api/ao/sintesi/assist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentId, draftPrompt: draft, action: 'improve', model }),
+    });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    const improved = data.output?.improvedPrompt || data.output?.prompt || draft;
+    document.getElementById('sintesiPrompt').value = improved;
+  } catch (e) {
+    alert('Errore: ' + e.message);
+  }
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────
+function showProcessing(msg) {
+  document.getElementById('dropZoneContainer').style.display = 'none';
+  document.getElementById('practiceResults').style.display = 'none';
+  document.getElementById('processingMsg').textContent = msg;
+  document.getElementById('processingSpinner').style.display = '';
+}
+
+function hideProcessing() {
+  document.getElementById('processingSpinner').style.display = 'none';
+}
+
+// ── Drag & Drop ────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => { stageFiles(e.target.files); fileInput.value = ''; });
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  stageFiles(e.dataTransfer.files);
+});
+
+// ── PDF Viewer (separate window) ───────────────────────────────────
+
+function openPdfAndSearch(fileName, searchText) {
+  if (!fileName || !searchText) return;
+
+  const file = processedFileBlobs[fileName];
+  if (!file) return alert('PDF non disponibile in memoria. Ricarica il file per abilitare il viewer.');
+  if (!file.name.toLowerCase().endsWith('.pdf')) return alert('Il viewer funziona solo con file PDF.');
+
+  const w = Math.min(800, screen.width * 0.45);
+  const h = Math.min(900, screen.height * 0.85);
+  const left = screen.width - w - 40;
+  const top = 60;
+
+  const win = window.open('', '_blank',
+    `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`
+  );
+  if (!win) return alert('Popup bloccato dal browser. Consenti i popup per questo sito.');
+
+  win.document.write(`<!DOCTYPE html>
+<html><head>
+<title>${fileName} — Ricerca: ${searchText.substring(0,40)}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #525659; }
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    background: #1a1a1a; color: white; padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px; font-size: 0.82rem; flex-wrap: wrap;
+  }
+  .toolbar .filename { font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toolbar .search-info { color: #ffd54f; font-weight: 600; margin-right: auto; font-size: 0.78rem; }
+  .toolbar button {
+    background: rgba(255,255,255,0.12); border: none; color: white; padding: 5px 10px;
+    border-radius: 6px; cursor: pointer; font-size: 0.78rem; font-family: inherit;
+  }
+  .toolbar button:hover { background: rgba(255,255,255,0.25); }
+  .pages { display: flex; flex-direction: column; align-items: center; padding: 12px; gap: 10px; }
+  .page-wrap { position: relative; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+  .page-wrap canvas { display: block; }
+  .text-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  .hl {
+    position: absolute; background: rgba(255,213,0,0.4); border: 2px solid #ffd500;
+    border-radius: 3px; pointer-events: none;
+  }
+  .hl.active { background: rgba(255,100,0,0.5); border-color: #ff6400; animation: pulse 1.5s ease 3; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .loading { color: white; text-align: center; padding: 60px 20px; }
+  .loading .spin { display: inline-block; width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: sp 0.7s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+</style>
+</head><body>
+<div class="toolbar">
+  <span class="filename">${fileName}</span>
+  <span class="search-info" id="searchInfo">Ricerca: "${searchText.substring(0,40)}${searchText.length>40?'...':''}"</span>
+  <button onclick="prevMatch()">&#9650; Prec</button>
+  <button onclick="nextMatch()">&#9660; Succ</button>
+  <span id="pageInfo">-</span>
+</div>
+<div class="pages" id="pages">
+  <div class="loading"><div class="spin"></div><div style="margin-top:10px">Caricamento PDF...</div></div>
+</div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const SCALE = 1.4;
+let matches = [], currentMatch = -1, totalPages = 0;
+
+// Poll for data from parent window
+function waitForData() {
+  if (window.__pdfData) {
+    loadPdf(window.__pdfData);
+  } else {
+    setTimeout(waitForData, 100);
+  }
+}
+waitForData();
+
+async function loadPdf(data) {
+  const searchText = data.searchText.toLowerCase().trim();
+  const searchTerms = [searchText];
+  const words = searchText.split(/\\s+/);
+  if (words.length > 3) searchTerms.push(words.slice(0,4).join(' '));
+  if (words.length > 1) searchTerms.push(words.slice(0,2).join(' '));
+
+  try {
+    const pdf = await pdfjsLib.getDocument({data: data.arrayBuffer}).promise;
+    totalPages = pdf.numPages;
+    document.getElementById('pages').innerHTML = '';
+
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const vp = page.getViewport({scale: SCALE});
+      const wrap = document.createElement('div');
+      wrap.className = 'page-wrap';
+      wrap.style.width = vp.width+'px';
+      wrap.style.height = vp.height+'px';
+
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      wrap.appendChild(canvas);
+
+      const tl = document.createElement('div');
+      tl.className = 'text-layer';
+      wrap.appendChild(tl);
+
+      document.getElementById('pages').appendChild(wrap);
+      await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+
+      const tc = await page.getTextContent();
+      const fullText = tc.items.map(i => i.str).join(' ').toLowerCase();
+
+      for (const term of searchTerms) {
+        if (!term) continue;
+        let pos = 0;
+        while ((pos = fullText.indexOf(term, pos)) !== -1) {
+          let cc = 0;
+          for (const item of tc.items) {
+            const ie = cc + item.str.length;
+            if (pos >= cc && pos < ie + 1) {
+              const tx = item.transform;
+              const x = tx[4] * SCALE;
+              const y = vp.height - tx[5]*SCALE - (item.height||12)*SCALE;
+              const w = (item.width||100)*SCALE;
+              const h = (item.height||14)*SCALE;
+              const hl = document.createElement('div');
+              hl.className = 'hl';
+              hl.style.cssText = 'left:'+x+'px;top:'+y+'px;width:'+Math.min(w+20,vp.width-x)+'px;height:'+(h+4)+'px';
+              tl.appendChild(hl);
+              matches.push({page:p, el:hl});
+              break;
+            }
+            cc = ie + 1;
+          }
+          pos += term.length;
+        }
+        if (matches.length > 0) break;
+      }
+    }
+
+    document.getElementById('pageInfo').textContent = totalPages + ' pag.';
+    const si = document.getElementById('searchInfo');
+    if (matches.length > 0) {
+      si.textContent += ' — ' + matches.length + ' risultat' + (matches.length===1?'o':'i');
+      currentMatch = 0;
+      goToMatch(0);
+    } else {
+      si.textContent += ' — non trovato';
+    }
+  } catch(err) {
+    document.getElementById('pages').innerHTML = '<div class="loading">Errore: '+err.message+'</div>';
+  }
+}
+
+function goToMatch(idx) {
+  matches.forEach(m => m.el.classList.remove('active'));
+  if (idx >= 0 && idx < matches.length) {
+    matches[idx].el.classList.add('active');
+    matches[idx].el.scrollIntoView({behavior:'smooth', block:'center'});
+    document.getElementById('pageInfo').textContent = 'Pag.'+matches[idx].page+'/'+totalPages+' — '+(idx+1)+'/'+matches.length;
+  }
+}
+function nextMatch() { if(!matches.length) return; currentMatch=(currentMatch+1)%matches.length; goToMatch(currentMatch); }
+function prevMatch() { if(!matches.length) return; currentMatch=(currentMatch-1+matches.length)%matches.length; goToMatch(currentMatch); }
+<\/script>
+</body></html>`);
+  win.document.close();
+
+  // Pass PDF data via window variable — child polls for it
+  file.arrayBuffer().then(buf => {
+    win.__pdfData = { arrayBuffer: buf, searchText };
+  });
+}
+
+// Event delegation for clickable extraction fields
+document.addEventListener('click', e => {
+  const field = e.target.closest('.extraction-field.clickable');
+  if (!field) return;
+  const pdf = field.dataset.pdf;
+  const search = field.dataset.search;
+  if (pdf && search) {
+    e.stopPropagation();
+    openPdfAndSearch(pdf, search);
+  }
+});
+</script>
+{% endblock %}

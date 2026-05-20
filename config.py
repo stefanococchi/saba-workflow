@@ -51,6 +51,11 @@ class Config:
     # Landing page URL base
     LANDING_BASE_URL = os.getenv('LANDING_BASE_URL', 'http://localhost:5001/landing')
 
+    # Agent Orchestrator (AO) - Pratiche documentali
+    AO_BASE_URL = os.getenv('AO_BASE_URL', '')
+    AO_SERVICE_TOKEN = os.getenv('AO_SERVICE_TOKEN', '')
+    AO_TEAM_ID = os.getenv('AO_TEAM_ID', '')
+
     # Saba Form DB (read-only, per import partecipanti)
     SABAFORM_DATABASE_URI = os.getenv(
         'SABAFORM_DATABASE_URL',

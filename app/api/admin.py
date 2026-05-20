@@ -1301,6 +1301,12 @@ def executions_monitor():
                              flow_data={})
 
 
+@admin_bp.route('/pratiche')
+def pratiche_page():
+    """Pagina pratiche documentali"""
+    return render_template('admin/pratiche.html')
+
+
 @admin_bp.route('/activity-log')
 @superuser_required
 def activity_log():

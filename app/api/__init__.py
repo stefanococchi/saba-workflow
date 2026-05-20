@@ -5,5 +5,6 @@ from .health import health_bp
 from .admin import admin_bp
 from .landing_builder_api import landing_builder_api_bp
 from .stripe_webhook import stripe_bp
+from .pratiche import pratiche_bp
 
-__all__ = ['workflow_bp', 'participant_bp', 'landing_bp', 'health_bp', 'admin_bp', 'landing_builder_api_bp', 'stripe_bp']
+__all__ = ['workflow_bp', 'participant_bp', 'landing_bp', 'health_bp', 'admin_bp', 'landing_builder_api_bp', 'stripe_bp', 'pratiche_bp']
