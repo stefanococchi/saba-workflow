@@ -2,7 +2,7 @@
 from flask import Blueprint, request, jsonify, Response
 from app.services import ao_service
 from app import db_session as db
-from app.models import PracticeResult
+from app.models import PracticeResult, PracticeFile
 import json
 import logging
 
@@ -73,15 +73,40 @@ def ao_practice_process(agent_id, practice_id):
     """Processa una pratica: carica file e avvia identify+extract."""
     try:
         files = {}
+        raw_files = []  # (content, mime, filename) for DB storage
         idx = 0
         for key in request.files:
             upload = request.files[key]
             content = upload.read()
             files[f"file_{idx}"] = (content, upload.content_type, upload.filename)
+            raw_files.append((content, upload.content_type, upload.filename))
             idx += 1
+
         result = ao_service.practice_process(
             agent_id, practice_id, files=files if files else None,
         )
+
+        # Salva file nel DB per il viewer PDF
+        for content, mime, filename in raw_files:
+            try:
+                existing = db.query(PracticeFile).filter_by(
+                    practice_id=practice_id, file_name=filename
+                ).first()
+                if existing:
+                    existing.data = content
+                    existing.mime_type = mime
+                else:
+                    db.add(PracticeFile(
+                        practice_id=practice_id,
+                        file_name=filename,
+                        mime_type=mime,
+                        data=content,
+                    ))
+                db.commit()
+            except Exception as fe:
+                db.rollback()
+                logger.warning(f"Salvataggio file DB fallito: {fe}")
+
         return jsonify(result)
     except Exception as e:
         logger.error(f"AO practice process: {e}")
@@ -318,14 +343,31 @@ def list_practice_results():
 
 @pratiche_bp.route('/results/<practice_id>', methods=['DELETE'])
 def delete_practice_result(practice_id):
-    """Elimina risultato pratica dal database."""
+    """Elimina risultato pratica e file associati dal database."""
     try:
+        db.query(PracticeFile).filter_by(practice_id=practice_id).delete()
         pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
         if pr:
             db.delete(pr)
-            db.commit()
+        db.commit()
         return jsonify({"ok": True})
     except Exception as e:
         db.rollback()
         logger.error(f"Delete practice result: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@pratiche_bp.route('/files/<practice_id>/<file_name>', methods=['GET'])
+def get_practice_file(practice_id, file_name):
+    """Serve un file PDF/immagine salvato per una pratica."""
+    try:
+        pf = db.query(PracticeFile).filter_by(
+            practice_id=practice_id, file_name=file_name
+        ).first()
+        if not pf:
+            return jsonify({"error": "File non trovato"}), 404
+        return Response(pf.data, mimetype=pf.mime_type,
+                        headers={'Content-Disposition': f'inline; filename="{pf.file_name}"'})
+    except Exception as e:
+        logger.error(f"Get practice file: {e}")
         return jsonify({"error": str(e)}), 500

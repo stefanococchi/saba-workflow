@@ -1265,11 +1265,27 @@ dropZone.addEventListener('drop', e => {
 
 // ── PDF Viewer (separate window) ───────────────────────────────────
 
-function openPdfAndSearch(fileName, searchText) {
+async function openPdfAndSearch(fileName, searchText) {
   if (!fileName || !searchText) return;
 
-  const file = processedFileBlobs[fileName];
-  if (!file) return alert('PDF non disponibile in memoria. Ricarica il file per abilitare il viewer.');
+  let file = processedFileBlobs[fileName];
+
+  // Se non in memoria, scarica dal DB
+  if (!file) {
+    const practiceId = document.getElementById('practiceIdInput').value.trim();
+    if (!practiceId) return alert('Nessuna pratica selezionata');
+
+    try {
+      const r = await fetch(`/api/ao/files/${practiceId}/${encodeURIComponent(fileName)}`);
+      if (!r.ok) throw new Error('File non trovato sul server');
+      const blob = await r.blob();
+      file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
+      processedFileBlobs[fileName] = file;
+    } catch (e) {
+      return alert('PDF non disponibile: ' + e.message);
+    }
+  }
+
   if (!file.name.toLowerCase().endsWith('.pdf')) return alert('Il viewer funziona solo con file PDF.');
 
   const w = Math.min(800, screen.width * 0.45);

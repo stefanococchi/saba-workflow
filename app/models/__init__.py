@@ -426,3 +426,18 @@ class PracticeResult(Base):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class PracticeFile(Base):
+    """File PDF/immagine associato a una pratica documentale"""
+    __tablename__ = 'practice_files'
+
+    id = Column(Integer, primary_key=True)
+    practice_id = Column(String(255), nullable=False, index=True)
+    file_name = Column(String(255), nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<PracticeFile {self.practice_id}/{self.file_name}>'
