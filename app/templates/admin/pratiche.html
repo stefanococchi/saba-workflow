@@ -226,8 +226,8 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 <!-- TABS: Pratiche | Catalogo                    -->
 <!-- ============================================ -->
 <div class="prat-tabs">
-  <div class="prat-tab active" onclick="showPratPage('elabora')"><i class="bi bi-folder2-open"></i> Elabora pratica</div>
-  <div class="prat-tab" onclick="showPratPage('catalogo')"><i class="bi bi-journal-bookmark"></i> Catalogo</div>
+  <div class="prat-tab active" onclick="showPratPage('elabora', this)"><i class="bi bi-folder2-open"></i> Elabora pratica</div>
+  <div class="prat-tab" onclick="showPratPage('catalogo', this)"><i class="bi bi-journal-bookmark"></i> Catalogo</div>
 </div>
 
 <!-- ============================================ -->
@@ -344,6 +344,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
           <div id="filesList"></div>
         </div>
       </div>
+      </div><!-- end practiceResults -->
 
     </div><!-- end elabora-col-detail -->
   </div><!-- end elabora-layout -->
@@ -642,11 +643,11 @@ function startNewPractice() {
 }
 
 // ── Page navigation ────────────────────────────────────────────────
-function showPratPage(id) {
+function showPratPage(id, tab) {
   document.querySelectorAll('.prat-page').forEach(p => p.classList.remove('active'));
   document.getElementById('prat-page-' + id).classList.add('active');
   document.querySelectorAll('.prat-tab').forEach(t => t.classList.remove('active'));
-  event.currentTarget.classList.add('active');
+  if (tab) tab.classList.add('active');
 }
 
 // ── Practice operations ────────────────────────────────────────────
