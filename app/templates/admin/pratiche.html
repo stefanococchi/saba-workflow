@@ -211,9 +211,14 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
         </div>
         <div class="col-md-3">
           <label class="form-label" style="font-size:0.8rem;font-weight:500">Pratiche salvate</label>
-          <select id="savedPracticeSelect" class="form-select" style="border-radius:12px" onchange="onSavedPracticeSelected(this.value)">
-            <option value="">Nuova pratica...</option>
-          </select>
+          <div class="d-flex gap-1">
+            <select id="savedPracticeSelect" class="form-select" style="border-radius:12px" onchange="onSavedPracticeSelected(this.value)">
+              <option value="">Nuova pratica...</option>
+            </select>
+            <button class="btn btn-outline-danger" id="btnDeletePractice" onclick="deleteSavedPractice()" style="border-radius:12px;display:none" title="Elimina pratica salvata">
+              <i class="bi bi-trash3"></i>
+            </button>
+          </div>
         </div>
         <div class="col-md-3">
           <label class="form-label" style="font-size:0.8rem;font-weight:500">ID Pratica</label>
@@ -958,6 +963,7 @@ async function loadSavedPractices() {
 }
 
 async function onSavedPracticeSelected(practiceId) {
+  document.getElementById('btnDeletePractice').style.display = practiceId ? '' : 'none';
   if (!practiceId) {
     resetPractice();
     return;
@@ -974,6 +980,22 @@ async function onSavedPracticeSelected(practiceId) {
   const cached = await loadPracticeFromDb(practiceId);
   if (cached && cached.result_data) {
     showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+  }
+}
+
+async function deleteSavedPractice() {
+  const sel = document.getElementById('savedPracticeSelect');
+  const practiceId = sel.value;
+  if (!practiceId) return;
+  if (!confirm('Eliminare la pratica ' + practiceId + '?')) return;
+  try {
+    await fetch(`/api/ao/results/${practiceId}`, { method: 'DELETE' });
+    sel.value = '';
+    document.getElementById('btnDeletePractice').style.display = 'none';
+    resetPractice();
+    loadSavedPractices();
+  } catch (e) {
+    alert('Errore: ' + e.message);
   }
 }
 
