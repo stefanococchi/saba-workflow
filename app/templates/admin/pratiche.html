@@ -1070,41 +1070,74 @@ function openCatalogEdit(typeId) {
 
 function renderQuestions(questions) {
   const list = document.getElementById('editQuestionsList');
-  document.getElementById('editQCount').textContent = questions.length;
+  const activeCount = questions.filter(q => !q.disabled).length;
+  document.getElementById('editQCount').textContent = activeCount + '/' + questions.length;
   list.innerHTML = '';
   questions.forEach((q, i) => {
-    const fmtColors = { string: '#d1ecf1;color:#0c5460', number: '#fff3cd;color:#856404', json: '#d1ecf1;color:#0c5460', boolean: '#e2e3e5;color:#383d41' };
-    const fmtStyle = fmtColors[q.outputFormat] || fmtColors.string;
+    const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
     list.innerHTML += `
-      <div class="file-row" style="gap:12px" data-idx="${i}">
-        <i class="bi bi-grip-vertical" style="color:var(--md-outline);cursor:grab;font-size:1.1rem"></i>
-        <div style="flex:1">
-          <div class="d-flex gap-2 align-items-center mb-1">
-            <code style="background:var(--md-surface-container);padding:2px 8px;border-radius:4px;font-size:0.78rem">${q.id}</code>
-            <span style="background:${fmtStyle};padding:1px 8px;border-radius:4px;font-size:0.72rem;font-weight:600">${q.outputFormat || 'string'}</span>
-            ${q.disabled ? '<span style="font-size:0.7rem;color:var(--md-on-surface-variant)">DISABILITATO</span>' : ''}
-            ${q.useResponseFromQuestions?.length ? '<span style="font-size:0.7rem;color:var(--md-on-surface-variant)"><i class="bi bi-link-45deg"></i> ' + q.useResponseFromQuestions.join(', ') + '</span>' : ''}
+      <div class="card mb-2 ${q.disabled ? 'opacity-50' : ''}" data-idx="${i}" style="border-radius:12px">
+        <div class="card-body p-3">
+          <div class="d-flex gap-2 align-items-center mb-2">
+            <i class="bi bi-grip-vertical" style="color:var(--md-outline);cursor:grab;font-size:1.1rem" title="Trascina per riordinare"></i>
+            <input type="text" class="form-control form-control-sm" style="width:160px;border-radius:8px;font-family:monospace;font-size:0.8rem"
+              value="${esc(q.id)}" onchange="updateQ(${i},'id',this.value)" placeholder="campo_id">
+            <select class="form-select form-select-sm" style="width:100px;border-radius:8px;font-size:0.78rem" onchange="updateQ(${i},'outputFormat',this.value)">
+              <option value="string" ${q.outputFormat==='string'?'selected':''}>string</option>
+              <option value="json" ${q.outputFormat==='json'?'selected':''}>json</option>
+              <option value="number" ${q.outputFormat==='number'?'selected':''}>number</option>
+              <option value="boolean" ${q.outputFormat==='boolean'?'selected':''}>boolean</option>
+            </select>
+            <label class="form-check form-switch mb-0 ms-2" title="Attiva/disattiva">
+              <input class="form-check-input" type="checkbox" ${q.disabled?'':'checked'} onchange="updateQ(${i},'disabled',!this.checked)">
+              <span style="font-size:0.75rem">${q.disabled?'Off':'On'}</span>
+            </label>
+            <div class="ms-auto d-flex gap-1">
+              <button class="btn btn-sm btn-outline-secondary" onclick="duplicateQuestion(${i})" style="border-radius:8px" title="Duplica"><i class="bi bi-copy"></i></button>
+              <button class="btn btn-sm btn-outline-danger" onclick="removeQuestion(${i})" style="border-radius:8px" title="Elimina"><i class="bi bi-trash3"></i></button>
+            </div>
           </div>
-          <div style="font-size:0.85rem">${q.question}</div>
-        </div>
-        <div class="d-flex gap-1">
-          <button class="btn btn-sm btn-outline-danger" onclick="removeQuestion(${i})" style="border-radius:8px"><i class="bi bi-trash3"></i></button>
+          <textarea class="form-control mb-2" rows="2" style="border-radius:8px;font-size:0.85rem"
+            onchange="updateQ(${i},'question',this.value)" placeholder="Scrivi la query di estrazione...">${esc(q.question)}</textarea>
+          <div class="d-flex align-items-center gap-2">
+            <label style="font-size:0.75rem;color:var(--md-on-surface-variant);white-space:nowrap"><i class="bi bi-link-45deg"></i> Dipende da:</label>
+            <input type="text" class="form-control form-control-sm" style="border-radius:8px;font-size:0.78rem"
+              value="${(q.useResponseFromQuestions||[]).join(', ')}"
+              onchange="updateQ(${i},'useResponseFromQuestions',this.value.split(',').map(s=>s.trim()).filter(Boolean))"
+              placeholder="es. numero_repertorio, data_atto">
+          </div>
         </div>
       </div>`;
   });
 }
 
+function updateQ(index, field, value) {
+  catalogData[editingTypeId].extraction.questions[index][field] = value;
+}
+
 function addQuestion() {
   const questions = catalogData[editingTypeId]?.extraction?.questions || [];
-  questions.push({ id: 'new_field', question: 'Nuova domanda', outputFormat: 'string', disabled: false, useResponseFromQuestions: [], tools: [] });
+  questions.push({ id: 'nuovo_campo', question: '', outputFormat: 'string', disabled: false, useResponseFromQuestions: [], tools: [] });
   if (!catalogData[editingTypeId].extraction) catalogData[editingTypeId].extraction = {};
   catalogData[editingTypeId].extraction.questions = questions;
   renderQuestions(questions);
+  // Scroll to new question
+  const list = document.getElementById('editQuestionsList');
+  list.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function removeQuestion(idx) {
+  if (!confirm('Eliminare questa query di estrazione?')) return;
   const questions = catalogData[editingTypeId].extraction.questions;
   questions.splice(idx, 1);
+  renderQuestions(questions);
+}
+
+function duplicateQuestion(idx) {
+  const questions = catalogData[editingTypeId].extraction.questions;
+  const copy = JSON.parse(JSON.stringify(questions[idx]));
+  copy.id = copy.id + '_copia';
+  questions.splice(idx + 1, 0, copy);
   renderQuestions(questions);
 }
 
