@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>PDF Viewer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf_viewer.min.css">
+<style>
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #2a2a2a; }
+#viewerContainer {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  overflow: auto; background: #404040;
+}
+.page { position: relative; margin: 8px auto; background: white; box-shadow: 0 1px 6px rgba(0,0,0,0.4); }
+.page canvas { display: block; }
+.textLayer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; opacity: 0.25; line-height: 1; }
+.textLayer span { position: absolute; white-space: pre; transform-origin: 0 0; color: transparent; }
+.textLayer .highlight { background: rgba(255, 210, 0, 0.4); border-radius: 2px; }
+.textLayer .highlight.active { background: rgba(255, 80, 0, 0.5); }
+/* Toolbar */
+.toolbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: #292929; border-bottom: 1px solid #1a1a1a;
+  padding: 4px 10px; display: flex; align-items: center; gap: 6px;
+  font: 12px/1 -apple-system, 'Segoe UI', system-ui, sans-serif; color: #ccc;
+}
+.toolbar button {
+  background: none; border: 1px solid transparent; color: #bbb; padding: 3px 7px;
+  border-radius: 3px; cursor: pointer; font: inherit;
+}
+.toolbar button:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.toolbar button.active { background: rgba(255,255,255,0.15); color: #fff; }
+.toolbar input[type=number] {
+  width: 38px; background: #3a3a3a; border: 1px solid #555; color: #ddd;
+  border-radius: 3px; padding: 2px; text-align: center; font: inherit;
+}
+.toolbar select {
+  background: #3a3a3a; border: 1px solid #555; color: #ddd;
+  border-radius: 3px; padding: 2px 4px; font: inherit;
+}
+.toolbar .sep { width: 1px; height: 16px; background: #555; }
+.toolbar .name { font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar .search-term { background: #5c4a00; color: #ffd54f; padding: 1px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar .spacer { flex: 1; }
+.toolbar .info { color: #888; font-size: 11px; }
+/* Find bar */
+.findbar {
+  position: fixed; top: 32px; left: 0; right: 0; z-index: 99;
+  background: #333; border-bottom: 1px solid #1a1a1a;
+  padding: 4px 10px; display: none; align-items: center; gap: 6px; font: 12px/1 inherit;
+}
+.findbar.open { display: flex; }
+.findbar input {
+  flex: 1; max-width: 250px; background: #2a2a2a; border: 1px solid #555; color: #ddd;
+  padding: 3px 8px; border-radius: 3px; font: inherit; outline: none;
+}
+.findbar input:focus { border-color: #4a90d9; }
+.findbar .cnt { color: #888; font-size: 11px; min-width: 50px; }
+/* Thumbnails */
+.thumbbar {
+  position: fixed; top: 32px; left: 0; bottom: 0; width: 130px; z-index: 98;
+  background: #262626; overflow-y: auto; padding: 6px; display: none; border-right: 1px solid #1a1a1a;
+}
+.thumbbar.open { display: block; }
+.thumbbar .thumb { cursor: pointer; margin-bottom: 4px; border: 2px solid transparent; border-radius: 3px; position: relative; }
+.thumbbar .thumb:hover { border-color: #666; }
+.thumbbar .thumb.active { border-color: #4a90d9; }
+.thumbbar .thumb canvas { width: 100%; display: block; }
+.thumbbar .thumb span { position: absolute; bottom: 1px; right: 3px; background: rgba(0,0,0,.7); color: #ccc; font-size: 9px; padding: 0 4px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="toolbar" id="toolbar">
+  <button onclick="toggleThumbs()" id="btnTh" title="Miniature">&#9776;</button>
+  <span class="sep"></span>
+  <button onclick="goPg(-1)">&#9664;</button>
+  <input type="number" id="pgNum" value="1" min="1" onchange="goToPage(+this.value)">
+  <span class="info" id="pgTotal">/ -</span>
+  <button onclick="goPg(1)">&#9654;</button>
+  <span class="sep"></span>
+  <button onclick="zoom(-0.15)">&#8722;</button>
+  <select id="zoomSel" onchange="zoomTo(this.value)">
+    <option value="0.5">50%</option>
+    <option value="0.75">75%</option>
+    <option value="1">100%</option>
+    <option value="1.25">125%</option>
+    <option value="1.5" selected>150%</option>
+    <option value="2">200%</option>
+    <option value="3">300%</option>
+    <option value="fit">Adatta larghezza</option>
+    <option value="fitpage">Adatta pagina</option>
+  </select>
+  <button onclick="zoom(0.15)">+</button>
+  <span class="sep"></span>
+  <button onclick="toggleFind()" id="btnFind" title="Cerca (Ctrl+F)">&#128269;</button>
+  <span class="spacer"></span>
+  <span class="name" id="fileName"></span>
+  <span class="search-term" id="searchTerm"></span>
+  <span class="info" id="matchInfo"></span>
+</div>
+<div class="findbar" id="findbar">
+  <input id="findInput" placeholder="Cerca nel documento..." onkeydown="if(event.key==='Enter'){event.shiftKey?findPrev():findNext()}" oninput="doSearch()">
+  <span class="cnt" id="findCount"></span>
+  <button onclick="findPrev()">&#9650;</button>
+  <button onclick="findNext()">&#9660;</button>
+  <button onclick="toggleFind()">&#10005;</button>
+</div>
+<div class="thumbbar" id="thumbbar"></div>
+<div id="viewerContainer" style="top:32px"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const params = new URLSearchParams(location.search);
+const fileUrl = params.get('file');
+const searchText = params.get('search') || '';
+const fileName = params.get('name') || 'PDF';
+
+document.getElementById('fileName').textContent = fileName;
+document.getElementById('searchTerm').textContent = searchText ? searchText : '';
+document.title = fileName;
+
+let pdf, scale = 1.5, totalPages = 0;
+let pageEls = [], textContents = [], thumbEls = [];
+let highlights = [], hlIdx = -1;
+
+async function init() {
+  if (!fileUrl) { document.getElementById('viewerContainer').innerHTML = '<p style="color:#ccc;text-align:center;padding:40px">Nessun file specificato</p>'; return; }
+
+  try {
+    pdf = await pdfjsLib.getDocument(fileUrl).promise;
+    totalPages = pdf.numPages;
+    document.getElementById('pgNum').max = totalPages;
+    document.getElementById('pgTotal').textContent = '/ ' + totalPages;
+
+    await renderPages();
+    if (searchText) doHighlight(searchText);
+    buildThumbs();
+  } catch (e) {
+    document.getElementById('viewerContainer').innerHTML = '<p style="color:#f88;text-align:center;padding:40px">Errore: ' + e.message + '</p>';
+  }
+}
+
+async function renderPages() {
+  const container = document.getElementById('viewerContainer');
+  container.innerHTML = '';
+  pageEls = []; textContents = []; highlights = []; hlIdx = -1;
+
+  for (let i = 1; i <= totalPages; i++) {
+    const page = await pdf.getPage(i);
+    const vp = page.getViewport({ scale });
+
+    const div = document.createElement('div');
+    div.className = 'page'; div.id = 'page' + i;
+    div.style.width = vp.width + 'px'; div.style.height = vp.height + 'px';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width; canvas.height = vp.height;
+    div.appendChild(canvas);
+    container.appendChild(div);
+
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+
+    // Text layer for search
+    const tc = await page.getTextContent();
+    textContents.push({ items: tc.items, text: tc.items.map(t => t.str).join(' ') });
+
+    const tl = document.createElement('div');
+    tl.className = 'textLayer';
+    // Render text spans for selection
+    tc.items.forEach(item => {
+      const tx = item.transform;
+      const span = document.createElement('span');
+      span.textContent = item.str;
+      span.style.left = tx[4] + 'px';
+      span.style.top = (vp.height / scale - tx[5] - (item.height || 10)) + 'px';
+      span.style.fontSize = (item.height || 10) + 'px';
+      span.style.transform = 'scaleX(' + (tx[0] / (item.height || 10)) + ')';
+      tl.appendChild(span);
+    });
+    div.appendChild(tl);
+
+    pageEls.push({ div, tl, vp, page });
+  }
+}
+
+function doHighlight(text) {
+  highlights = []; hlIdx = -1;
+  const lower = text.toLowerCase().trim();
+  if (!lower) return;
+
+  const terms = [lower];
+  const words = lower.split(/\s+/);
+  if (words.length > 3) terms.push(words.slice(0, 4).join(' '));
+  if (words.length > 1) terms.push(words.slice(0, 2).join(' '));
+
+  for (let p = 0; p < totalPages; p++) {
+    const ft = textContents[p].text.toLowerCase();
+    for (const term of terms) {
+      if (!term) continue;
+      let pos = 0;
+      while ((pos = ft.indexOf(term, pos)) !== -1) {
+        let cc = 0;
+        for (const item of textContents[p].items) {
+          const ie = cc + item.str.length;
+          if (pos >= cc && pos < ie + 1) {
+            const tx = item.transform;
+            const x = tx[4] * scale;
+            const y = pageEls[p].vp.height - tx[5] * scale - (item.height || 12) * scale;
+            const w = (item.width || 80) * scale;
+            const h = (item.height || 12) * scale;
+            const hl = document.createElement('div');
+            hl.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:${Math.min(w + 12, pageEls[p].vp.width - x)}px;height:${h + 3}px;background:rgba(255,210,0,.4);border:2px solid rgba(240,180,0,.7);border-radius:2px;pointer-events:none`;
+            hl.className = 'hl-marker';
+            pageEls[p].div.appendChild(hl);
+            highlights.push({ page: p + 1, el: hl });
+            break;
+          }
+          cc = ie + 1;
+        }
+        pos += term.length;
+      }
+      if (highlights.length > 0) break;
+    }
+  }
+
+  document.getElementById('matchInfo').textContent = highlights.length ? highlights.length + ' trovati' : 'non trovato';
+  if (highlights.length) { hlIdx = 0; goToHighlight(0); }
+}
+
+function goToHighlight(idx) {
+  highlights.forEach(h => { h.el.style.background = 'rgba(255,210,0,.4)'; h.el.style.borderColor = 'rgba(240,180,0,.7)'; });
+  if (idx >= 0 && idx < highlights.length) {
+    highlights[idx].el.style.background = 'rgba(255,80,0,.5)';
+    highlights[idx].el.style.borderColor = '#f50';
+    highlights[idx].el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('pgNum').value = highlights[idx].page;
+    highlightThumb(highlights[idx].page);
+    document.getElementById('matchInfo').textContent = (idx + 1) + '/' + highlights.length;
+  }
+}
+
+// Zoom
+function zoom(delta) { scale = Math.max(0.3, Math.min(5, scale + delta)); rerender(); updateZoomSel(); }
+function zoomTo(v) {
+  if (v === 'fit') { const cw = document.getElementById('viewerContainer').clientWidth - 20; if (pageEls[0]) scale = cw / pageEls[0].page.getViewport({ scale: 1 }).width; }
+  else if (v === 'fitpage') { const cw = document.getElementById('viewerContainer').clientWidth - 20; const ch = document.getElementById('viewerContainer').clientHeight - 16; if (pageEls[0]) { const vp1 = pageEls[0].page.getViewport({ scale: 1 }); scale = Math.min(cw / vp1.width, ch / vp1.height); } }
+  else scale = parseFloat(v);
+  rerender(); updateZoomSel();
+}
+function updateZoomSel() { const s = document.getElementById('zoomSel'); for (let i = 0; i < s.options.length; i++) { if (Math.abs(parseFloat(s.options[i].value) - scale) < 0.02) { s.selectedIndex = i; return; } } }
+async function rerender() {
+  const scrollRatio = document.getElementById('viewerContainer').scrollTop / (document.getElementById('viewerContainer').scrollHeight || 1);
+  await renderPages();
+  if (searchText) doHighlight(searchText);
+  buildThumbs();
+  document.getElementById('viewerContainer').scrollTop = scrollRatio * document.getElementById('viewerContainer').scrollHeight;
+}
+
+// Page nav
+function goPg(d) { const c = parseInt(document.getElementById('pgNum').value) || 1; goToPage(Math.max(1, Math.min(totalPages, c + d))); }
+function goToPage(n) { n = Math.max(1, Math.min(totalPages, n)); document.getElementById('pgNum').value = n; const el = document.getElementById('page' + n); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); highlightThumb(n); }
+
+// Thumbs
+async function buildThumbs() {
+  const bar = document.getElementById('thumbbar'); bar.innerHTML = ''; thumbEls = [];
+  for (let i = 1; i <= totalPages; i++) {
+    const pg = await pdf.getPage(i);
+    const vp = pg.getViewport({ scale: 0.18 });
+    const div = document.createElement('div'); div.className = 'thumb'; div.dataset.p = i;
+    div.onclick = function() { goToPage(+this.dataset.p); };
+    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+    await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    div.appendChild(c);
+    const s = document.createElement('span'); s.textContent = i; div.appendChild(s);
+    bar.appendChild(div); thumbEls.push(div);
+  }
+  highlightThumb(parseInt(document.getElementById('pgNum').value) || 1);
+}
+function highlightThumb(n) { thumbEls.forEach((t, i) => t.classList.toggle('active', i === n - 1)); }
+function toggleThumbs() {
+  const tb = document.getElementById('thumbbar'); tb.classList.toggle('open');
+  document.getElementById('btnTh').classList.toggle('active');
+  document.getElementById('viewerContainer').style.left = tb.classList.contains('open') ? '130px' : '0';
+}
+
+// Find
+function toggleFind() {
+  const fb = document.getElementById('findbar'); fb.classList.toggle('open');
+  document.getElementById('btnFind').classList.toggle('active');
+  document.getElementById('viewerContainer').style.top = fb.classList.contains('open') ? '64px' : '32px';
+  if (fb.classList.contains('open')) document.getElementById('findInput').focus();
+}
+let searchHls = [], searchHlIdx = -1;
+function doSearch() {
+  document.querySelectorAll('.hl-search').forEach(e => e.remove());
+  searchHls = []; searchHlIdx = -1;
+  const q = document.getElementById('findInput').value.toLowerCase().trim();
+  if (!q) { document.getElementById('findCount').textContent = ''; return; }
+
+  for (let p = 0; p < totalPages; p++) {
+    const ft = textContents[p].text.toLowerCase(); let pos = 0;
+    while ((pos = ft.indexOf(q, pos)) !== -1) {
+      let cc = 0;
+      for (const item of textContents[p].items) {
+        const ie = cc + item.str.length;
+        if (pos >= cc && pos < ie + 1) {
+          const tx = item.transform;
+          const x = tx[4] * scale, y = pageEls[p].vp.height - tx[5] * scale - (item.height || 12) * scale;
+          const w = (item.width || 80) * scale, h = (item.height || 12) * scale;
+          const hl = document.createElement('div'); hl.className = 'hl-search';
+          hl.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:${Math.min(w + 12, pageEls[p].vp.width - x)}px;height:${h + 3}px;background:rgba(60,140,255,.35);border:2px solid rgba(60,120,255,.6);border-radius:2px;pointer-events:none`;
+          pageEls[p].div.appendChild(hl);
+          searchHls.push({ page: p + 1, el: hl }); break;
+        }
+        cc = ie + 1;
+      }
+      pos += q.length;
+    }
+  }
+  document.getElementById('findCount').textContent = searchHls.length ? searchHls.length + ' trovati' : '0';
+  if (searchHls.length) { searchHlIdx = 0; goSearchHl(0); }
+}
+function goSearchHl(idx) {
+  searchHls.forEach(h => { h.el.style.borderWidth = '2px'; });
+  if (idx >= 0 && idx < searchHls.length) { searchHls[idx].el.style.borderWidth = '3px'; searchHls[idx].el.scrollIntoView({ behavior: 'smooth', block: 'center' }); document.getElementById('findCount').textContent = (idx + 1) + '/' + searchHls.length; }
+}
+function findNext() { if (!searchHls.length) return; searchHlIdx = (searchHlIdx + 1) % searchHls.length; goSearchHl(searchHlIdx); }
+function findPrev() { if (!searchHls.length) return; searchHlIdx = (searchHlIdx - 1 + searchHls.length) % searchHls.length; goSearchHl(searchHlIdx); }
+
+// Keys
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === '+' || e.key === '=') zoom(0.15);
+  else if (e.key === '-') zoom(-0.15);
+  else if (e.key === 'f' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); toggleFind(); }
+  else if (e.key === 'Escape') { document.getElementById('findbar').classList.remove('open'); document.getElementById('viewerContainer').style.top = '32px'; }
+});
+
+// Scroll spy
+document.getElementById('viewerContainer').addEventListener('scroll', function() {
+  const st = this.scrollTop + 60;
+  for (let p = totalPages; p >= 1; p--) { const el = document.getElementById('page' + p); if (el && el.offsetTop <= st) { document.getElementById('pgNum').value = p; highlightThumb(p); break; } }
+});
+
+init();
+</script>
+</body>
+</html>

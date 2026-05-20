@@ -1307,6 +1307,12 @@ def pratiche_page():
     return render_template('admin/pratiche.html')
 
 
+@admin_bp.route('/pdf-viewer')
+def pdf_viewer_page():
+    """PDF viewer standalone con PDF.js"""
+    return render_template('admin/pdf_viewer.html')
+
+
 @admin_bp.route('/activity-log')
 @superuser_required
 def activity_log():
