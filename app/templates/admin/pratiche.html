@@ -300,7 +300,10 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
             </div>
           </div>
           <div id="stagedFilesList"></div>
-          <div class="card-body border-top d-flex justify-content-end">
+          <div class="card-body border-top d-flex justify-content-end gap-2">
+            <button class="btn btn-outline-primary btn-sm" id="btnSaveFiles" onclick="saveFilesToDb()" style="border-radius:8px">
+              <i class="bi bi-cloud-upload"></i> Salva file
+            </button>
             <button class="btn btn-primary btn-sm" onclick="processAllFiles()" style="border-radius:8px">
               <i class="bi bi-play-fill"></i> Elabora <span id="stagedCountBtn">0</span> documenti
             </button>
@@ -694,7 +697,7 @@ async function loadPracticeInfo() {
     // Salva in localStorage se ha file
     const info = data.output?.info || data.output || data.info || data;
     if (info.files && Object.keys(info.files).length > 0) {
-      savePracticeToDb(practiceId, agentId, info);
+      await savePracticeToDb(practiceId, agentId, info);
     }
 
     await showPracticeResult(data, practiceId);
@@ -749,6 +752,51 @@ function removeStagedFile(idx) {
 function clearStagedFiles() {
   stagedFiles = [];
   renderStagedFiles();
+}
+
+async function saveFilesToDb() {
+  const agentId = getAgentId();
+  const practiceId = getPracticeId();
+  if (!agentId) return alert('Seleziona un agente');
+  if (stagedFiles.length === 0) return alert('Nessun file da salvare');
+
+  const btn = document.getElementById('btnSaveFiles');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="prat-spinner" style="width:14px;height:14px;border-width:2px"></span> Salvataggio...';
+
+  try {
+    // Crea pratica nel DB
+    await savePracticeToDb(practiceId, agentId, { files: {} });
+
+    // Upload file
+    const fd = new FormData();
+    stagedFiles.forEach((f, i) => fd.append('file_' + i, f));
+    const r = await fetch(`/api/ao/practice-files/${practiceId}/upload`, { method: 'POST', body: fd });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    // Salva blob per PDF viewer
+    for (const f of stagedFiles) processedFileBlobs[f.name] = f;
+
+    btn.innerHTML = `<i class="bi bi-check2"></i> ${data.saved?.length || 0} file salvati`;
+    btn.classList.remove('btn-outline-primary');
+    btn.classList.add('btn-outline-success');
+
+    // Aggiorna sidebar
+    if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+  } catch (e) {
+    btn.innerHTML = '<i class="bi bi-x-lg"></i> Errore';
+    btn.classList.remove('btn-outline-primary');
+    btn.classList.add('btn-outline-danger');
+    alert('Salvataggio fallito: ' + e.message);
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-cloud-upload"></i> Salva file';
+      btn.classList.remove('btn-outline-success', 'btn-outline-danger');
+      btn.classList.add('btn-outline-primary');
+    }, 3000);
+  }
 }
 
 async function processAllFiles() {
@@ -810,20 +858,25 @@ async function processAllFiles() {
   valEl.innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> 0/${totalFiles}</span>`;
   valEl.appendChild(timerEl);
 
-  // Salva pratica e file nel DB subito
-  savePracticeToDb(practiceId, agentId, { files: {} });
+  // Salva pratica e file nel DB subito, poi aggiorna sidebar
+  await savePracticeToDb(practiceId, agentId, { files: {} });
+  if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+
   const uploadFd = new FormData();
   filesToProcess.forEach((f, i) => uploadFd.append('file_' + i, f));
   try {
     const upRes = await fetch(`/api/ao/practice-files/${practiceId}/upload`, { method: 'POST', body: uploadFd });
     const upData = await upRes.json();
+    if (upData.error) throw new Error(upData.error);
     if (upData.saved?.length) {
       valEl.innerHTML = `<span class="badge-ok"><i class="bi bi-check2"></i> ${upData.saved.length} file salvati</span>`;
       valEl.appendChild(timerEl);
+      // Aggiorna sidebar con conteggio file corretto
+      if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
     }
   } catch (e) {
     console.error('Upload file nel DB fallito:', e);
-    valEl.innerHTML = `<span class="badge-ko"><i class="bi bi-x-lg"></i> Salvataggio file fallito</span>`;
+    valEl.innerHTML = `<span class="badge-ko"><i class="bi bi-x-lg"></i> Salvataggio file fallito: ${e.message}</span>`;
     valEl.appendChild(timerEl);
   }
 
@@ -849,7 +902,7 @@ async function processAllFiles() {
       // Salva risultato nel DB subito
       const info = data.output?.info || data.output || data.info || data;
       lastInfo = info;
-      savePracticeToDb(practiceId, agentId, info);
+      await savePracticeToDb(practiceId, agentId, info);
 
       const files = info.files || {};
 
@@ -1165,19 +1218,19 @@ function toggleExtraction(id) {
 }
 
 // ── Persistence (DB) ───────────────────────────────────────────────
-function savePracticeToDb(practiceId, agentId, resultInfo) {
-  const agentName = document.getElementById('agentSelect').selectedOptions[0]?.text || '';
-  fetch(`/api/ao/results/${practiceId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agent_id: agentId, agent_name: agentName, result_data: resultInfo }),
-  })
-  .then(r => r.json())
-  .then(data => {
+async function savePracticeToDb(practiceId, agentId, resultInfo) {
+  const agentName = agents.find(a => a.id === agentId)?.name || '';
+  try {
+    const r = await fetch(`/api/ao/results/${practiceId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentId, agent_name: agentName, result_data: resultInfo }),
+    });
+    const data = await r.json();
     if (data.error) console.error('Salvataggio pratica errore:', data.error);
-    else console.log('Pratica salvata:', practiceId);
-  })
-  .catch(e => console.error('Salvataggio pratica fallito:', e));
+  } catch (e) {
+    console.error('Salvataggio pratica fallito:', e);
+  }
 }
 
 async function loadPracticeFromDb(practiceId) {
