@@ -1040,16 +1040,44 @@ function processAdditionalFiles(files) {
 async function reprocessFile(contentHash) {
   const agentId = getAgentId();
   const practiceId = getPracticeId();
-  showProcessing('Rielaborazione file...');
+
+  // Mostra spinner inline sulla riga del file
+  const fileRow = document.querySelector(`[onclick*="reprocessFile('${contentHash}')"]`)?.closest('.file-row');
+  const badgesEl = fileRow?.querySelector('.file-badges');
+  const origBadges = badgesEl?.innerHTML;
+  if (badgesEl) badgesEl.innerHTML = '<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> Elaborazione...</span>';
+
   try {
-    const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/file/${contentHash}/reprocess`, { method: 'POST' });
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
-    await showPracticeResult(data, practiceId);
+    if (contentHash.startsWith('db_')) {
+      // File solo nel DB locale → scarica e invia a /process
+      const fileName = contentHash.replace(/^db_/, '').replace(/_/g, '.').replace(/\.pdf$/, '.pdf');
+      let file = processedFileBlobs[fileName];
+      if (!file) {
+        const dlR = await fetch(`/api/ao/files/${practiceId}/${encodeURIComponent(fileName)}`);
+        if (!dlR.ok) throw new Error('File non trovato nel DB');
+        const blob = await dlR.blob();
+        file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
+      }
+      const fd = new FormData();
+      fd.append('file_0', file);
+      const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/process`, { method: 'POST', body: fd });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      await savePracticeToDb(practiceId, agentId, data.output?.info || data.output || data);
+    } else {
+      const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/file/${contentHash}/reprocess`, { method: 'POST' });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      await savePracticeToDb(practiceId, agentId, data.output?.info || data.output || data);
+    }
+    // Ricarica dal DB (dati mergiati) per mostrare tutti i file
+    const cached = await loadPracticeFromDb(practiceId);
+    if (cached?.result_data) {
+      await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+    }
   } catch (e) {
+    if (badgesEl) badgesEl.innerHTML = origBadges || '';
     alert('Errore: ' + e.message);
-  } finally {
-    hideProcessing();
   }
 }
 
@@ -1184,19 +1212,24 @@ async function showPracticeResult(result, practiceId) {
     const docType = file.identification?.documentId || file.identification?.documentTypeId || '';
     const ext = (file.fileName || '').split('.').pop().toLowerCase();
     const icon = ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-image';
+    const isDbOnly = hash.startsWith('db_');
 
     filesHtml += `
       <div class="file-row">
         <div class="file-icon"><i class="bi ${icon}"></i></div>
         <div class="file-info">
           <div class="file-name">${file.fileName || hash}</div>
-          <div class="file-type">${docType}</div>
+          <div class="file-type">${docType || (isDbOnly ? 'Non ancora elaborato' : '')}</div>
         </div>
         <div class="file-badges">${idBadge} ${exBadge}</div>
         <div class="file-actions">
-          <button class="btn btn-sm btn-outline-secondary" onclick="toggleExtraction('ext-${hash}')" style="border-radius:8px"><i class="bi bi-table"></i> Dati</button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="openSintesiForFile('${hash}')" style="border-radius:8px"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="reprocessFile('${hash}')" style="border-radius:8px"><i class="bi bi-arrow-repeat"></i></button>
+          ${isDbOnly ? `
+            <button class="btn btn-sm btn-primary" onclick="reprocessFile('${hash}')" style="border-radius:8px"><i class="bi bi-play-fill"></i> Elabora</button>
+          ` : `
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleExtraction('ext-${hash}')" style="border-radius:8px"><i class="bi bi-table"></i> Dati</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="openSintesiForFile('${hash}')" style="border-radius:8px"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="reprocessFile('${hash}')" style="border-radius:8px"><i class="bi bi-arrow-repeat"></i></button>
+          `}
           <button class="btn btn-sm btn-outline-danger" onclick="deleteFile('${hash}')" style="border-radius:8px"><i class="bi bi-trash3"></i></button>
         </div>
       </div>`;
@@ -1245,6 +1278,13 @@ function toggleExtraction(id) {
 async function savePracticeToDb(practiceId, agentId, resultInfo) {
   const agentName = agents.find(a => a.id === agentId)?.name || '';
   try {
+    // Mergia file: mantieni i file esistenti e aggiungi/aggiorna quelli nuovi
+    const existing = await loadPracticeFromDb(practiceId);
+    if (existing?.result_data?.files && resultInfo.files) {
+      const merged = { ...existing.result_data.files };
+      for (const [k, v] of Object.entries(resultInfo.files)) merged[k] = v;
+      resultInfo = { ...resultInfo, files: merged };
+    }
     const r = await fetch(`/api/ao/results/${practiceId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1310,8 +1350,17 @@ async function loadCatalog(agentId) {
     const suspended = loadSuspended();
     for (const [id, originalQuestions] of Object.entries(suspended)) {
       if (freshCatalog[id]) {
+        // Tipo esiste su AO (con domande disabled) — segna come sospeso
         freshCatalog[id]._disabled = true;
         freshCatalog[id]._originalQuestions = originalQuestions;
+      } else {
+        // Tipo non restituito da AO — ricostruisci dalle domande originali
+        freshCatalog[id] = {
+          identification: { aiEnabled: true, regexEnabled: false, instructions: '', hint: '' },
+          extraction: { questions: originalQuestions },
+          _disabled: true,
+          _originalQuestions: originalQuestions,
+        };
       }
     }
     catalogData = freshCatalog;
@@ -1338,7 +1387,7 @@ function renderCatalogTypes() {
 
   for (const [typeId, typeDef] of types) {
     const ident = typeDef.identification || {};
-    const questions = typeDef.extraction?.questions || [];
+    const questions = Array.isArray(typeDef.extraction?.questions) ? typeDef.extraction.questions : [];
     const activeQ = questions.filter(q => !q.disabled).length;
     const qNames = questions.slice(0, 5).map(q => q.id).join(', ');
     const esc = s => (s||'').replace(/'/g,"\\'");
@@ -1510,7 +1559,7 @@ function openCatalogEdit(typeId) {
   editingTypeId = typeId;
   const def = catalogData[typeId];
   const ident = def.identification || {};
-  const questions = def.extraction?.questions || [];
+  const questions = Array.isArray(def.extraction?.questions) ? def.extraction.questions : [];
 
   document.getElementById('catalogTypesArea').style.display = 'none';
   document.getElementById('catalogEditArea').style.display = '';
