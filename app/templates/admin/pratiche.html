@@ -880,15 +880,39 @@ async function processAllFiles() {
     valEl.appendChild(timerEl);
   }
 
-  // Processa un file alla volta, salvando dopo ogni elaborazione
+  // Controlla quali file sono già elaborati su AO
+  let alreadyDone = new Set();
+  try {
+    const infoR = await fetch(`/api/ao/practice/${agentId}/${practiceId}/info`);
+    const infoData = await infoR.json();
+    const existingFiles = infoData.output?.info?.files || infoData.output?.files || {};
+    for (const [h, ff] of Object.entries(existingFiles)) {
+      if (ff.state?.extraction === 'completed' && ff.state?.identification === 'completed') {
+        alreadyDone.add(ff.fileName);
+      }
+    }
+  } catch (e) { /* pratica nuova, nessun file esistente */ }
+
+  // Processa un file alla volta, saltando quelli già completati
   let lastInfo = null;
+  const toProcess = filesToProcess.filter(f => !alreadyDone.has(f.name));
+  let processed = 0;
+
   for (let i = 0; i < filesToProcess.length; i++) {
     const f = filesToProcess[i];
 
+    // Salta file già elaborati
+    if (alreadyDone.has(f.name)) {
+      document.getElementById('queue-status-' + i).textContent = 'Già elaborato';
+      document.getElementById('queue-badges-' + i).innerHTML = '<span class="badge-ok"><i class="bi bi-check2"></i> Già completato</span>';
+      continue;
+    }
+
+    processed++;
     // UI: file corrente in elaborazione
     document.getElementById('queue-status-' + i).textContent = 'Elaborazione in corso...';
     document.getElementById('queue-badges-' + i).innerHTML = '<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> Elaborazione...</span>';
-    valEl.innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${i + 1}/${totalFiles}</span>`;
+    valEl.innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${processed}/${toProcess.length}</span>`;
     valEl.appendChild(timerEl);
 
     try {
