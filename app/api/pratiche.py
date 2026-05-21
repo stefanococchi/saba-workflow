@@ -68,6 +68,39 @@ def ao_practice_info(agent_id, practice_id):
         return jsonify({"error": str(e)}), 500
 
 
+@pratiche_bp.route('/practice/<practice_id>/upload-files', methods=['POST'])
+def ao_practice_upload_files(practice_id):
+    """Salva i file nel DB subito, prima dell'elaborazione."""
+    try:
+        saved = []
+        for key in request.files:
+            upload = request.files[key]
+            content = upload.read()
+            filename = upload.filename
+            mime = upload.content_type
+
+            existing = db.query(PracticeFile).filter_by(
+                practice_id=practice_id, file_name=filename
+            ).first()
+            if existing:
+                existing.data = content
+                existing.mime_type = mime
+            else:
+                db.add(PracticeFile(
+                    practice_id=practice_id,
+                    file_name=filename,
+                    mime_type=mime,
+                    data=content,
+                ))
+            db.commit()
+            saved.append(filename)
+        return jsonify({"saved": saved})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Upload files: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @pratiche_bp.route('/practice/<agent_id>/<practice_id>/process', methods=['POST'])
 def ao_practice_process(agent_id, practice_id):
     """Processa una pratica: carica file e avvia identify+extract."""

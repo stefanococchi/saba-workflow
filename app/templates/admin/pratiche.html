@@ -810,8 +810,13 @@ async function processAllFiles() {
   valEl.innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> 0/${totalFiles}</span>`;
   valEl.appendChild(timerEl);
 
-  // Salva pratica vuota nel DB subito
+  // Salva pratica e file nel DB subito
   savePracticeToDb(practiceId, agentId, { files: {} });
+  const uploadFd = new FormData();
+  filesToProcess.forEach((f, i) => uploadFd.append('file_' + i, f));
+  try {
+    await fetch(`/api/ao/practice/${practiceId}/upload-files`, { method: 'POST', body: uploadFd });
+  } catch (e) { console.error('Upload file nel DB fallito:', e); }
 
   // Processa un file alla volta, salvando dopo ogni elaborazione
   let lastInfo = null;
@@ -1194,11 +1199,13 @@ async function loadCatalog(agentId) {
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     const freshCatalog = data.output?.catalog || data.output || data.catalog || data;
-    // Ripristina tipi sospesi da localStorage
+    // Ripristina tipi sospesi da localStorage (con domande originali)
     const suspended = loadSuspended();
-    for (const [id, def] of Object.entries(suspended)) {
-      if (!freshCatalog[id]) freshCatalog[id] = def;
-      else freshCatalog[id]._disabled = true;
+    for (const [id, originalQuestions] of Object.entries(suspended)) {
+      if (freshCatalog[id]) {
+        freshCatalog[id]._disabled = true;
+        freshCatalog[id]._originalQuestions = originalQuestions;
+      }
     }
     catalogData = freshCatalog;
     document.getElementById('catalogTypesTitle').innerHTML = `<i class="bi bi-cpu" style="opacity:0.5"></i> ${agentName}`;
@@ -1255,8 +1262,27 @@ function renderCatalogTypes() {
   }
 }
 
+function suspendType(id) {
+  if (!catalogData[id]._disabled) {
+    // Salva stato originale delle domande prima di sospendere
+    catalogData[id]._originalQuestions = JSON.parse(JSON.stringify(catalogData[id].extraction?.questions || []));
+  }
+  catalogData[id]._disabled = true;
+}
+
+function unsuspendType(id) {
+  // Ripristina le domande originali
+  if (catalogData[id]._originalQuestions) {
+    if (!catalogData[id].extraction) catalogData[id].extraction = {};
+    catalogData[id].extraction.questions = catalogData[id]._originalQuestions;
+    delete catalogData[id]._originalQuestions;
+  }
+  delete catalogData[id]._disabled;
+}
+
 function toggleCatalogType(typeId, disabled) {
-  catalogData[typeId]._disabled = disabled;
+  if (disabled) suspendType(typeId);
+  else unsuspendType(typeId);
   saveSuspended();
   renderCatalogTypes();
   syncCatalogToAO();
@@ -1264,7 +1290,8 @@ function toggleCatalogType(typeId, disabled) {
 
 function soloCatalogType(typeId) {
   for (const id of Object.keys(catalogData)) {
-    catalogData[id]._disabled = (id !== typeId);
+    if (id === typeId) unsuspendType(id);
+    else suspendType(id);
   }
   saveSuspended();
   renderCatalogTypes();
@@ -1272,7 +1299,7 @@ function soloCatalogType(typeId) {
 }
 
 function allCatalogTypesOn() {
-  for (const id of Object.keys(catalogData)) delete catalogData[id]._disabled;
+  for (const id of Object.keys(catalogData)) unsuspendType(id);
   saveSuspended();
   renderCatalogTypes();
   syncCatalogToAO();
@@ -1300,9 +1327,13 @@ function getSuspendedKey() {
 }
 
 function saveSuspended() {
+  // Salva lo stato originale delle domande (prima della sospensione)
   const suspended = {};
   for (const [id, def] of Object.entries(catalogData)) {
-    if (def._disabled) suspended[id] = def;
+    if (def._disabled) {
+      // Usa le domande originali se salvate, altrimenti le attuali
+      suspended[id] = def._originalQuestions || (def.extraction?.questions || []);
+    }
   }
   if (Object.keys(suspended).length) {
     localStorage.setItem(getSuspendedKey(), JSON.stringify(suspended));
@@ -1319,11 +1350,16 @@ function loadSuspended() {
 }
 
 function buildCatalogPayload() {
+  // Tutti i tipi vengono inviati ad AO (così i file già identificati non si perdono).
+  // Per i tipi sospesi, tutte le domande vengono disabilitate → AO identifica ma non estrae.
   const payload = {};
   for (const [id, def] of Object.entries(catalogData)) {
-    if (def._disabled) continue;
     const clean = JSON.parse(JSON.stringify(def));
     delete clean._disabled;
+    delete clean._originalQuestions;
+    if (def._disabled && clean.extraction?.questions) {
+      clean.extraction.questions.forEach(q => q.disabled = true);
+    }
     payload[id] = clean;
   }
   return payload;
