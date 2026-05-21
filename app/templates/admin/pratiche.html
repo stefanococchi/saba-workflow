@@ -1170,7 +1170,14 @@ async function loadCatalog(agentId) {
     const r = await fetch(`/api/ao/catalog/${agentId}`);
     const data = await r.json();
     if (data.error) throw new Error(data.error);
-    catalogData = data.output?.catalog || data.output || data.catalog || data;
+    const freshCatalog = data.output?.catalog || data.output || data.catalog || data;
+    // Ripristina tipi sospesi da localStorage
+    const suspended = loadSuspended();
+    for (const [id, def] of Object.entries(suspended)) {
+      if (!freshCatalog[id]) freshCatalog[id] = def;
+      else freshCatalog[id]._disabled = true;
+    }
+    catalogData = freshCatalog;
     document.getElementById('catalogTypesTitle').innerHTML = `<i class="bi bi-cpu" style="opacity:0.5"></i> ${agentName}`;
     renderCatalogTypes();
   } catch (e) {
@@ -1227,6 +1234,7 @@ function renderCatalogTypes() {
 
 function toggleCatalogType(typeId, disabled) {
   catalogData[typeId]._disabled = disabled;
+  saveSuspended();
   renderCatalogTypes();
 }
 
@@ -1234,25 +1242,46 @@ function soloCatalogType(typeId) {
   for (const id of Object.keys(catalogData)) {
     catalogData[id]._disabled = (id !== typeId);
   }
+  saveSuspended();
   renderCatalogTypes();
 }
 
 function allCatalogTypesOn() {
   for (const id of Object.keys(catalogData)) delete catalogData[id]._disabled;
+  saveSuspended();
   renderCatalogTypes();
 }
 
+// ── Persistenza tipi sospesi in localStorage ──
+function getSuspendedKey() {
+  return 'catalog_suspended_' + (selectedCatalogAgentId || '');
+}
+
+function saveSuspended() {
+  const suspended = {};
+  for (const [id, def] of Object.entries(catalogData)) {
+    if (def._disabled) suspended[id] = def;
+  }
+  if (Object.keys(suspended).length) {
+    localStorage.setItem(getSuspendedKey(), JSON.stringify(suspended));
+  } else {
+    localStorage.removeItem(getSuspendedKey());
+  }
+}
+
+function loadSuspended() {
+  try {
+    const raw = localStorage.getItem(getSuspendedKey());
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
 function buildCatalogPayload() {
-  // Per i tipi sospesi (_disabled), disabilita tutte le domande di estrazione
-  // così AO identifica comunque ma non estrae nulla. Il catalogo resta completo.
   const payload = {};
   for (const [id, def] of Object.entries(catalogData)) {
+    if (def._disabled) continue;
     const clean = JSON.parse(JSON.stringify(def));
-    const wasSuspended = clean._disabled;
     delete clean._disabled;
-    if (wasSuspended && clean.extraction?.questions) {
-      clean.extraction.questions.forEach(q => q.disabled = true);
-    }
     payload[id] = clean;
   }
   return payload;
