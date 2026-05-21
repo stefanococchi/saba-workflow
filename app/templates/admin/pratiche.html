@@ -1458,33 +1458,25 @@ dropZone.addEventListener('drop', e => {
 
 async function openPdfAndSearch(fileName, searchText) {
   if (!fileName || !searchText) return;
+  if (!fileName.toLowerCase().endsWith('.pdf')) return alert('Il viewer funziona solo con file PDF.');
 
-  let file = processedFileBlobs[fileName];
+  const practiceId = selectedPracticeId || document.getElementById('practiceIdInput').value.trim();
 
-  // Se non in memoria, scarica dal DB
-  if (!file) {
-    const practiceId = selectedPracticeId || document.getElementById('practiceIdInput').value.trim();
-    if (!practiceId) return alert('Nessuna pratica selezionata');
-
-    try {
-      const r = await fetch(`/api/ao/files/${practiceId}/${encodeURIComponent(fileName)}`);
-      if (!r.ok) throw new Error('File non trovato sul server');
-      const blob = await r.blob();
-      file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
-      processedFileBlobs[fileName] = file;
-    } catch (e) {
-      return alert('PDF non disponibile: ' + e.message);
-    }
+  // Se il file è solo in memoria (appena elaborato, non ancora salvato in DB), upload temporaneo
+  let fileUrl;
+  const file = processedFileBlobs[fileName];
+  if (file && !practiceId) {
+    // Fallback blob URL (solo stesso tab, ma non c'è pratica salvata)
+    fileUrl = URL.createObjectURL(file);
+  } else if (practiceId) {
+    // Usa URL server — funziona anche dalla finestra popup
+    fileUrl = `/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`;
+  } else {
+    return alert('Nessuna pratica selezionata');
   }
 
-  if (!file.name.toLowerCase().endsWith('.pdf')) return alert('Il viewer funziona solo con file PDF.');
-
-  // Salva il file come blob URL temporaneo servito dal browser
-  const blobUrl = URL.createObjectURL(file);
-
-  // Usa il viewer PDF.js ospitato localmente come route
   const searchParam = encodeURIComponent(searchText.substring(0, 60));
-  const viewerUrl = `/admin/pdf-viewer?file=${encodeURIComponent(blobUrl)}&search=${searchParam}&name=${encodeURIComponent(fileName)}`;
+  const viewerUrl = `/admin/pdf-viewer?file=${encodeURIComponent(fileUrl)}&search=${searchParam}&name=${encodeURIComponent(fileName)}`;
 
   const w = Math.min(850, screen.width * 0.5);
   const h = Math.min(950, screen.height * 0.9);
