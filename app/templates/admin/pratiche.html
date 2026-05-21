@@ -790,7 +790,6 @@ async function processAllFiles() {
   }
   document.getElementById('filesList').innerHTML = queueHtml;
 
-  // Processa un file alla volta
   const filesToProcess = [...stagedFiles];
   stagedFiles = [];
   renderStagedFiles();
@@ -798,14 +797,32 @@ async function processAllFiles() {
   // Salva i blob per il PDF viewer
   for (const f of filesToProcess) processedFileBlobs[f.name] = f;
 
+  // Timer
+  const t0 = performance.now();
+  const timerEl = document.createElement('span');
+  timerEl.style.cssText = 'font-size:0.78rem;color:var(--md-on-surface-variant);margin-left:8px;font-variant-numeric:tabular-nums';
+  timerEl.textContent = '0s';
+  const timerInterval = setInterval(() => {
+    const s = Math.floor((performance.now() - t0) / 1000);
+    timerEl.textContent = s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+  }, 1000);
+  const valEl = document.getElementById('infoValidation');
+  valEl.innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> 0/${totalFiles}</span>`;
+  valEl.appendChild(timerEl);
+
+  // Salva pratica vuota nel DB subito
+  savePracticeToDb(practiceId, agentId, { files: {} });
+
+  // Processa un file alla volta, salvando dopo ogni elaborazione
   let lastInfo = null;
   for (let i = 0; i < filesToProcess.length; i++) {
     const f = filesToProcess[i];
 
-    // Aggiorna stato: in elaborazione
+    // UI: file corrente in elaborazione
     document.getElementById('queue-status-' + i).textContent = 'Elaborazione in corso...';
     document.getElementById('queue-badges-' + i).innerHTML = '<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> Elaborazione...</span>';
-    document.getElementById('infoValidation').innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${i + 1}/${totalFiles}</span>`;
+    valEl.innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${i + 1}/${totalFiles}</span>`;
+    valEl.appendChild(timerEl);
 
     try {
       const fd = new FormData();
@@ -815,17 +832,19 @@ async function processAllFiles() {
       const data = await r.json();
       if (data.error) throw new Error(data.error);
 
-      // Estrai info sul file appena elaborato
+      // Salva risultato nel DB subito
       const info = data.output?.info || data.output || data.info || data;
       lastInfo = info;
       savePracticeToDb(practiceId, agentId, info);
+
       const files = info.files || {};
 
-      // Trova il file appena aggiunto
+      // Trova il file appena elaborato
       let thisFile = null;
       for (const [h, ff] of Object.entries(files)) {
-        if (ff.fileName === f.name || !thisFile) thisFile = ff;
+        if (ff.fileName === f.name) { thisFile = ff; break; }
       }
+      if (!thisFile) thisFile = Object.values(files).pop();
 
       if (thisFile) {
         const idState = thisFile.state?.identification || 'completed';
@@ -837,7 +856,6 @@ async function processAllFiles() {
         document.getElementById('queue-badges-' + i).innerHTML = idBadge + ' ' + exBadge;
         document.getElementById('queue-status-' + i).textContent = docType || 'Elaborato';
 
-        // Mostra dati estratti aperti
         if (thisFile.extraction?.data && Object.keys(thisFile.extraction.data).length > 0) {
           const extEl = document.getElementById('queue-extraction-' + i);
           extEl.className = 'extraction-grid';
@@ -859,6 +877,11 @@ async function processAllFiles() {
       document.getElementById('queue-badges-' + i).innerHTML = '<span class="badge-ko"><i class="bi bi-x-lg"></i> Errore</span>';
     }
   }
+
+  // Stop timer
+  clearInterval(timerInterval);
+  const elapsed = Math.floor((performance.now() - t0) / 1000);
+  timerEl.textContent = elapsed < 60 ? elapsed + 's' : Math.floor(elapsed / 60) + 'm ' + (elapsed % 60) + 's';
 
   // Fine: aggiorna sidebar con ultimo risultato (senza ricaricare i file)
   if (lastInfo) {
