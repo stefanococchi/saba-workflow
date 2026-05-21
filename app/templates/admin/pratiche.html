@@ -634,7 +634,7 @@ async function selectPractice(practiceId) {
   // Load from DB
   const cached = await loadPracticeFromDb(practiceId);
   if (cached && cached.result_data) {
-    showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+    await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
   }
 }
 
@@ -679,7 +679,7 @@ async function loadPracticeInfo() {
     const info = cached.result_data;
     const hasFiles = info.files && Object.keys(info.files).length > 0;
     if (hasFiles) {
-      showPracticeResult({ output: { info } }, practiceId);
+      await showPracticeResult({ output: { info } }, practiceId);
       return;
     }
   }
@@ -697,7 +697,7 @@ async function loadPracticeInfo() {
       savePracticeToDb(practiceId, agentId, info);
     }
 
-    showPracticeResult(data, practiceId);
+    await showPracticeResult(data, practiceId);
   } catch (e) {
     alert('Errore: ' + e.message);
   } finally {
@@ -815,8 +815,17 @@ async function processAllFiles() {
   const uploadFd = new FormData();
   filesToProcess.forEach((f, i) => uploadFd.append('file_' + i, f));
   try {
-    await fetch(`/api/ao/practice/${practiceId}/upload-files`, { method: 'POST', body: uploadFd });
-  } catch (e) { console.error('Upload file nel DB fallito:', e); }
+    const upRes = await fetch(`/api/ao/practice-files/${practiceId}/upload`, { method: 'POST', body: uploadFd });
+    const upData = await upRes.json();
+    if (upData.saved?.length) {
+      valEl.innerHTML = `<span class="badge-ok"><i class="bi bi-check2"></i> ${upData.saved.length} file salvati</span>`;
+      valEl.appendChild(timerEl);
+    }
+  } catch (e) {
+    console.error('Upload file nel DB fallito:', e);
+    valEl.innerHTML = `<span class="badge-ko"><i class="bi bi-x-lg"></i> Salvataggio file fallito</span>`;
+    valEl.appendChild(timerEl);
+  }
 
   // Processa un file alla volta, salvando dopo ogni elaborazione
   let lastInfo = null;
@@ -959,7 +968,7 @@ async function reprocessFile(contentHash) {
     const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/file/${contentHash}/reprocess`, { method: 'POST' });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
-    showPracticeResult(data, practiceId);
+    await showPracticeResult(data, practiceId);
   } catch (e) {
     alert('Errore: ' + e.message);
   } finally {
@@ -975,7 +984,7 @@ async function deleteFile(contentHash) {
     const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/file/${contentHash}`, { method: 'DELETE' });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
-    showPracticeResult(data, practiceId);
+    await showPracticeResult(data, practiceId);
   } catch (e) {
     alert('Errore: ' + e.message);
   }
@@ -1002,7 +1011,7 @@ async function showPracticeResult(result, practiceId) {
 
   // Integra file dal DB che AO potrebbe non aver restituito
   try {
-    const r = await fetch(`/api/ao/practice/${practiceId}/list-files`);
+    const r = await fetch(`/api/ao/practice-files/${practiceId}/list`);
     const data = await r.json();
     const dbFiles = data.files || [];
     const knownNames = new Set(Object.values(info.files).map(f => f.fileName));

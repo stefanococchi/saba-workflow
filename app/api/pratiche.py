@@ -68,7 +68,7 @@ def ao_practice_info(agent_id, practice_id):
         return jsonify({"error": str(e)}), 500
 
 
-@pratiche_bp.route('/practice/<practice_id>/upload-files', methods=['POST'])
+@pratiche_bp.route('/practice-files/<practice_id>/upload', methods=['POST'])
 def ao_practice_upload_files(practice_id):
     """Salva i file nel DB subito, prima dell'elaborazione."""
     try:
@@ -101,7 +101,7 @@ def ao_practice_upload_files(practice_id):
         return jsonify({"error": str(e)}), 500
 
 
-@pratiche_bp.route('/practice/<practice_id>/list-files', methods=['GET'])
+@pratiche_bp.route('/practice-files/<practice_id>/list', methods=['GET'])
 def ao_practice_list_files(practice_id):
     """Lista i file salvati nel DB per una pratica."""
     try:
