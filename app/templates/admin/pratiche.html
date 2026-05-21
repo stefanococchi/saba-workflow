@@ -1236,6 +1236,7 @@ function toggleCatalogType(typeId, disabled) {
   catalogData[typeId]._disabled = disabled;
   saveSuspended();
   renderCatalogTypes();
+  syncCatalogToAO();
 }
 
 function soloCatalogType(typeId) {
@@ -1244,12 +1245,30 @@ function soloCatalogType(typeId) {
   }
   saveSuspended();
   renderCatalogTypes();
+  syncCatalogToAO();
 }
 
 function allCatalogTypesOn() {
   for (const id of Object.keys(catalogData)) delete catalogData[id]._disabled;
   saveSuspended();
   renderCatalogTypes();
+  syncCatalogToAO();
+}
+
+async function syncCatalogToAO() {
+  const agentId = selectedCatalogAgentId;
+  if (!agentId) return;
+  try {
+    const r = await fetch(`/api/ao/catalog/${agentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ catalog: buildCatalogPayload() }),
+    });
+    const data = await r.json();
+    if (data.error) console.error('Sync catalogo:', data.error);
+  } catch (e) {
+    console.error('Sync catalogo:', e);
+  }
 }
 
 // ── Persistenza tipi sospesi in localStorage ──
