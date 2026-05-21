@@ -1346,22 +1346,11 @@ async function loadCatalog(agentId) {
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     const freshCatalog = data.output?.catalog || data.output || data.catalog || data;
-    // Ripristina tipi sospesi da localStorage (con domande originali)
+    // Ripristina tipi sospesi da localStorage (definizioni complete)
     const suspended = loadSuspended();
-    for (const [id, originalQuestions] of Object.entries(suspended)) {
-      if (freshCatalog[id]) {
-        // Tipo esiste su AO (con domande disabled) — segna come sospeso
-        freshCatalog[id]._disabled = true;
-        freshCatalog[id]._originalQuestions = originalQuestions;
-      } else {
-        // Tipo non restituito da AO — ricostruisci dalle domande originali
-        freshCatalog[id] = {
-          identification: { aiEnabled: true, regexEnabled: false, instructions: '', hint: '' },
-          extraction: { questions: originalQuestions },
-          _disabled: true,
-          _originalQuestions: originalQuestions,
-        };
-      }
+    for (const [id, fullDef] of Object.entries(suspended)) {
+      // Ripristina la definizione completa, segnata come sospesa
+      freshCatalog[id] = { ...fullDef, _disabled: true };
     }
     catalogData = freshCatalog;
     document.getElementById('catalogTypesTitle').innerHTML = `<i class="bi bi-cpu" style="opacity:0.5"></i> ${agentName}`;
@@ -1419,20 +1408,10 @@ function renderCatalogTypes() {
 }
 
 function suspendType(id) {
-  if (!catalogData[id]._disabled) {
-    // Salva stato originale delle domande prima di sospendere
-    catalogData[id]._originalQuestions = JSON.parse(JSON.stringify(catalogData[id].extraction?.questions || []));
-  }
   catalogData[id]._disabled = true;
 }
 
 function unsuspendType(id) {
-  // Ripristina le domande originali
-  if (catalogData[id]._originalQuestions) {
-    if (!catalogData[id].extraction) catalogData[id].extraction = {};
-    catalogData[id].extraction.questions = catalogData[id]._originalQuestions;
-    delete catalogData[id]._originalQuestions;
-  }
   delete catalogData[id]._disabled;
 }
 
@@ -1483,12 +1462,18 @@ function getSuspendedKey() {
 }
 
 function saveSuspended() {
-  // Salva lo stato originale delle domande (prima della sospensione)
+  // Salva la definizione completa dei tipi sospesi
   const suspended = {};
   for (const [id, def] of Object.entries(catalogData)) {
     if (def._disabled) {
-      // Usa le domande originali se salvate, altrimenti le attuali
-      suspended[id] = def._originalQuestions || (def.extraction?.questions || []);
+      const clean = JSON.parse(JSON.stringify(def));
+      // Ripristina domande originali se disponibili
+      if (clean._originalQuestions && clean.extraction) {
+        clean.extraction.questions = clean._originalQuestions;
+      }
+      delete clean._disabled;
+      delete clean._originalQuestions;
+      suspended[id] = clean;
     }
   }
   if (Object.keys(suspended).length) {
@@ -1506,16 +1491,14 @@ function loadSuspended() {
 }
 
 function buildCatalogPayload() {
-  // Tutti i tipi vengono inviati ad AO (così i file già identificati non si perdono).
-  // Per i tipi sospesi, tutte le domande vengono disabilitate → AO identifica ma non estrae.
+  // I tipi sospesi vengono esclusi dal payload — AO li rimuoverebbe comunque.
+  // Restano salvati nel localStorage per poterli ripristinare.
   const payload = {};
   for (const [id, def] of Object.entries(catalogData)) {
+    if (def._disabled) continue;
     const clean = JSON.parse(JSON.stringify(def));
     delete clean._disabled;
     delete clean._originalQuestions;
-    if (def._disabled && clean.extraction?.questions) {
-      clean.extraction.questions.forEach(q => q.disabled = true);
-    }
     payload[id] = clean;
   }
   return payload;
