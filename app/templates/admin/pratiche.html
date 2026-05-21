@@ -1271,7 +1271,9 @@ function renderQuestions(questions) {
   questions.forEach((q, i) => {
     const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
     list.innerHTML += `
-      <div class="card mb-2 ${q.disabled ? 'opacity-50' : ''}" data-idx="${i}" style="border-radius:12px">
+      <div class="card mb-2 ${q.disabled ? 'opacity-50' : ''}" data-idx="${i}" draggable="true"
+        ondragstart="qDragStart(event)" ondragover="qDragOver(event)" ondrop="qDrop(event)" ondragend="qDragEnd(event)"
+        style="border-radius:12px;transition:opacity 0.15s">
         <div class="card-body p-3">
           <div class="d-flex gap-2 align-items-center mb-2">
             <i class="bi bi-grip-vertical" style="color:var(--md-outline);cursor:grab;font-size:1.1rem" title="Trascina per riordinare"></i>
@@ -1309,6 +1311,38 @@ function renderQuestions(questions) {
           </div>
         </div>
       </div>`;
+  });
+}
+
+// ── Drag & drop riordinamento domande ──
+let qDragIdx = null;
+function qDragStart(e) {
+  const card = e.target.closest('[data-idx]');
+  qDragIdx = +card.dataset.idx;
+  card.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+}
+function qDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const card = e.target.closest('[data-idx]');
+  if (card) card.style.borderTop = '2px solid var(--md-primary)';
+}
+function qDrop(e) {
+  e.preventDefault();
+  const card = e.target.closest('[data-idx]');
+  if (!card || qDragIdx === null) return;
+  const targetIdx = +card.dataset.idx;
+  if (qDragIdx === targetIdx) return;
+  const questions = catalogData[editingTypeId].extraction.questions;
+  const [moved] = questions.splice(qDragIdx, 1);
+  questions.splice(targetIdx, 0, moved);
+  renderQuestions(questions);
+}
+function qDragEnd(e) {
+  qDragIdx = null;
+  document.querySelectorAll('#editQuestionsList [data-idx]').forEach(el => {
+    el.style.opacity = ''; el.style.borderTop = '';
   });
 }
 
