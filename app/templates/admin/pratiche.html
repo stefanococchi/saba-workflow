@@ -439,7 +439,11 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center" style="font-size:0.85rem">
             <span><i class="bi bi-list-check"></i> Domande di estrazione (<span id="editQCount">0</span>)</span>
-            <button class="btn btn-sm btn-outline-primary" onclick="addQuestion()" style="border-radius:8px;font-size:0.78rem"><i class="bi bi-plus-lg"></i> Aggiungi</button>
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllQuestions(true)" style="border-radius:8px;font-size:0.72rem" title="Attiva tutte le domande"><i class="bi bi-check-all"></i> Tutte on</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllQuestions(false)" style="border-radius:8px;font-size:0.72rem" title="Sospendi tutte le domande"><i class="bi bi-pause-circle"></i> Tutte off</button>
+              <button class="btn btn-sm btn-outline-primary" onclick="addQuestion()" style="border-radius:8px;font-size:0.78rem"><i class="bi bi-plus-lg"></i> Aggiungi</button>
+            </div>
           </div>
           <div id="editQuestionsList"></div>
         </div>
@@ -1284,12 +1288,18 @@ function renderQuestions(questions) {
               <span style="font-size:0.75rem">${q.disabled?'Off':'On'}</span>
             </label>
             <div class="ms-auto d-flex gap-1">
+              <button class="btn btn-sm btn-outline-warning" onclick="soloQuestion(${i})" style="border-radius:8px;font-size:0.72rem" title="Testa solo questa domanda (sospendi le altre)"><i class="bi bi-bullseye"></i> Solo</button>
               <button class="btn btn-sm btn-outline-secondary" onclick="duplicateQuestion(${i})" style="border-radius:8px" title="Duplica"><i class="bi bi-copy"></i></button>
               <button class="btn btn-sm btn-outline-danger" onclick="removeQuestion(${i})" style="border-radius:8px" title="Elimina"><i class="bi bi-trash3"></i></button>
             </div>
           </div>
-          <textarea class="form-control mb-2" rows="2" style="border-radius:8px;font-size:0.85rem"
-            onchange="updateQ(${i},'question',this.value)" placeholder="Scrivi la query di estrazione...">${esc(q.question)}</textarea>
+          <div class="d-flex gap-2 align-items-start mb-2">
+            <textarea class="form-control" rows="2" style="border-radius:8px;font-size:0.85rem;flex:1" id="q_textarea_${i}"
+              onchange="updateQ(${i},'question',this.value)" placeholder="Scrivi la query di estrazione...">${esc(q.question)}</textarea>
+            <button class="btn btn-sm btn-outline-secondary" onclick="assistQuestion(${i})" style="border-radius:8px;white-space:nowrap;margin-top:2px" title="Migliora prompt con AI">
+              <i class="bi bi-magic"></i>
+            </button>
+          </div>
           <div class="d-flex align-items-center gap-2">
             <label style="font-size:0.75rem;color:var(--md-on-surface-variant);white-space:nowrap"><i class="bi bi-link-45deg"></i> Dipende da:</label>
             <input type="text" class="form-control form-control-sm" style="border-radius:8px;font-size:0.78rem"
@@ -1321,6 +1331,49 @@ function removeQuestion(idx) {
   if (!confirm('Eliminare questa query di estrazione?')) return;
   const questions = catalogData[editingTypeId].extraction.questions;
   questions.splice(idx, 1);
+  renderQuestions(questions);
+}
+
+async function assistQuestion(idx) {
+  const agentId = selectedCatalogAgentId;
+  if (!agentId) return alert('Nessun agente selezionato');
+  const ta = document.getElementById('q_textarea_' + idx);
+  const draft = ta.value.trim();
+  if (!draft) return alert('Scrivi prima una domanda da migliorare');
+
+  const btn = ta.closest('.card-body').querySelector('[onclick*="assistQuestion"]');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="prat-spinner" style="width:14px;height:14px;border-width:2px"></span>';
+
+  try {
+    const r = await fetch('/api/ao/sintesi/assist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentId, draftPrompt: draft, action: 'improve', model: 'gpt-4o-mini' }),
+    });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    const improved = data.output?.improvedPrompt || data.output?.prompt || draft;
+    ta.value = improved;
+    updateQ(idx, 'question', improved);
+  } catch (e) {
+    alert('Errore: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
+}
+
+function toggleAllQuestions(enable) {
+  const questions = catalogData[editingTypeId]?.extraction?.questions || [];
+  questions.forEach(q => q.disabled = !enable);
+  renderQuestions(questions);
+}
+
+function soloQuestion(idx) {
+  const questions = catalogData[editingTypeId]?.extraction?.questions || [];
+  questions.forEach((q, i) => q.disabled = (i !== idx));
   renderQuestions(questions);
 }
 
