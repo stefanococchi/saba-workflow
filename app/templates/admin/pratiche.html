@@ -390,9 +390,12 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
       <div id="catalogTypesArea" style="display:none">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h6 class="mb-0" id="catalogTypesTitle" style="font-weight:600"></h6>
-          <button class="btn btn-sm btn-primary" onclick="newCatalogType()" style="border-radius:8px">
-            <i class="bi bi-plus-lg"></i> Aggiungi tipo
-          </button>
+          <div class="d-flex gap-1">
+            <button class="btn btn-sm btn-outline-secondary" onclick="allCatalogTypesOn()" style="border-radius:8px;font-size:0.72rem"><i class="bi bi-check-all"></i> Tutti on</button>
+            <button class="btn btn-sm btn-primary" onclick="newCatalogType()" style="border-radius:8px">
+              <i class="bi bi-plus-lg"></i> Aggiungi tipo
+            </button>
+          </div>
         </div>
         <div id="catalogTypesList"></div>
       </div>
@@ -1195,10 +1198,19 @@ function renderCatalogTypes() {
     const activeQ = questions.filter(q => !q.disabled).length;
     const qNames = questions.slice(0, 5).map(q => q.id).join(', ');
     const esc = s => (s||'').replace(/'/g,"\\'");
+    const off = typeDef._disabled;
 
     list.innerHTML += `
-      <div class="type-row" onclick="openCatalogEdit('${esc(typeId)}')">
-        <div class="type-name">${typeId}</div>
+      <div class="type-row${off ? ' opacity-50' : ''}" onclick="openCatalogEdit('${esc(typeId)}')" style="${off ? 'border-style:dashed' : ''}">
+        <div class="d-flex align-items-center gap-2">
+          <div class="type-name" style="flex:1">${typeId}</div>
+          <div onclick="event.stopPropagation()" class="d-flex align-items-center gap-1">
+            <label class="form-check form-switch mb-0" title="${off ? 'Tipo sospeso — non verrà elaborato' : 'Tipo attivo'}">
+              <input class="form-check-input" type="checkbox" ${off ? '' : 'checked'} onchange="toggleCatalogType('${esc(typeId)}', !this.checked)">
+            </label>
+            <button class="btn btn-sm btn-outline-warning" onclick="soloCatalogType('${esc(typeId)}')" style="border-radius:6px;font-size:0.68rem;padding:1px 6px" title="Attiva solo questo tipo"><i class="bi bi-bullseye"></i></button>
+          </div>
+        </div>
         <div class="type-meta">
           <span><i class="bi bi-cpu"></i> AI ${ident.aiEnabled ? 'on' : 'off'}</span>
           <span><i class="bi bi-regex"></i> Regex ${ident.regexEnabled ? 'on' : 'off'}</span>
@@ -1211,6 +1223,39 @@ function renderCatalogTypes() {
         </div>
       </div>`;
   }
+}
+
+function toggleCatalogType(typeId, disabled) {
+  catalogData[typeId]._disabled = disabled;
+  renderCatalogTypes();
+}
+
+function soloCatalogType(typeId) {
+  for (const id of Object.keys(catalogData)) {
+    catalogData[id]._disabled = (id !== typeId);
+  }
+  renderCatalogTypes();
+}
+
+function allCatalogTypesOn() {
+  for (const id of Object.keys(catalogData)) delete catalogData[id]._disabled;
+  renderCatalogTypes();
+}
+
+function buildCatalogPayload() {
+  // Per i tipi sospesi (_disabled), disabilita tutte le domande di estrazione
+  // così AO identifica comunque ma non estrae nulla. Il catalogo resta completo.
+  const payload = {};
+  for (const [id, def] of Object.entries(catalogData)) {
+    const clean = JSON.parse(JSON.stringify(def));
+    const wasSuspended = clean._disabled;
+    delete clean._disabled;
+    if (wasSuspended && clean.extraction?.questions) {
+      clean.extraction.questions.forEach(q => q.disabled = true);
+    }
+    payload[id] = clean;
+  }
+  return payload;
 }
 
 function newCatalogType() {
@@ -1231,11 +1276,12 @@ async function deleteCatalogType(typeId) {
 
   // Salva su AO
   const agentId = selectedCatalogAgentId;
+  const catalogToSave = buildCatalogPayload();
   try {
     const r = await fetch(`/api/ao/catalog/${agentId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ catalog: catalogData }),
+      body: JSON.stringify({ catalog: catalogToSave }),
     });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
@@ -1430,11 +1476,14 @@ async function saveCatalogEdit() {
     hint: document.getElementById('editHint').value,
   };
 
+  // Invia tutto ad AO: per i tipi sospesi, disabilita tutte le domande di estrazione
+  const catalogToSave = buildCatalogPayload();
+
   try {
     const r = await fetch(`/api/ao/catalog/${agentId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ catalog: catalogData }),
+      body: JSON.stringify({ catalog: catalogToSave }),
     });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
