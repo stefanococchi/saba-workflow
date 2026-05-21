@@ -600,7 +600,7 @@ async function loadElaboraPractices(agentId) {
     list.innerHTML = '';
     for (const pr of results) {
       const info = pr.result_data || {};
-      const fileCount = info.files ? Object.keys(info.files).length : 0;
+      const fileCount = pr.file_count ?? (info.files ? Object.keys(info.files).length : 0);
       const date = pr.updated_at ? new Date(pr.updated_at).toLocaleDateString('it') : '';
       const isActive = pr.practice_id === selectedPracticeId;
       list.innerHTML += `
@@ -996,9 +996,30 @@ function resetPractice() {
 }
 
 // ── Render practice result ─────────────────────────────────────────
-function showPracticeResult(result, practiceId) {
+async function showPracticeResult(result, practiceId) {
   const info = result.output?.info || result.output || result.info || result;
-  const hasFiles = info.files && Object.keys(info.files).length > 0;
+  if (!info.files) info.files = {};
+
+  // Integra file dal DB che AO potrebbe non aver restituito
+  try {
+    const r = await fetch(`/api/ao/practice/${practiceId}/list-files`);
+    const data = await r.json();
+    const dbFiles = data.files || [];
+    const knownNames = new Set(Object.values(info.files).map(f => f.fileName));
+    for (const df of dbFiles) {
+      if (!knownNames.has(df.file_name)) {
+        const pseudoHash = 'db_' + df.file_name.replace(/[^a-zA-Z0-9]/g, '_');
+        info.files[pseudoHash] = {
+          fileName: df.file_name,
+          state: { identification: 'pending', extraction: 'pending' },
+          identification: {},
+          extraction: {},
+        };
+      }
+    }
+  } catch (e) { console.error('List files fallito:', e); }
+
+  const hasFiles = Object.keys(info.files).length > 0;
   document.getElementById('dropZoneContainer').style.display = hasFiles ? 'none' : '';
   document.getElementById('elaboraEmpty').style.display = 'none';
   document.getElementById('practiceResults').style.display = '';

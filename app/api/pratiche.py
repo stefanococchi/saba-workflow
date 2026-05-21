@@ -101,6 +101,20 @@ def ao_practice_upload_files(practice_id):
         return jsonify({"error": str(e)}), 500
 
 
+@pratiche_bp.route('/practice/<practice_id>/list-files', methods=['GET'])
+def ao_practice_list_files(practice_id):
+    """Lista i file salvati nel DB per una pratica."""
+    try:
+        files = db.query(PracticeFile).filter_by(practice_id=practice_id).all()
+        return jsonify({"files": [
+            {"file_name": f.file_name, "mime_type": f.mime_type}
+            for f in files
+        ]})
+    except Exception as e:
+        logger.error(f"List practice files: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @pratiche_bp.route('/practice/<agent_id>/<practice_id>/process', methods=['POST'])
 def ao_practice_process(agent_id, practice_id):
     """Processa una pratica: carica file e avvia identify+extract."""
@@ -368,7 +382,15 @@ def list_practice_results():
     """Lista tutte le pratiche salvate."""
     try:
         results = db.query(PracticeResult).order_by(PracticeResult.updated_at.desc()).all()
-        return jsonify({"results": [r.to_dict() for r in results]})
+        items = []
+        for r in results:
+            d = r.to_dict()
+            # Conteggio file reali dal DB
+            d['file_count'] = db.query(PracticeFile).filter_by(
+                practice_id=r.practice_id
+            ).count()
+            items.append(d)
+        return jsonify({"results": items})
     except Exception as e:
         logger.error(f"List practice results: {e}")
         return jsonify({"error": str(e)}), 500
