@@ -1,10 +1,12 @@
 """Blueprint API per Pratiche Documentali (proxy verso Agent Orchestrator)."""
+from datetime import datetime
 from flask import Blueprint, request, jsonify, Response
 from app.services import ao_service
 from app import db_session as db
-from app.models import PracticeResult, PracticeFile
+from app.models import PracticeResult, PracticeFile, Participant, WorkflowStep, StepType, ParticipantStatus, ExecutionStatus, Execution
 import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -425,4 +427,128 @@ def get_practice_file(practice_id, file_name):
                         headers={'Content-Disposition': f'inline; filename="{pf.file_name}"'})
     except Exception as e:
         logger.error(f"Get practice file: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Document Check Verdict (workflow integration) ────────────────
+
+def _parse_workflow_practice_id(practice_id):
+    """Parse practice_id formato WF-{wf_id}-P-{p_id}-S-{s_id}. Returns (wf_id, p_id, s_id) or None."""
+    m = re.match(r'^WF-(\d+)-P-(\d+)-S-(\d+)$', practice_id)
+    if m:
+        return int(m.group(1)), int(m.group(2)), int(m.group(3))
+    return None
+
+
+@pratiche_bp.route('/practice/<practice_id>/verdict', methods=['POST'])
+def document_check_verdict(practice_id):
+    """Valida o rifiuta una pratica document_check, avanzando il workflow."""
+    try:
+        body = request.get_json() or {}
+        action = body.get('action', '')
+        notes = body.get('notes', '')
+
+        if action not in ('validate', 'reject'):
+            return jsonify({"error": "Azione non valida (validate/reject)"}), 400
+
+        # Parse practice_id per estrarre workflow/participant/step
+        parsed = _parse_workflow_practice_id(practice_id)
+        if not parsed:
+            return jsonify({"error": "Practice non collegata a un workflow", "workflow_linked": False}), 200
+
+        wf_id, participant_id, step_id = parsed
+
+        participant = db.get(Participant, participant_id)
+        if not participant:
+            return jsonify({"error": "Partecipante non trovato"}), 404
+
+        step = db.get(WorkflowStep, step_id)
+        if not step or step.type != StepType.DOCUMENT_CHECK:
+            return jsonify({"error": "Step non trovato o tipo errato"}), 404
+
+        # First-responder: controlla se già gestito
+        collected = dict(participant.collected_data or {})
+        if collected.get('_doc_check_handled'):
+            return jsonify({
+                "ok": True,
+                "already_handled": True,
+                "previous_action": collected.get('_doc_check_action'),
+            })
+
+        config = step.skip_conditions or {}
+
+        # Segna come gestito
+        collected['_doc_check_handled'] = True
+        collected['_doc_check_action'] = action
+        collected['_doc_check_at'] = datetime.utcnow().isoformat()
+        collected['_doc_check_notes'] = notes
+        participant.collected_data = collected
+
+        # Aggiorna PracticeResult
+        pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if pr and pr.result_data:
+            rd = dict(pr.result_data)
+            rd['validation'] = {
+                'outcome': 'OK' if action == 'validate' else 'REJECTED',
+                'action': action,
+                'notes': notes,
+                'at': datetime.utcnow().isoformat(),
+            }
+            pr.result_data = rd
+
+        # Aggiorna execution
+        ex = db.query(Execution).filter(
+            Execution.participant_id == participant_id,
+            Execution.step_id == step_id,
+            Execution.status == ExecutionStatus.SENT,
+        ).first()
+        if ex:
+            ex.status = ExecutionStatus.COMPLETED if action == 'validate' else ExecutionStatus.FAILED
+            ex.completed_at = datetime.utcnow()
+
+        # Log activity
+        from app.services.activity_service import log_activity
+        log_activity(
+            workflow_id=wf_id,
+            event_type=f'document_check_{action}d',
+            description=f'{participant.full_name or participant.email} — pratica {action}d' + (f': {notes}' if notes else ''),
+            participant_id=participant_id,
+        )
+
+        # Branching — stessa logica di human_approval
+        from app.services.scheduler_service import SchedulerService
+
+        if action == 'validate':
+            if_validated = config.get('if_validated', 'continue')
+            if if_validated == 'complete':
+                participant.status = ParticipantStatus.COMPLETED
+                participant.completed_at = datetime.utcnow()
+                SchedulerService.cancel_scheduled_executions(participant.id)
+            elif if_validated == 'jump' and config.get('if_validated_step'):
+                target_order = config['if_validated_step']
+                target_step = next((s for s in participant.workflow.steps if s.order == target_order), None)
+                if target_step:
+                    SchedulerService.schedule_step(participant, target_step, delay_hours=0)
+            else:
+                SchedulerService._schedule_next_step(participant, step)
+        else:
+            if_rejected = config.get('if_rejected', 'stop')
+            if if_rejected == 'continue':
+                SchedulerService._schedule_next_step(participant, step)
+            elif if_rejected == 'jump' and config.get('if_rejected_step'):
+                target_order = config['if_rejected_step']
+                target_step = next((s for s in participant.workflow.steps if s.order == target_order), None)
+                if target_step:
+                    SchedulerService.schedule_step(participant, target_step, delay_hours=0)
+            else:
+                participant.status = ParticipantStatus.COMPLETED
+                participant.completed_at = datetime.utcnow()
+                SchedulerService.cancel_scheduled_executions(participant.id)
+
+        db.commit()
+        return jsonify({"ok": True, "action": action, "workflow_linked": True})
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Document check verdict error: {e}")
         return jsonify({"error": str(e)}), 500

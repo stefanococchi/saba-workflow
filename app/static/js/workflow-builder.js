@@ -817,6 +817,8 @@ function renderNodeSubtitle(step) {
             return fname + ' · ' + (step.config.columns || []).length + ' col';
         case 'document_processing':
             return (step.config.ao_agent_name || 'Agent non configurato') + (step.config.delay_hours ? ' · ' + step.config.delay_hours + 'h' : '');
+        case 'document_check':
+            return (step.config.ao_agent_name || 'Agent non configurato') + ' · verifica manuale';
         default:
             return capitalize(step.type);
     }
@@ -943,6 +945,9 @@ function editStep(index) {
     if (step.type === 'document_processing') {
         _loadDocProcAgents(step.config.ao_agent_id || step.config.ao_agent_name || '');
     }
+    if (step.type === 'document_check') {
+        _loadDocCheckAgents(step.config.ao_agent_id || '');
+    }
 
     // Destroy Summernote when modal closes
     document.getElementById('stepEditModal').addEventListener('hidden.bs.modal', function() {
@@ -962,7 +967,7 @@ function renderStepEditForm(step, index) {
     `;
 
     // For branching steps, the next-step is already handled by their true/false selectors
-    var _branchingTypes = ['condition', 'goal_check', 'human_approval'];
+    var _branchingTypes = ['condition', 'goal_check', 'human_approval', 'document_check'];
     var needsNextStep = _branchingTypes.indexOf(step.type) === -1;
     // Email with wait_for_landing is also branching
     if (step.type === 'email' && step.config && step.config.wait_for_landing) {
@@ -1705,6 +1710,88 @@ function _renderStepEditFormInner(step, index, common) {
                 </div>
             `;
         }
+
+        case 'document_check': {
+            var ifValidated = step.config.if_validated || 'continue';
+            var ifRejected = step.config.if_rejected || 'stop';
+            var stepsOptions = '';
+            if (window._workflowSteps) {
+                window._workflowSteps.forEach(function(s) {
+                    stepsOptions += '<option value="' + s.order + '"' +
+                        (step.config.if_validated_step == s.order ? ' selected' : '') +
+                        '>' + s.order + '. ' + (s.name || s.type) + '</option>';
+                });
+            }
+            var stepsOptionsRej = '';
+            if (window._workflowSteps) {
+                window._workflowSteps.forEach(function(s) {
+                    stepsOptionsRej += '<option value="' + s.order + '"' +
+                        (step.config.if_rejected_step == s.order ? ' selected' : '') +
+                        '>' + s.order + '. ' + (s.name || s.type) + '</option>';
+                });
+            }
+            return common + `
+                <div class="mb-3">
+                    <label class="form-label">Agente AO</label>
+                    <select class="form-select" id="editDocCheckAgent">
+                        <option value="">Caricamento agenti...</option>
+                    </select>
+                    <div class="form-text">L'agente che identifica e estrae dati dai documenti.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Ritardo (ore)</label>
+                    <input type="number" class="form-control" id="editDocCheckDelay"
+                           value="${step.config.delay_hours || 0}" min="0">
+                </div>
+                <hr>
+                <h6 class="text-muted"><i class="bi bi-signpost-split"></i> Branching</h6>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-success"><i class="bi bi-check-circle"></i> Se validata</label>
+                        <select class="form-select" id="editDocCheckIfValidated" onchange="toggleDocCheckJump('validated')">
+                            <option value="continue" ${ifValidated === 'continue' ? 'selected' : ''}>Continua (step successivo)</option>
+                            <option value="jump" ${ifValidated === 'jump' ? 'selected' : ''}>Salta a step...</option>
+                            <option value="complete" ${ifValidated === 'complete' ? 'selected' : ''}>Completa partecipante</option>
+                        </select>
+                        <select class="form-select mt-2" id="editDocCheckValidatedStep"
+                            style="display:${ifValidated === 'jump' ? 'block' : 'none'}">
+                            ${stepsOptions}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-danger"><i class="bi bi-x-circle"></i> Se rifiutata</label>
+                        <select class="form-select" id="editDocCheckIfRejected" onchange="toggleDocCheckJump('rejected')">
+                            <option value="stop" ${ifRejected === 'stop' ? 'selected' : ''}>Ferma (completa partecipante)</option>
+                            <option value="continue" ${ifRejected === 'continue' ? 'selected' : ''}>Continua (step successivo)</option>
+                            <option value="jump" ${ifRejected === 'jump' ? 'selected' : ''}>Salta a step...</option>
+                        </select>
+                        <select class="form-select mt-2" id="editDocCheckRejectedStep"
+                            style="display:${ifRejected === 'jump' ? 'block' : 'none'}">
+                            ${stepsOptionsRej}
+                        </select>
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <small><i class="bi bi-info-circle"></i>
+                    <strong>Verifica Documenti:</strong><br>
+                    1. I documenti vengono elaborati con AO (identificazione + estrazione dati)<br>
+                    2. Il workflow si <strong>ferma</strong> in attesa della validazione operatore<br>
+                    3. L'operatore verifica i dati estratti nel pannello Pratiche<br>
+                    4. Cliccando Valida/Rifiuta il workflow avanza o si ferma
+                    </small>
+                </div>
+            `;
+        }
+    }
+}
+
+function toggleDocCheckJump(which) {
+    if (which === 'validated') {
+        var v = document.getElementById('editDocCheckIfValidated').value;
+        document.getElementById('editDocCheckValidatedStep').style.display = v === 'jump' ? 'block' : 'none';
+    } else {
+        var v = document.getElementById('editDocCheckIfRejected').value;
+        document.getElementById('editDocCheckRejectedStep').style.display = v === 'jump' ? 'block' : 'none';
     }
 }
 
@@ -1725,6 +1812,27 @@ function _loadDocProcAgents(selectedId) {
         })
         .catch(function() {
             var sel = document.getElementById('editDocProcAgent');
+            if (sel) sel.innerHTML = '<option value="">Errore caricamento agenti</option>';
+        });
+}
+
+// Load AO agents for document_check step
+function _loadDocCheckAgents(selectedId) {
+    fetch('/api/ao/agents')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var sel = document.getElementById('editDocCheckAgent');
+            if (!sel) return;
+            var agents = data.agents || [];
+            sel.innerHTML = '<option value="">Seleziona agente...</option>';
+            agents.forEach(function(a) {
+                var name = a.name || a.agentName || a.id;
+                var selected = (a.id === selectedId || name === selectedId) ? 'selected' : '';
+                sel.innerHTML += '<option value="' + a.id + '" data-name="' + name + '" ' + selected + '>' + name + '</option>';
+            });
+        })
+        .catch(function() {
+            var sel = document.getElementById('editDocCheckAgent');
             if (sel) sel.innerHTML = '<option value="">Errore caricamento agenti</option>';
         });
 }
@@ -2516,6 +2624,16 @@ function saveStepEdit() {
             step.config.required_docs = document.getElementById('editDocProcRequiredDocs')?.value || '';
             step.config.delay_hours = parseInt(document.getElementById('editDocProcDelay')?.value) || 0;
             step.config.wait_for_landing = document.getElementById('editDocProcWaitLanding')?.checked || false;
+            break;
+        case 'document_check':
+            var dcAgentSel = document.getElementById('editDocCheckAgent');
+            step.config.ao_agent_id = dcAgentSel?.value || '';
+            step.config.ao_agent_name = dcAgentSel?.selectedOptions[0]?.dataset?.name || dcAgentSel?.selectedOptions[0]?.text || '';
+            step.config.delay_hours = parseInt(document.getElementById('editDocCheckDelay')?.value) || 0;
+            step.config.if_validated = document.getElementById('editDocCheckIfValidated')?.value || 'continue';
+            step.config.if_validated_step = parseInt(document.getElementById('editDocCheckValidatedStep')?.value) || 0;
+            step.config.if_rejected = document.getElementById('editDocCheckIfRejected')?.value || 'stop';
+            step.config.if_rejected_step = parseInt(document.getElementById('editDocCheckRejectedStep')?.value) || 0;
             break;
     }
 
@@ -3493,7 +3611,8 @@ var DR_TYPE_ICONS = {
     export_data: 'bi-download', condition: 'bi-signpost-split-fill',
     survey: 'bi-ui-checks', human_approval: 'bi-person-check-fill',
     excel_write: 'bi-file-earmark-spreadsheet-fill', whatsapp: 'bi-whatsapp',
-    document_processing: 'bi-file-earmark-check-fill'
+    document_processing: 'bi-file-earmark-check-fill',
+    document_check: 'bi-file-earmark-ruled-fill'
 };
 
 var DR_TYPE_COLORS = {
@@ -3501,7 +3620,8 @@ var DR_TYPE_COLORS = {
     human_approval: '#9C5A2E', goal_check: '#386A20', whatsapp: '#25D366',
     survey: '#0277BD', export_data: '#6D4C41', excel_write: '#6D4C41',
     sms: '#E65100', webhook: '#455A64',
-    document_processing: '#1565C0'
+    document_processing: '#1565C0',
+    document_check: '#6A1B9A'
 };
 
 function switchReviewTab(tab) {

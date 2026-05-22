@@ -29,6 +29,7 @@ class StepType(str, Enum):
     EXCEL_WRITE = 'excel_write'
     WHATSAPP = 'whatsapp'
     DOCUMENT_PROCESSING = 'document_processing'
+    DOCUMENT_CHECK = 'document_check'
 
 
 class ParticipantStatus(str, Enum):

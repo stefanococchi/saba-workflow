@@ -1894,15 +1894,30 @@ function openPreviewExternal() {
   window.open(viewerUrl, 'pdfviewer', `width=${Math.min(850, screen.width * 0.5)},height=${Math.min(950, screen.height * 0.9)},resizable=yes,scrollbars=yes`);
 }
 
-// Validate/reject practice (placeholder actions)
+// Validate/reject practice — also triggers workflow advancement if linked
 async function validatePractice() {
   const practiceId = window._practiceId;
   const agentId = getAgentId();
   if (!practiceId) return;
-  // Save validation status
+
+  // Save validation locally
   const files = window._practiceFiles || {};
   await savePracticeToDb(practiceId, agentId, { files, validation: { outcome: 'OK', anomalies: [] } });
   document.getElementById('infoValidation').innerHTML = '<span class="badge-ok"><i class="bi bi-check2"></i> Validata</span>';
+
+  // Call verdict API (advances workflow if practice is linked to a document_check step)
+  try {
+    const r = await fetch(`/api/ao/practice/${practiceId}/verdict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'validate' }),
+    });
+    const data = await r.json();
+    if (data.workflow_linked) {
+      document.getElementById('infoValidation').innerHTML = '<span class="badge-ok"><i class="bi bi-check2"></i> Validata — workflow avanzato</span>';
+    }
+  } catch (e) { console.error('Verdict API error:', e); }
+
   if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
 }
 
@@ -1912,9 +1927,25 @@ async function rejectPractice() {
   if (!practiceId) return;
   const reason = prompt('Motivo del rifiuto (opzionale):');
   if (reason === null) return;
+
+  // Save rejection locally
   const files = window._practiceFiles || {};
   await savePracticeToDb(practiceId, agentId, { files, validation: { outcome: 'REJECTED', anomalies: [{ severity: 'error', message: reason || 'Rifiutata manualmente' }] } });
   document.getElementById('infoValidation').innerHTML = '<span class="badge-ko"><i class="bi bi-x-lg"></i> Rifiutata</span>';
+
+  // Call verdict API (stops workflow if practice is linked to a document_check step)
+  try {
+    const r = await fetch(`/api/ao/practice/${practiceId}/verdict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reject', notes: reason || '' }),
+    });
+    const data = await r.json();
+    if (data.workflow_linked) {
+      document.getElementById('infoValidation').innerHTML = '<span class="badge-ko"><i class="bi bi-x-lg"></i> Rifiutata — workflow fermato</span>';
+    }
+  } catch (e) { console.error('Verdict API error:', e); }
+
   if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
 }
 

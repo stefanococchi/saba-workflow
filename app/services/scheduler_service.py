@@ -301,6 +301,15 @@ class SchedulerService:
                     success = SchedulerService._execute_excel_write_step(participant, step, execution)
                 elif step.type.value == 'document_processing':
                     success = SchedulerService._execute_document_processing_step(participant, step, execution)
+                elif step.type.value == 'document_check':
+                    success = SchedulerService._execute_document_check_step(participant, step, execution)
+                    if success:
+                        # Don't advance — workflow pauses until operator validates/rejects
+                        execution.status = ExecutionStatus.SENT
+                        execution.sent_at = datetime.utcnow()
+                        participant.last_interaction = datetime.utcnow()
+                        _db().commit()
+                        return
                 else:
                     logger.warning(f"⚠ Unsupported step type: {step.type}")
 
@@ -1671,5 +1680,82 @@ class SchedulerService:
 
         except Exception as e:
             logger.error(f"✗ Document processing error: {str(e)}")
+            execution.error_message = str(e)
+            return False
+
+    @staticmethod
+    def _execute_document_check_step(participant, step, execution):
+        """Elabora documenti con AO e pausa il workflow in attesa di validazione operatore."""
+        try:
+            from app.services import ao_service
+            from app.models import PracticeResult, PracticeFile
+
+            config = step.skip_conditions or {}
+            agent_id = config.get('ao_agent_id', '')
+            if not agent_id:
+                execution.error_message = "Agent AO non configurato nello step"
+                return False
+
+            practice_id = f"WF-{step.workflow_id}-P-{participant.id}-S-{step.id}"
+
+            # Recupera file dal collected_data (caricati via landing) o da PracticeFile
+            collected = participant.collected_data or {}
+            uploaded_files = collected.get('uploaded_files', [])
+
+            files = {}
+            if uploaded_files:
+                import base64
+                for idx, file_info in enumerate(uploaded_files):
+                    content = base64.b64decode(file_info['data']) if isinstance(file_info.get('data'), str) else file_info.get('data', b'')
+                    files[f"file_{idx}"] = (content, file_info.get('mime', 'application/pdf'), file_info.get('name', f'file_{idx}'))
+            else:
+                # Prova file già salvati nel DB
+                db_files = _db().query(PracticeFile).filter_by(practice_id=practice_id).all()
+                for idx, pf in enumerate(db_files):
+                    files[f"file_{idx}"] = (pf.data, pf.mime_type, pf.file_name)
+
+            # Processa con AO (se ci sono file)
+            if files:
+                result = ao_service.practice_process(agent_id, practice_id, files=files)
+                output = result.get('output', {})
+                info = output.get('info', output)
+            else:
+                # Nessun file: crea pratica vuota, l'operatore caricherà i file manualmente
+                info = {'practiceId': practice_id, 'files': {}}
+
+            # Salva in PracticeResult per il pannello pratiche
+            pr = _db().query(PracticeResult).filter_by(practice_id=practice_id).first()
+            if pr:
+                pr.result_data = info
+                pr.agent_id = agent_id
+                pr.agent_name = config.get('ao_agent_name', '')
+            else:
+                pr = PracticeResult(
+                    practice_id=practice_id,
+                    agent_id=agent_id,
+                    agent_name=config.get('ao_agent_name', ''),
+                    result_data=info,
+                )
+                _db().add(pr)
+
+            # Salva riferimenti nel collected_data del partecipante
+            collected['ao_practice_id'] = practice_id
+            collected['ao_agent_id'] = agent_id
+            collected['_doc_check_step_id'] = step.id
+            participant.collected_data = collected
+            _db().flush()
+
+            execution.result_data = {
+                'practice_id': practice_id,
+                'agent_id': agent_id,
+                'status': 'pending_review',
+                'files_count': len(info.get('files', {})),
+            }
+
+            logger.info(f"📋 Document check: practice {practice_id} ready for review ({len(info.get('files', {}))} files)")
+            return True
+
+        except Exception as e:
+            logger.error(f"✗ Document check error: {str(e)}")
             execution.error_message = str(e)
             return False

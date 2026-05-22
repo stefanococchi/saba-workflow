@@ -455,7 +455,7 @@ function _applyDrawflowStyles() {
 // ========== Build Node HTML ==========
 
 var _decisionTypes = ['condition', 'goal_check'];
-var _branchTypes = ['condition', 'goal_check', 'human_approval'];
+var _branchTypes = ['condition', 'goal_check', 'human_approval', 'document_check'];
 
 function _isDecision(step) {
     return _decisionTypes.indexOf(step.type) !== -1;
