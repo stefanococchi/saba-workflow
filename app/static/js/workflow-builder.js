@@ -1715,16 +1715,16 @@ function _renderStepEditFormInner(step, index, common) {
             var ifValidated = step.config.if_validated || 'continue';
             var ifRejected = step.config.if_rejected || 'stop';
             var stepsOptions = '';
-            if (window._workflowSteps) {
-                window._workflowSteps.forEach(function(s) {
+            if (workflowSteps) {
+                workflowSteps.forEach(function(s) {
                     stepsOptions += '<option value="' + s.order + '"' +
                         (step.config.if_validated_step == s.order ? ' selected' : '') +
                         '>' + s.order + '. ' + (s.name || s.type) + '</option>';
                 });
             }
             var stepsOptionsRej = '';
-            if (window._workflowSteps) {
-                window._workflowSteps.forEach(function(s) {
+            if (workflowSteps) {
+                workflowSteps.forEach(function(s) {
                     stepsOptionsRej += '<option value="' + s.order + '"' +
                         (step.config.if_rejected_step == s.order ? ' selected' : '') +
                         '>' + s.order + '. ' + (s.name || s.type) + '</option>';
