@@ -2511,7 +2511,10 @@ function openCatalogEdit(typeId) {
   editingTypeId = typeId;
   const def = catalogData[typeId];
   const ident = def.identification || {};
-  const questions = Array.isArray(def.extraction?.questions) ? def.extraction.questions : [];
+  // Assicura che extraction.questions esista come array nell'oggetto
+  if (!def.extraction) def.extraction = {};
+  if (!Array.isArray(def.extraction.questions)) def.extraction.questions = [];
+  const questions = def.extraction.questions;
 
   document.getElementById('catalogTypesArea').style.display = 'none';
   document.getElementById('catalogEditArea').style.display = '';
