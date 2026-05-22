@@ -818,7 +818,9 @@ function renderNodeSubtitle(step) {
         case 'document_processing':
             return (step.config.ao_agent_name || 'Agent non configurato') + (step.config.delay_hours ? ' · ' + step.config.delay_hours + 'h' : '');
         case 'document_check':
-            return (step.config.ao_agent_name || 'Agent non configurato') + ' · verifica manuale';
+            var dcTypes = (step.config.doc_types || []);
+            var dcLabel = dcTypes.length > 0 ? dcTypes.join(', ') : 'tutti i tipi';
+            return (step.config.ao_agent_name || 'Agent non configurato') + ' · ' + dcLabel;
         default:
             return capitalize(step.type);
     }
@@ -1730,13 +1732,21 @@ function _renderStepEditFormInner(step, index, common) {
                         '>' + s.order + '. ' + (s.name || s.type) + '</option>';
                 });
             }
+            var selectedDocTypes = step.config.doc_types || [];
             return common + `
                 <div class="mb-3">
                     <label class="form-label">Agente AO</label>
-                    <select class="form-select" id="editDocCheckAgent">
+                    <select class="form-select" id="editDocCheckAgent" onchange="_loadDocCheckCatalogTypes()">
                         <option value="">Caricamento agenti...</option>
                     </select>
                     <div class="form-text">L'agente che identifica e estrae dati dai documenti.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label"><i class="bi bi-journal-bookmark"></i> Tipi documento per questo step</label>
+                    <div id="editDocCheckTypes" style="border:1.5px solid var(--bs-border-color);border-radius:8px;padding:10px;max-height:200px;overflow-y:auto;background:#fff">
+                        <span class="text-muted" style="font-size:0.8rem">Seleziona un agente per caricare i tipi...</span>
+                    </div>
+                    <div class="form-text">Seleziona quali tipi documento elaborare in questo step. Se nessuno selezionato, usa tutto il catalogo.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Ritardo (ore)</label>
@@ -1830,11 +1840,69 @@ function _loadDocCheckAgents(selectedId) {
                 var selected = (a.id === selectedId || name === selectedId) ? 'selected' : '';
                 sel.innerHTML += '<option value="' + a.id + '" data-name="' + name + '" ' + selected + '>' + name + '</option>';
             });
+            // Carica tipi catalogo per l'agente selezionato
+            if (selectedId) _loadDocCheckCatalogTypes();
         })
         .catch(function() {
             var sel = document.getElementById('editDocCheckAgent');
             if (sel) sel.innerHTML = '<option value="">Errore caricamento agenti</option>';
         });
+}
+
+function _loadDocCheckCatalogTypes() {
+    var agentId = document.getElementById('editDocCheckAgent')?.value;
+    var container = document.getElementById('editDocCheckTypes');
+    if (!agentId || !container) {
+        if (container) container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Seleziona un agente per caricare i tipi...</span>';
+        return;
+    }
+    container.innerHTML = '<span class="text-muted" style="font-size:0.8rem"><span class="spinner-border spinner-border-sm"></span> Caricamento...</span>';
+
+    // Recupera i tipi già selezionati dalla config dello step in editing
+    var editingStep = workflowSteps.find(function(s) { return document.getElementById('editStepName')?.value === s.name; });
+    var selectedTypes = (editingStep?.config?.doc_types) || [];
+
+    fetch('/api/ao/catalog/' + agentId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var catalog = data.output?.catalog || data.catalog || {};
+            // Filtra risposte errore AO
+            if (catalog.type === 'getCatalog' || catalog.success === false) catalog = {};
+
+            var types = Object.entries(catalog).filter(function(e) {
+                return e[1] && typeof e[1] === 'object' && (e[1].identification || e[1].extraction);
+            });
+
+            if (types.length === 0) {
+                container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Nessun tipo nel catalogo di questo agente</span>';
+                return;
+            }
+
+            var html = '';
+            types.forEach(function(entry) {
+                var typeId = entry[0];
+                var typeDef = entry[1];
+                var questions = (typeDef.extraction?.questions || []).filter(function(q) { return !q.disabled; });
+                var checked = selectedTypes.indexOf(typeId) !== -1 ? 'checked' : '';
+                html += '<div class="form-check" style="padding:4px 0 4px 24px">' +
+                    '<input class="form-check-input doc-check-type-cb" type="checkbox" value="' + typeId + '" id="dctype_' + typeId + '" ' + checked + '>' +
+                    '<label class="form-check-label" for="dctype_' + typeId + '" style="font-size:0.82rem;cursor:pointer">' +
+                    '<strong>' + typeId + '</strong> <span style="color:var(--bs-secondary);font-size:0.72rem">(' + questions.length + ' campi)</span>' +
+                    '</label></div>';
+            });
+            html += '<div class="mt-2 d-flex gap-1">' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="_dcTypesSelectAll(true)" style="font-size:0.7rem;border-radius:6px;padding:1px 8px">Tutti</button>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="_dcTypesSelectAll(false)" style="font-size:0.7rem;border-radius:6px;padding:1px 8px">Nessuno</button>' +
+                '</div>';
+            container.innerHTML = html;
+        })
+        .catch(function() {
+            container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Errore caricamento catalogo</span>';
+        });
+}
+
+function _dcTypesSelectAll(checked) {
+    document.querySelectorAll('.doc-check-type-cb').forEach(function(cb) { cb.checked = checked; });
 }
 
 var _excelColCounter = 0;
@@ -2634,6 +2702,11 @@ function saveStepEdit() {
             step.config.if_validated_step = parseInt(document.getElementById('editDocCheckValidatedStep')?.value) || 0;
             step.config.if_rejected = document.getElementById('editDocCheckIfRejected')?.value || 'stop';
             step.config.if_rejected_step = parseInt(document.getElementById('editDocCheckRejectedStep')?.value) || 0;
+            // Tipi documento selezionati
+            step.config.doc_types = [];
+            document.querySelectorAll('.doc-check-type-cb:checked').forEach(function(cb) {
+                step.config.doc_types.push(cb.value);
+            });
             break;
     }
 
@@ -3104,7 +3177,8 @@ function saveWorkflow() {
                     if_validated: step.config.if_validated || 'continue',
                     if_validated_step: step.config.if_validated_step || 0,
                     if_rejected: step.config.if_rejected || 'stop',
-                    if_rejected_step: step.config.if_rejected_step || 0
+                    if_rejected_step: step.config.if_rejected_step || 0,
+                    doc_types: step.config.doc_types || []
                 };
             }
 
