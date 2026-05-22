@@ -2692,6 +2692,7 @@ async function saveCatalogEdit() {
   // Invia tutto ad AO: per i tipi sospesi, disabilita tutte le domande di estrazione
   const catalogToSave = buildCatalogPayload();
 
+  console.log('Saving catalog for agent', agentId, ':', JSON.stringify(catalogToSave, null, 2));
   try {
     const r = await fetch(`/api/ao/catalog/${agentId}`, {
       method: 'PUT',
@@ -2699,11 +2700,14 @@ async function saveCatalogEdit() {
       body: JSON.stringify({ catalog: catalogToSave }),
     });
     const data = await r.json();
+    console.log('Catalog save response:', data);
     if (data.error) throw new Error(data.error);
+    alert('Catalogo salvato');
     closeCatalogEdit();
     loadCatalog();
   } catch (e) {
     alert('Errore salvataggio: ' + e.message);
+    console.error('Catalog save error:', e);
   }
 }
 
