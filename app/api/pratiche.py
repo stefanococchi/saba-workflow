@@ -444,6 +444,71 @@ def ao_sintesi_assist():
         return jsonify({"error": str(e)}), 500
 
 
+@pratiche_bp.route('/askquestions', methods=['POST'])
+def ao_ask_questions():
+    """Invia una domanda + file della pratica all'agente askquestions."""
+    try:
+        body = request.get_json() or {}
+        question = body.get('question', '').strip()
+        practice_id = body.get('practice_id', '')
+        agent_id = body.get('agent_id', '')
+
+        if not question:
+            return jsonify({"error": "Domanda vuota"}), 400
+
+        # Trova l'agente askquestions se non specificato
+        if not agent_id:
+            agents = ao_service.list_agents()
+            aq = next((a for a in agents if 'askquestion' in (a.get('name', '') or '').lower()), None)
+            if aq:
+                agent_id = aq['id']
+            else:
+                return jsonify({"error": "Agente askquestions non trovato"}), 404
+
+        # Raccogli file dalla pratica
+        files = {}
+        if practice_id:
+            db_files = db.query(PracticeFile).filter_by(practice_id=practice_id).all()
+            for idx, pf in enumerate(db_files):
+                files[f"file_{idx}"] = (bytes(pf.data), pf.mime_type, pf.file_name)
+
+        # Prepara input con la domanda
+        import base64
+        from pathlib import Path
+        binary = None
+        if files:
+            binary = {}
+            for key, (content, mime, filename) in files.items():
+                ext = Path(filename).suffix.lstrip(".")
+                binary[key] = {
+                    "data": base64.b64encode(content).decode(),
+                    "mimeType": mime,
+                    "fileName": filename,
+                    "fileExtension": ext,
+                }
+
+        result = ao_service.run_agent(agent_id, {"question": question}, binary=binary)
+        # Poll per risultato
+        task_result = ao_service.poll_task(result["taskId"], max_wait=120.0)
+
+        # Estrai risposta
+        output = task_result.get('output', {})
+        answer = output.get('answer', '') or output.get('response', '') or output.get('text', '')
+        if not answer and isinstance(output, dict):
+            # Prova a trovare la risposta in qualsiasi campo stringa
+            for v in output.values():
+                if isinstance(v, str) and len(v) > 10:
+                    answer = v
+                    break
+        if not answer:
+            answer = json.dumps(output, indent=2, ensure_ascii=False)
+
+        return jsonify({"ok": True, "answer": answer, "raw_output": output})
+    except Exception as e:
+        logger.error(f"AO ask questions error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Practice Results (persistence in DB) ──────────────────────────
 
 @pratiche_bp.route('/results/<practice_id>', methods=['GET'])
