@@ -324,6 +324,19 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 }
 .detail-empty-state i { font-size: 2.5rem; opacity: 0.2; }
 
+/* Workflow stepper dots */
+.wf-step-dot {
+  display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 8px;
+  font-size: 0.72rem; font-weight: 500; cursor: default; white-space: nowrap; flex-shrink: 0;
+  border: 1.5px solid var(--md-outline-variant); background: var(--md-surface-container-lowest);
+  color: var(--md-on-surface-variant); transition: all 0.15s;
+}
+.wf-step-dot.current { border-color: var(--md-primary); background: var(--md-primary-container); color: var(--md-on-primary-container); font-weight: 700; }
+.wf-step-dot.completed { border-color: var(--md-success, #386A20); background: #d4edda; color: #155724; }
+.wf-step-dot.skipped { border-color: var(--md-outline); background: var(--md-surface-container); color: var(--md-on-surface-variant); opacity: 0.6; }
+.wf-step-connector { width: 16px; height: 2px; background: var(--md-outline-variant); flex-shrink: 0; }
+.wf-step-connector.done { background: var(--md-success, #386A20); }
+
 /* Slide-in animation */
 @keyframes detailSlideIn {
   from { opacity: 0; transform: translateY(10px); }
@@ -482,6 +495,31 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
               <input type="file" id="addFileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="processAdditionalFiles(this.files)">
               <button class="btn btn-sm btn-outline-danger" onclick="deleteSavedPractice()" style="border-radius:6px;font-size:0.7rem;padding:2px 8px"><i class="bi bi-trash3"></i></button>
             </div>
+          </div>
+        </div>
+
+        <!-- Workflow stepper bar -->
+        <div id="workflowStepperBar" style="display:none;padding:8px 16px;border-bottom:1px solid var(--md-outline-variant);flex-shrink:0;background:var(--md-surface-container-low)">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span style="font-size:0.72rem;font-weight:600;color:var(--md-on-surface-variant);text-transform:uppercase;letter-spacing:0.5px">
+              <i class="bi bi-diagram-3"></i> Workflow:
+            </span>
+            <span id="wfStepperName" style="font-size:0.78rem;font-weight:600"></span>
+            <span id="wfStepperProgress" style="font-size:0.7rem;color:var(--md-on-surface-variant);margin-left:auto"></span>
+          </div>
+          <div id="wfStepperDots" class="d-flex align-items-center gap-1" style="overflow-x:auto"></div>
+        </div>
+
+        <!-- Workflow selector (when no workflow is attached) -->
+        <div id="workflowSelector" style="display:none;padding:8px 16px;border-bottom:1px solid var(--md-outline-variant);flex-shrink:0">
+          <div class="d-flex align-items-center gap-2">
+            <span style="font-size:0.75rem;color:var(--md-on-surface-variant)"><i class="bi bi-diagram-3"></i> Workflow:</span>
+            <select id="wfSelectorDropdown" class="form-select form-select-sm" style="width:220px;border-radius:8px;font-size:0.78rem">
+              <option value="">Nessuno (verifica libera)</option>
+            </select>
+            <button class="btn btn-sm btn-primary" onclick="startWorkflowForPractice()" style="border-radius:8px;font-size:0.72rem;padding:2px 10px" id="btnStartWf">
+              <i class="bi bi-play-fill"></i> Avvia
+            </button>
           </div>
         </div>
 
@@ -1478,6 +1516,9 @@ async function showPracticeResult(result, practiceId) {
 
   // Select first tab
   if (firstHash) switchFileTab(firstHash);
+
+  // Load workflow stepper if practice has one
+  loadPracticeWorkflow(practiceId);
 }
 
 function _escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
@@ -2556,6 +2597,174 @@ document.addEventListener('click', e => {
     openPdfAndSearch(pdf, search);
   }
 });
+
+// ── Backoffice Workflow Stepper ─────────────────────────────────────
+let practiceWorkflow = null; // { steps, current_step_order, workflow_name, ... }
+
+async function loadPracticeWorkflow(practiceId) {
+  try {
+    const r = await fetch(`/api/ao/practice/${practiceId}/workflow-status`);
+    const data = await r.json();
+    if (data.has_workflow) {
+      practiceWorkflow = data;
+      renderWorkflowStepper(data);
+      document.getElementById('workflowStepperBar').style.display = '';
+      document.getElementById('workflowSelector').style.display = 'none';
+      updateValidateBarForWorkflow(data);
+    } else {
+      practiceWorkflow = null;
+      document.getElementById('workflowStepperBar').style.display = 'none';
+      document.getElementById('workflowSelector').style.display = '';
+      loadWorkflowSelector();
+    }
+  } catch (e) {
+    console.error('Load practice workflow error:', e);
+    practiceWorkflow = null;
+    document.getElementById('workflowStepperBar').style.display = 'none';
+    document.getElementById('workflowSelector').style.display = 'none';
+  }
+}
+
+function renderWorkflowStepper(wf) {
+  document.getElementById('wfStepperName').textContent = wf.workflow_name;
+  const completed = wf.steps.filter(s => s.state.status === 'completed').length;
+  document.getElementById('wfStepperProgress').textContent = `${completed}/${wf.total_steps} completati`;
+
+  const dotsEl = document.getElementById('wfStepperDots');
+  let html = '';
+  const STEP_ICONS = {
+    DOCUMENT_CHECK: 'bi-file-earmark-ruled', EMAIL: 'bi-envelope', WHATSAPP: 'bi-whatsapp',
+    WEBHOOK: 'bi-globe', CONDITION: 'bi-signpost-split', DOCUMENT_PROCESSING: 'bi-file-earmark-check',
+  };
+  wf.steps.forEach((s, i) => {
+    if (i > 0) {
+      const connDone = s.state.status === 'completed' || s.state.status === 'in_progress';
+      html += `<div class="wf-step-connector${connDone ? ' done' : ''}"></div>`;
+    }
+    const stateClass = s.order === wf.current_step_order ? 'current'
+      : s.state.status === 'completed' ? 'completed'
+      : s.state.status === 'skipped' ? 'skipped' : '';
+    const icon = STEP_ICONS[s.type] || 'bi-gear';
+    const stateIcon = s.state.status === 'completed' ? '<i class="bi bi-check-lg"></i> '
+      : s.state.status === 'skipped' ? '<i class="bi bi-skip-forward"></i> '
+      : s.order === wf.current_step_order ? '<i class="bi bi-arrow-right-short"></i> ' : '';
+    html += `<div class="wf-step-dot ${stateClass}" title="Step ${s.order}: ${s.name} (${s.type})">
+      ${stateIcon}<i class="bi ${icon}"></i> ${s.name}
+    </div>`;
+  });
+  dotsEl.innerHTML = html;
+}
+
+function updateValidateBarForWorkflow(wf) {
+  if (!wf || !wf.current_step_order) {
+    // Workflow completato
+    document.getElementById('validateInfo').innerHTML = '<i class="bi bi-check-circle-fill" style="color:var(--md-success)"></i> Workflow completato';
+    document.querySelector('.validate-bar .vb-right').innerHTML = '';
+    return;
+  }
+
+  const currentStep = wf.steps.find(s => s.order === wf.current_step_order);
+  if (!currentStep) return;
+
+  const isDocCheck = currentStep.type === 'DOCUMENT_CHECK';
+  const stepLabel = `Step ${currentStep.order}/${wf.total_steps}: ${currentStep.name}`;
+  document.getElementById('validateInfo').innerHTML = `<strong>${stepLabel}</strong> <span style="opacity:0.6">(${currentStep.type})</span>`;
+
+  let buttonsHtml = '';
+  if (isDocCheck) {
+    buttonsHtml = `
+      <button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem" onclick="rejectPractice()"><i class="bi bi-x-lg"></i> Rifiuta</button>
+      <button class="btn-validate" onclick="validateAndAdvance()"><i class="bi bi-check-lg"></i> Valida e avanza</button>
+    `;
+  } else {
+    buttonsHtml = `
+      <button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem" onclick="skipWorkflowStep()"><i class="bi bi-skip-forward"></i> Salta</button>
+      <button class="btn-validate" onclick="executeAndAdvance()"><i class="bi bi-play-fill"></i> Esegui e avanza</button>
+    `;
+  }
+  document.querySelector('.validate-bar .vb-right').innerHTML = buttonsHtml;
+}
+
+async function validateAndAdvance() {
+  const practiceId = window._practiceId;
+  if (!practiceId) return;
+
+  // First validate (save to DB)
+  const agentId = getAgentId();
+  const files = window._practiceFiles || {};
+  await savePracticeToDb(practiceId, agentId, { files, validation: { outcome: 'OK', anomalies: [] } });
+
+  // Then complete the step and advance
+  await completeCurrentStep('complete');
+}
+
+async function executeAndAdvance() {
+  await completeCurrentStep('complete');
+}
+
+async function skipWorkflowStep() {
+  await completeCurrentStep('skip');
+}
+
+async function completeCurrentStep(action) {
+  const practiceId = window._practiceId;
+  if (!practiceId) return;
+
+  try {
+    const r = await fetch(`/api/ao/practice/${practiceId}/complete-step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    const data = await r.json();
+    if (data.error) { alert('Errore: ' + data.error); return; }
+
+    if (data.workflow_completed) {
+      document.getElementById('infoValidation').innerHTML = '<span class="badge-ok"><i class="bi bi-check-circle-fill"></i> Workflow completato</span>';
+    } else {
+      document.getElementById('infoValidation').innerHTML = `<span class="badge-pending">Step ${data.next_step_order}: ${data.next_step_name}</span>`;
+    }
+
+    // Reload workflow stepper
+    await loadPracticeWorkflow(practiceId);
+  } catch (e) {
+    alert('Errore: ' + e.message);
+  }
+}
+
+async function loadWorkflowSelector() {
+  const sel = document.getElementById('wfSelectorDropdown');
+  try {
+    const r = await fetch('/api/workflows?status=active');
+    const data = await r.json();
+    const workflows = data.workflows || data || [];
+    sel.innerHTML = '<option value="">Nessuno (verifica libera)</option>';
+    workflows.forEach(wf => {
+      sel.innerHTML += `<option value="${wf.id}">${wf.name} (${wf.steps_count || '?'} step)</option>`;
+    });
+  } catch (e) {
+    sel.innerHTML = '<option value="">Errore caricamento</option>';
+  }
+}
+
+async function startWorkflowForPractice() {
+  const practiceId = window._practiceId;
+  const wfId = document.getElementById('wfSelectorDropdown').value;
+  if (!practiceId || !wfId) return;
+
+  try {
+    const r = await fetch(`/api/ao/practice/${practiceId}/start-workflow`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workflow_id: parseInt(wfId) }),
+    });
+    const data = await r.json();
+    if (data.error) { alert('Errore: ' + data.error); return; }
+    await loadPracticeWorkflow(practiceId);
+  } catch (e) {
+    alert('Errore: ' + e.message);
+  }
+}
 
 // ── Agent rail tooltip (appended to body to avoid overflow clip) ────
 (function() {

@@ -552,3 +552,191 @@ def document_check_verdict(practice_id):
         db.rollback()
         logger.error(f"Document check verdict error: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# ── Backoffice Workflow (pratica-driven) ─────────────────────────
+
+@pratiche_bp.route('/practice/<practice_id>/start-workflow', methods=['POST'])
+def start_practice_workflow(practice_id):
+    """Associa un workflow a una pratica e inizializza al primo step."""
+    try:
+        body = request.get_json() or {}
+        workflow_id = body.get('workflow_id')
+        if not workflow_id:
+            return jsonify({"error": "workflow_id richiesto"}), 400
+
+        from app.models import Workflow
+        workflow = db.get(Workflow, workflow_id)
+        if not workflow:
+            return jsonify({"error": "Workflow non trovato"}), 404
+
+        pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if not pr:
+            return jsonify({"error": "Pratica non trovata"}), 404
+
+        steps = sorted(workflow.steps, key=lambda s: s.order)
+        if not steps:
+            return jsonify({"error": "Workflow senza step"}), 400
+
+        pr.workflow_id = workflow_id
+        pr.current_step_order = 1
+        pr.step_states = {str(s.order): {'status': 'pending'} for s in steps}
+        # Segna il primo step come "in_progress"
+        pr.step_states['1']['status'] = 'in_progress'
+        db.commit()
+
+        return jsonify({
+            "ok": True,
+            "workflow_id": workflow_id,
+            "workflow_name": workflow.name,
+            "current_step_order": 1,
+            "total_steps": len(steps),
+            "steps": [{'order': s.order, 'name': s.name, 'type': s.type.name} for s in steps],
+        })
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Start practice workflow error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@pratiche_bp.route('/practice/<practice_id>/workflow-status', methods=['GET'])
+def get_practice_workflow_status(practice_id):
+    """Stato corrente del workflow associato a una pratica."""
+    try:
+        pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if not pr or not pr.workflow_id:
+            return jsonify({"has_workflow": False})
+
+        from app.models import Workflow
+        workflow = db.get(Workflow, pr.workflow_id)
+        if not workflow:
+            return jsonify({"has_workflow": False})
+
+        steps = sorted(workflow.steps, key=lambda s: s.order)
+        step_states = pr.step_states or {}
+
+        return jsonify({
+            "has_workflow": True,
+            "workflow_id": pr.workflow_id,
+            "workflow_name": workflow.name,
+            "current_step_order": pr.current_step_order,
+            "total_steps": len(steps),
+            "steps": [{
+                'order': s.order,
+                'name': s.name,
+                'type': s.type.name,
+                'config': s.skip_conditions or {},
+                'state': step_states.get(str(s.order), {'status': 'pending'}),
+            } for s in steps],
+        })
+    except Exception as e:
+        logger.error(f"Get practice workflow status error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@pratiche_bp.route('/practice/<practice_id>/complete-step', methods=['POST'])
+def complete_practice_step(practice_id):
+    """Completa lo step corrente e avanza al prossimo. Per DOCUMENT_CHECK usa validate/reject."""
+    try:
+        body = request.get_json() or {}
+        action = body.get('action', 'complete')  # complete | skip
+        step_result = body.get('result', {})
+
+        pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if not pr or not pr.workflow_id:
+            return jsonify({"error": "Nessun workflow associato"}), 400
+
+        from app.models import Workflow
+        workflow = db.get(Workflow, pr.workflow_id)
+        if not workflow:
+            return jsonify({"error": "Workflow non trovato"}), 404
+
+        steps = sorted(workflow.steps, key=lambda s: s.order)
+        current_order = pr.current_step_order or 1
+        current_step = next((s for s in steps if s.order == current_order), None)
+        if not current_step:
+            return jsonify({"error": "Step corrente non trovato"}), 400
+
+        step_states = dict(pr.step_states or {})
+
+        # Segna step corrente come completato
+        step_states[str(current_order)] = {
+            'status': 'skipped' if action == 'skip' else 'completed',
+            'completed_at': datetime.utcnow().isoformat(),
+            'result': step_result,
+        }
+
+        # Esegui azioni automatiche dello step (email, whatsapp, ecc.)
+        step_type = current_step.type.name
+        exec_result = {}
+        if action != 'skip' and step_type in ('EMAIL', 'WHATSAPP', 'WEBHOOK'):
+            exec_result = _execute_backoffice_step(current_step, pr, body)
+            step_states[str(current_order)]['exec_result'] = exec_result
+
+        # Avanza al prossimo step
+        next_step = next((s for s in steps if s.order > current_order), None)
+        if next_step:
+            pr.current_step_order = next_step.order
+            step_states[str(next_step.order)] = {'status': 'in_progress'}
+        else:
+            # Workflow completato
+            pr.current_step_order = None
+
+        pr.step_states = step_states
+        db.commit()
+
+        return jsonify({
+            "ok": True,
+            "completed_step": current_order,
+            "completed_type": step_type,
+            "next_step_order": next_step.order if next_step else None,
+            "next_step_name": next_step.name if next_step else None,
+            "workflow_completed": next_step is None,
+            "exec_result": exec_result,
+        })
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Complete practice step error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+def _execute_backoffice_step(step, practice_result, body):
+    """Esegue uno step automatico (email/whatsapp/webhook) nel contesto di una pratica."""
+    step_type = step.type.name
+    config = step.skip_conditions or {}
+    result = {'type': step_type}
+
+    try:
+        if step_type == 'EMAIL':
+            from app.services.email_service import EmailService
+            to_email = config.get('custom_to', '') or body.get('to_email', '')
+            subject = config.get('subject', step.subject or '')
+            body_html = step.body_template or ''
+            if to_email and subject:
+                ok = EmailService.send_email(to_email=to_email, subject=subject, body_html=body_html)
+                result['sent'] = ok
+                result['to'] = to_email
+            else:
+                result['error'] = 'Email o subject mancante'
+
+        elif step_type == 'WEBHOOK':
+            import requests as req
+            url = config.get('webhook_url', '')
+            if url:
+                r = req.post(url, json={
+                    'practice_id': practice_result.practice_id,
+                    'step': step.name,
+                    'result_data': practice_result.result_data,
+                }, timeout=30)
+                result['status_code'] = r.status_code
+            else:
+                result['error'] = 'URL webhook mancante'
+
+        elif step_type == 'WHATSAPP':
+            result['note'] = 'WhatsApp non ancora implementato per workflow pratica'
+
+    except Exception as e:
+        result['error'] = str(e)
+        logger.error(f"Execute backoffice step error: {e}")
+
+    return result

@@ -411,8 +411,14 @@ class PracticeResult(Base):
     agent_id = Column(String(255), nullable=False)
     agent_name = Column(String(255), nullable=True)
     result_data = Column(JSON, nullable=True)  # info completo da AO (files, validation, etc.)
+    # Workflow di backoffice
+    workflow_id = Column(Integer, ForeignKey('workflows.id'), nullable=True)
+    current_step_order = Column(Integer, nullable=True)  # step corrente (1-based)
+    step_states = Column(JSON, nullable=True)  # {order: {status, completed_at, result}}
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    workflow = relationship('Workflow', foreign_keys=[workflow_id])
 
     def __repr__(self):
         return f'<PracticeResult {self.practice_id}>'
@@ -424,6 +430,9 @@ class PracticeResult(Base):
             'agent_id': self.agent_id,
             'agent_name': self.agent_name,
             'result_data': self.result_data,
+            'workflow_id': self.workflow_id,
+            'current_step_order': self.current_step_order,
+            'step_states': self.step_states,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
