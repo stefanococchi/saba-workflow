@@ -2615,10 +2615,11 @@ function updateQ(index, field, value) {
 }
 
 function addQuestion() {
-  const questions = catalogData[editingTypeId]?.extraction?.questions || [];
-  questions.push({ id: 'nuovo_campo', question: '', outputFormat: 'string', disabled: false, useResponseFromQuestions: [], tools: [] });
+  if (!editingTypeId || !catalogData[editingTypeId]) { alert('Nessun tipo documento selezionato'); return; }
   if (!catalogData[editingTypeId].extraction) catalogData[editingTypeId].extraction = {};
-  catalogData[editingTypeId].extraction.questions = questions;
+  if (!Array.isArray(catalogData[editingTypeId].extraction.questions)) catalogData[editingTypeId].extraction.questions = [];
+  const questions = catalogData[editingTypeId].extraction.questions;
+  questions.push({ id: 'nuovo_campo', question: '', outputFormat: 'string', disabled: false, useResponseFromQuestions: [], tools: [] });
   renderQuestions(questions);
   // Scroll to new question
   const list = document.getElementById('editQuestionsList');
