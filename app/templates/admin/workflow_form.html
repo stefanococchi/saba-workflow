@@ -1742,7 +1742,15 @@ try {
             sharepoint_site: _skipCond.sharepoint_site || '',
             sheet_name: _skipCond.sheet_name || 'Sheet1',
             columns: _skipCond.columns || [],
-            next_step: _skipCond.next_step || 'auto'
+            next_step: _skipCond.next_step || 'auto',
+            // Document processing / check
+            ao_agent_id: _skipCond.ao_agent_id || '',
+            ao_agent_name: _skipCond.ao_agent_name || '',
+            required_docs: _skipCond.required_docs || '',
+            if_validated: _skipCond.if_validated || 'continue',
+            if_validated_step: _skipCond.if_validated_step || 0,
+            if_rejected: _skipCond.if_rejected || 'stop',
+            if_rejected_step: _skipCond.if_rejected_step || 0
         },
         _dfPos: _skipCond._dfPos || null
     });
