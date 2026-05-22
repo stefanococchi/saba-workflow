@@ -1533,14 +1533,23 @@ async function reprocessFile(contentHash) {
   const origBadges = badgesEl?.innerHTML;
   if (badgesEl) badgesEl.innerHTML = '<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> Elaborazione...</span>';
 
+  // Aggiorna UI con spinner (nel data-scroll se visibile)
+  const dataScroll = document.getElementById('dataScroll');
+  const origScroll = dataScroll?.innerHTML;
+  if (dataScroll) {
+    dataScroll.innerHTML = `<div class="text-center py-5"><div class="prat-spinner" style="width:24px;height:24px;border-width:3px"></div><div style="margin-top:10px;font-size:0.82rem;color:var(--md-on-surface-variant)">Elaborazione in corso...</div></div>`;
+  }
+
   try {
     if (contentHash.startsWith('db_')) {
       // File solo nel DB locale → scarica e invia a /process
-      const fileName = contentHash.replace(/^db_/, '').replace(/_/g, '.').replace(/\.pdf$/, '.pdf');
+      const fileData = window._practiceFiles?.[contentHash];
+      const fileName = fileData?.fileName || contentHash.replace(/^db_/, '');
       let file = processedFileBlobs[fileName];
       if (!file) {
-        const dlR = await fetch(`/api/ao/files/${practiceId}/${encodeURIComponent(fileName)}`);
-        if (!dlR.ok) throw new Error('File non trovato nel DB');
+        // Prova a scaricare dal DB
+        const dlR = await fetch(`/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`);
+        if (!dlR.ok) throw new Error(`File "${fileName}" non trovato nel DB (status ${dlR.status})`);
         const blob = await dlR.blob();
         file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
       }
@@ -1563,6 +1572,7 @@ async function reprocessFile(contentHash) {
     }
   } catch (e) {
     if (badgesEl) badgesEl.innerHTML = origBadges || '';
+    if (dataScroll && origScroll) dataScroll.innerHTML = origScroll;
     alert('Errore: ' + e.message);
   }
 }
