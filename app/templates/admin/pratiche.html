@@ -2312,12 +2312,22 @@ async function loadCatalog(agentId) {
     const r = await fetch(`/api/ao/catalog/${agentId}`);
     const data = await r.json();
     if (data.error) throw new Error(data.error);
-    console.log('Catalog raw response:', JSON.stringify(data).substring(0, 500));
-    let freshCatalog = data.output?.catalog || data.output || data.catalog || data;
-    // Se il catalogo è wrappato in un ulteriore livello (es. {info: {catalog: {...}}})
+    let freshCatalog = data.output?.catalog || data.catalog || {};
+    // Se AO ritorna un errore o risposta non-catalogo, parti con catalogo vuoto
+    if (freshCatalog.type === 'getCatalog' || freshCatalog.success === false || typeof freshCatalog !== 'object') {
+      freshCatalog = {};
+    }
+    // Se il catalogo è wrappato in un ulteriore livello
     if (freshCatalog.info?.catalog) freshCatalog = freshCatalog.info.catalog;
     if (freshCatalog.catalog && typeof freshCatalog.catalog === 'object' && !freshCatalog.identification) freshCatalog = freshCatalog.catalog;
-    console.log('Catalog keys:', Object.keys(freshCatalog));
+    // Filtra chiavi che non sono tipi documento (metadati AO)
+    const filtered = {};
+    for (const [k, v] of Object.entries(freshCatalog)) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && (v.identification || v.extraction)) {
+        filtered[k] = v;
+      }
+    }
+    freshCatalog = filtered;
     // Ripristina tipi sospesi da localStorage (definizioni complete)
     const suspended = loadSuspended();
     for (const [id, fullDef] of Object.entries(suspended)) {
@@ -2468,6 +2478,7 @@ function buildCatalogPayload() {
   // Restano salvati nel localStorage per poterli ripristinare.
   const payload = {};
   for (const [id, def] of Object.entries(catalogData)) {
+    if (!def || typeof def !== 'object' || !def.extraction) continue;
     if (def._disabled) continue;
     const clean = JSON.parse(JSON.stringify(def));
     delete clean._disabled;
@@ -3196,6 +3207,7 @@ async function startWorkflowForPractice() {
   document.body.appendChild(tip);
 
   document.addEventListener('mouseenter', e => {
+    if (!e.target || !e.target.closest) return;
     const item = e.target.closest('.agent-rail-item[data-tooltip]');
     if (!item) return;
     tip.textContent = item.dataset.tooltip;
@@ -3207,6 +3219,7 @@ async function startWorkflowForPractice() {
   }, true);
 
   document.addEventListener('mouseleave', e => {
+    if (!e.target || !e.target.closest) return;
     const item = e.target.closest('.agent-rail-item[data-tooltip]');
     if (!item) return;
     tip.classList.remove('visible');
