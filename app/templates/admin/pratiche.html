@@ -1150,23 +1150,41 @@ async function processAllFilesBackground() {
   }
 }
 
+let _lastPollProgress = -1;
+
 function pollProcessingStatus(practiceId, agentId) {
   const poll = async () => {
     try {
       const r = await fetch(`/api/ao/practice/${practiceId}/process-status`);
       const job = await r.json();
 
-      if (job.status === 'none') return; // nessun job
-
-      const msg = document.getElementById('bgProcessMsg');
-      const detail = document.getElementById('bgProcessDetail');
+      if (job.status === 'none') return;
 
       if (job.status === 'running') {
-        if (msg) msg.textContent = `Elaborazione: ${job.progress}/${job.total} file completati...`;
-        if (detail) detail.textContent = 'Puoi navigare altrove — l\'elaborazione continua in background';
-        setTimeout(poll, 2000);
+        // Aggiorna info bar con progresso
+        document.getElementById('infoValidation').innerHTML =
+          `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${job.progress}/${job.total}</span>`;
+
+        // Se c'è progresso nuovo, ricarica split-view con i risultati parziali
+        if (job.progress > 0 && job.progress !== _lastPollProgress) {
+          _lastPollProgress = job.progress;
+          document.getElementById('previewPanel').style.display = '';
+          const cached = await loadPracticeFromDb(practiceId);
+          if (cached?.result_data) {
+            // Mostra risultati parziali senza resettare il polling
+            const info = cached.result_data;
+            if (info.files && Object.keys(info.files).length > 0) {
+              window._practiceFiles = info.files;
+              window._practiceId = practiceId;
+              // Aggiorna tabs e dati
+              _renderFileTabs(info.files, practiceId, job.progress, job.total);
+            }
+          }
+        }
+
+        setTimeout(poll, 2500);
       } else if (job.status === 'completed' || job.status === 'error') {
-        // Elaborazione finita — ricarica risultati
+        _lastPollProgress = -1;
         document.getElementById('previewPanel').style.display = '';
         document.getElementById('infoValidation').innerHTML = job.status === 'completed'
           ? '<span class="badge-ok">Elaborazione completata</span>'
@@ -1183,7 +1201,49 @@ function pollProcessingStatus(practiceId, agentId) {
       setTimeout(poll, 5000);
     }
   };
-  setTimeout(poll, 2000);
+  setTimeout(poll, 2500);
+}
+
+// Render parziale: aggiorna tabs e mostra file completati mentre altri si elaborano
+function _renderFileTabs(files, practiceId, progress, total) {
+  const fileEntries = Object.entries(files);
+  const tabsBar = document.getElementById('fileTabsBar');
+  const validateBar = document.getElementById('validateBar');
+
+  let tabsHtml = '';
+  let firstCompleted = null;
+  for (const [hash, file] of fileEntries) {
+    const exState = file.state?.extraction || 'pending';
+    const idState = file.state?.identification || 'pending';
+    const isOk = exState === 'completed' && idState === 'completed';
+    const isErr = exState === 'error' || idState === 'error';
+    const ext = (file.fileName || '').split('.').pop().toLowerCase();
+    const icon = ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-image';
+    const badgeClass = isErr ? 'badge-ko' : isOk ? 'badge-ok' : 'badge-pending';
+    const badgeIcon = isErr ? 'bi-x-lg' : isOk ? 'bi-check2' : 'bi-hourglass';
+    tabsHtml += `<div class="file-tab-item" data-hash="${hash}" onclick="switchFileTab('${hash}')">
+      <i class="bi ${icon}"></i> ${file.fileName || hash}
+      <span class="file-tab-badge ${badgeClass}"><i class="bi ${badgeIcon}"></i></span>
+    </div>`;
+    if (isOk && !firstCompleted) firstCompleted = hash;
+  }
+  // Aggiungi indicatore elaborazione in corso
+  if (progress < total) {
+    tabsHtml += `<div class="file-tab-item" style="cursor:default;color:var(--md-on-surface-variant)">
+      <span class="prat-spinner" style="width:12px;height:12px;border-width:2px"></span>
+      ${progress}/${total}
+    </div>`;
+  }
+  tabsBar.innerHTML = tabsHtml;
+
+  // Info bar
+  document.getElementById('validateInfo').textContent = `${progress}/${total} elaborati · ${fileEntries.length} file`;
+  validateBar.style.display = '';
+
+  // Se non c'è già un tab attivo, seleziona il primo completato
+  if (firstCompleted && !document.querySelector('.file-tab-item.active')) {
+    switchFileTab(firstCompleted);
+  }
 }
 
 // Controlla se c'è un'elaborazione in corso quando si apre una pratica
