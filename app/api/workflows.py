@@ -33,6 +33,8 @@ def create_workflow():
             sabaform_event_name=data.get('sabaform_event_name'),
             mail_from_email=data.get('mail_from_email'),
             mail_from_name=data.get('mail_from_name'),
+            ao_agent_id=data.get('ao_agent_id'),
+            ao_agent_name=data.get('ao_agent_name'),
         )
         
         db.add(workflow)
@@ -202,6 +204,10 @@ def update_workflow(workflow_id):
             workflow.mail_from_email = data['mail_from_email'] or None
         if 'mail_from_name' in data:
             workflow.mail_from_name = data['mail_from_name'] or None
+        if 'ao_agent_id' in data:
+            workflow.ao_agent_id = data['ao_agent_id'] or None
+        if 'ao_agent_name' in data:
+            workflow.ao_agent_name = data['ao_agent_name'] or None
 
         # Aggiorna steps se presenti (elimina vecchi, ricrea)
         if 'steps' in data:

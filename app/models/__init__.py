@@ -87,6 +87,10 @@ class Workflow(Base):
     sabaform_event_id = Column(Integer, nullable=True)
     sabaform_event_name = Column(String(300), nullable=True)
 
+    # Agent Orchestrator: auto-binding pratiche per questo agente
+    ao_agent_id = Column(String(255), nullable=True)
+    ao_agent_name = Column(String(255), nullable=True)
+
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

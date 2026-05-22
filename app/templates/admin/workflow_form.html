@@ -1173,6 +1173,15 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
                     </div>
                     <div class="form-text">Se vuoto, usa la casella di posta globale configurata nel sistema.</div>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label">
+                        <i class="bi bi-cpu"></i> Agent Orchestrator (pratiche)
+                    </label>
+                    <select class="form-select" id="wfAoAgent">
+                        <option value="">Nessuno — workflow senza AO</option>
+                    </select>
+                    <div class="form-text">Se selezionato, le pratiche create per questo agente saranno automaticamente associate a questo workflow.</div>
+                </div>
             </div>
         </div>
         
@@ -1800,6 +1809,18 @@ try {
     {% endif %}
 
     console.log('Loaded ' + existingSteps.length + ' steps from DB');
+
+    // Carica agenti AO per il selettore workflow
+    fetch('/api/ao/agents').then(r => r.json()).then(data => {
+        var sel = document.getElementById('wfAoAgent');
+        (data.agents || []).forEach(a => {
+            var name = a.name || a.agentName || a.id;
+            sel.innerHTML += `<option value="${a.id}" data-name="${name}">${name}</option>`;
+        });
+        {% if workflow.ao_agent_id %}
+        sel.value = {{ workflow.ao_agent_id | tojson }};
+        {% endif %}
+    }).catch(() => {});
 
     // In edit mode, vai direttamente a Build Steps (step 2)
     {% if mode == 'edit' %}

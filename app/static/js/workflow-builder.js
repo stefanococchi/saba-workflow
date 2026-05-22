@@ -2955,6 +2955,8 @@ function saveWorkflow() {
         sabaform_event_name: selectedSabaformEventName || null,
         mail_from_email: document.getElementById('mailFromEmail').value.trim() || null,
         mail_from_name: document.getElementById('mailFromName').value.trim() || null,
+        ao_agent_id: document.getElementById('wfAoAgent')?.value || null,
+        ao_agent_name: document.getElementById('wfAoAgent')?.selectedOptions?.[0]?.dataset?.name || null,
         participants: importedParticipants,
         steps: workflowSteps.map(step => {
             const stepData = {

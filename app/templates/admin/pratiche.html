@@ -510,14 +510,14 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
           <div id="wfStepperDots" class="d-flex align-items-center gap-1" style="overflow-x:auto"></div>
         </div>
 
-        <!-- Workflow selector (when no workflow is attached) -->
-        <div id="workflowSelector" style="display:none;padding:8px 16px;border-bottom:1px solid var(--md-outline-variant);flex-shrink:0">
+        <!-- Workflow selector (when no workflow is attached, manual fallback) -->
+        <div id="workflowSelector" style="display:none;padding:6px 16px;border-bottom:1px solid var(--md-outline-variant);flex-shrink:0;background:var(--md-surface-container-low)">
           <div class="d-flex align-items-center gap-2">
-            <span style="font-size:0.75rem;color:var(--md-on-surface-variant)"><i class="bi bi-diagram-3"></i> Workflow:</span>
-            <select id="wfSelectorDropdown" class="form-select form-select-sm" style="width:220px;border-radius:8px;font-size:0.78rem">
-              <option value="">Nessuno (verifica libera)</option>
+            <span style="font-size:0.72rem;color:var(--md-on-surface-variant)"><i class="bi bi-diagram-3"></i></span>
+            <select id="wfSelectorDropdown" class="form-select form-select-sm" style="width:200px;border-radius:8px;font-size:0.75rem">
+              <option value="">Verifica libera</option>
             </select>
-            <button class="btn btn-sm btn-primary" onclick="startWorkflowForPractice()" style="border-radius:8px;font-size:0.72rem;padding:2px 10px" id="btnStartWf">
+            <button class="btn btn-sm btn-outline-primary" onclick="startWorkflowForPractice()" style="border-radius:6px;font-size:0.7rem;padding:2px 8px" id="btnStartWf">
               <i class="bi bi-play-fill"></i> Avvia
             </button>
           </div>

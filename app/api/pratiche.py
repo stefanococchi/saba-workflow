@@ -358,12 +358,14 @@ def save_practice_result(practice_id):
     """Salva/aggiorna risultato pratica nel database."""
     try:
         body = request.get_json()
+        is_new = False
         pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
         if pr:
             pr.result_data = body.get('result_data')
             pr.agent_id = body.get('agent_id', pr.agent_id)
             pr.agent_name = body.get('agent_name', pr.agent_name)
         else:
+            is_new = True
             pr = PracticeResult(
                 practice_id=practice_id,
                 agent_id=body.get('agent_id', ''),
@@ -371,12 +373,38 @@ def save_practice_result(practice_id):
                 result_data=body.get('result_data'),
             )
             db.add(pr)
+
+        # Auto-start: se la pratica è nuova e l'agente ha un workflow, assegnalo
+        if is_new and not pr.workflow_id and pr.agent_id:
+            _auto_bind_workflow(pr)
+
         db.commit()
         return jsonify({"ok": True, "data": pr.to_dict()})
     except Exception as e:
         db.rollback()
         logger.error(f"Save practice result: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+def _auto_bind_workflow(practice_result):
+    """Se esiste un workflow attivo per l'agente, lo assegna alla pratica e inizializza step 1."""
+    from app.models import Workflow, WorkflowStatus
+    wf = db.query(Workflow).filter(
+        Workflow.ao_agent_id == practice_result.agent_id,
+        Workflow.status.in_([WorkflowStatus.ACTIVE, WorkflowStatus.DRAFT]),
+    ).first()
+    if not wf:
+        return
+
+    steps = sorted(wf.steps, key=lambda s: s.order)
+    if not steps:
+        return
+
+    practice_result.workflow_id = wf.id
+    practice_result.current_step_order = 1
+    practice_result.step_states = {str(s.order): {'status': 'pending'} for s in steps}
+    practice_result.step_states['1']['status'] = 'in_progress'
+    logger.info(f"Auto-bound workflow '{wf.name}' to practice {practice_result.practice_id}")
 
 
 @pratiche_bp.route('/results', methods=['GET'])
@@ -615,6 +643,13 @@ def get_practice_workflow_status(practice_id):
         steps = sorted(workflow.steps, key=lambda s: s.order)
         step_states = pr.step_states or {}
 
+        # Accumula contesto da tutti gli step completati
+        accumulated_data = {}
+        for s in steps:
+            ss = step_states.get(str(s.order), {})
+            if ss.get('status') == 'completed' and ss.get('extracted_data'):
+                accumulated_data.update(ss['extracted_data'])
+
         return jsonify({
             "has_workflow": True,
             "workflow_id": pr.workflow_id,
@@ -628,6 +663,7 @@ def get_practice_workflow_status(practice_id):
                 'config': s.skip_conditions or {},
                 'state': step_states.get(str(s.order), {'status': 'pending'}),
             } for s in steps],
+            "accumulated_data": accumulated_data,
         })
     except Exception as e:
         logger.error(f"Get practice workflow status error: {e}")
@@ -659,11 +695,20 @@ def complete_practice_step(practice_id):
 
         step_states = dict(pr.step_states or {})
 
+        # Raccogli dati estratti dalla pratica per il contesto dello step
+        extracted_data = {}
+        if pr.result_data and isinstance(pr.result_data, dict):
+            for fhash, fdata in (pr.result_data.get('files', {})).items():
+                if fdata.get('extraction', {}).get('data'):
+                    doc_type = fdata.get('identification', {}).get('documentId', fhash)
+                    extracted_data[doc_type] = fdata['extraction']['data']
+
         # Segna step corrente come completato
         step_states[str(current_order)] = {
             'status': 'skipped' if action == 'skip' else 'completed',
             'completed_at': datetime.utcnow().isoformat(),
             'result': step_result,
+            'extracted_data': extracted_data,
         }
 
         # Esegui azioni automatiche dello step (email, whatsapp, ecc.)
