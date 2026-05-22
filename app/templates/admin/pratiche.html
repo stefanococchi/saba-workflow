@@ -2508,23 +2508,30 @@ async function deleteCatalogType(typeId) {
 }
 
 function openCatalogEdit(typeId) {
-  editingTypeId = typeId;
-  const def = catalogData[typeId];
-  const ident = def.identification || {};
-  // Assicura che extraction.questions esista come array nell'oggetto
-  if (!def.extraction) def.extraction = {};
-  if (!Array.isArray(def.extraction.questions)) def.extraction.questions = [];
-  const questions = def.extraction.questions;
+  try {
+    editingTypeId = typeId;
+    const def = catalogData[typeId];
+    if (!def) { alert('Tipo "' + typeId + '" non trovato nel catalogo'); return; }
+    if (!def.identification) def.identification = {};
+    const ident = def.identification;
+    // Assicura che extraction.questions esista come array nell'oggetto
+    if (!def.extraction) def.extraction = {};
+    if (!Array.isArray(def.extraction.questions)) def.extraction.questions = [];
+    const questions = def.extraction.questions;
 
-  document.getElementById('catalogTypesArea').style.display = 'none';
-  document.getElementById('catalogEditArea').style.display = '';
-  document.getElementById('editTypeName').textContent = typeId;
-  document.getElementById('editAiEnabled').checked = ident.aiEnabled !== false;
-  document.getElementById('editRegexEnabled').checked = !!ident.regexEnabled;
-  document.getElementById('editInstructions').value = ident.instructions || '';
-  document.getElementById('editHint').value = ident.hint || '';
+    document.getElementById('catalogTypesArea').style.display = 'none';
+    document.getElementById('catalogEditArea').style.display = '';
+    document.getElementById('editTypeName').textContent = typeId;
+    document.getElementById('editAiEnabled').checked = ident.aiEnabled !== false;
+    document.getElementById('editRegexEnabled').checked = !!ident.regexEnabled;
+    document.getElementById('editInstructions').value = ident.instructions || '';
+    document.getElementById('editHint').value = ident.hint || '';
 
-  renderQuestions(questions);
+    renderQuestions(questions);
+  } catch (e) {
+    alert('Errore apertura editor: ' + e.message);
+    console.error('openCatalogEdit error:', e);
+  }
 }
 
 function renderQuestions(questions) {
