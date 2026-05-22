@@ -2478,7 +2478,9 @@ function newCatalogType() {
   if (catalogData[id]) return alert('Tipo "' + id + '" gia\' esistente');
   catalogData[id] = {
     identification: { aiEnabled: true, regexEnabled: false, instructions: '', hint: '' },
-    extraction: { questions: [] }
+    extraction: { questions: [
+      { id: 'campo_1', question: 'Estrai il primo campo rilevante dal documento', outputFormat: 'string', disabled: false, useResponseFromQuestions: [], tools: [] }
+    ] }
   };
   openCatalogEdit(id);
 }
