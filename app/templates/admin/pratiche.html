@@ -463,6 +463,17 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
             </div>
           </div>
           <div id="stagedFilesList"></div>
+          <!-- Workflow selector prima di elaborare -->
+          <div class="card-body border-top" id="newPracticeWorkflowRow">
+            <div class="d-flex align-items-center gap-2">
+              <label style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:var(--md-on-surface-variant)">
+                <i class="bi bi-diagram-3"></i> Workflow:
+              </label>
+              <select id="newPracticeWorkflow" class="form-select form-select-sm" style="flex:1;border-radius:8px;font-size:0.78rem">
+                <option value="">Nessuno (elaborazione libera)</option>
+              </select>
+            </div>
+          </div>
           <div class="card-body border-top d-flex justify-content-end gap-2">
             <button class="btn btn-outline-primary btn-sm" id="btnSaveFiles" onclick="saveFilesToDb()" style="border-radius:8px">
               <i class="bi bi-cloud-upload"></i> Salva file
@@ -890,8 +901,29 @@ function startNewPractice() {
   stagedFiles = [];
   renderStagedFiles();
 
+  // Carica workflow disponibili nel dropdown
+  loadNewPracticeWorkflows();
+
   // Deselect practice rows
   document.querySelectorAll('.practice-row').forEach(r => r.classList.remove('active'));
+}
+
+async function loadNewPracticeWorkflows() {
+  const sel = document.getElementById('newPracticeWorkflow');
+  sel.innerHTML = '<option value="">Nessuno (elaborazione libera)</option>';
+  try {
+    const r = await fetch('/api/workflows');
+    const data = await r.json();
+    const workflows = data.workflows || [];
+    workflows.forEach(wf => {
+      // Evidenzia workflow associati a questo agente
+      const isMatch = wf.ao_agent_id === selectedElaboraAgentId;
+      const label = isMatch ? `${wf.name} (consigliato)` : wf.name;
+      sel.innerHTML += `<option value="${wf.id}" ${isMatch ? 'selected' : ''}>${label} — ${wf.steps_count || '?'} step</option>`;
+    });
+  } catch (e) {
+    console.error('Load workflows:', e);
+  }
 }
 
 // ── Page navigation ────────────────────────────────────────────────
@@ -1048,6 +1080,18 @@ async function processAllFilesBackground() {
 
   // 1. Salva pratica nel DB
   await savePracticeToDb(practiceId, agentId, { files: {} });
+
+  // 1b. Assegna workflow se selezionato
+  const selectedWfId = document.getElementById('newPracticeWorkflow')?.value;
+  if (selectedWfId) {
+    try {
+      await fetch(`/api/ao/practice/${practiceId}/start-workflow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflow_id: parseInt(selectedWfId) }),
+      });
+    } catch (e) { console.error('Start workflow:', e); }
+  }
 
   // 2. Upload file nel DB
   const fd = new FormData();

@@ -126,6 +126,8 @@ def list_workflows():
                     'status': w.status.value,
                     'steps_count': len(w.steps),
                     'participants_count': len(w.participants),
+                    'ao_agent_id': w.ao_agent_id,
+                    'ao_agent_name': w.ao_agent_name,
                     'created_at': w.created_at.isoformat()
                 }
                 for w in workflows
