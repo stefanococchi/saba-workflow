@@ -7,8 +7,12 @@ from app.models import PracticeResult, PracticeFile, Participant, WorkflowStep, 
 import json
 import logging
 import re
+import threading
 
 logger = logging.getLogger(__name__)
+
+# In-memory job tracking for background processing
+_processing_jobs = {}  # practice_id -> {status, progress, total, results, error, started_at}
 
 pratiche_bp = Blueprint('pratiche', __name__)
 
@@ -160,6 +164,108 @@ def ao_practice_process(agent_id, practice_id):
     except Exception as e:
         logger.error(f"AO practice process: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@pratiche_bp.route('/practice/<agent_id>/<practice_id>/process-all', methods=['POST'])
+def ao_practice_process_all(agent_id, practice_id):
+    """Avvia elaborazione di tutti i file pendenti in background. Non si interrompe se l'utente naviga via."""
+    try:
+        # Raccogli file dal DB
+        db_files = db.query(PracticeFile).filter_by(practice_id=practice_id).all()
+        if not db_files:
+            return jsonify({"error": "Nessun file da elaborare"}), 400
+
+        # Controlla se già in corso
+        job = _processing_jobs.get(practice_id)
+        if job and job['status'] == 'running':
+            return jsonify({"ok": True, "already_running": True, "progress": job['progress'], "total": job['total']})
+
+        # Prepara dati file (leggi dal DB prima di passare al thread)
+        files_data = [(pf.file_name, pf.mime_type, bytes(pf.data)) for pf in db_files]
+
+        # Controlla file già elaborati su AO
+        already_done = set()
+        try:
+            info_r = ao_service.practice_info(agent_id, practice_id)
+            existing_files = info_r.get('output', {}).get('info', {}).get('files', {})
+            for h, ff in existing_files.items():
+                if ff.get('state', {}).get('extraction') == 'completed' and ff.get('state', {}).get('identification') == 'completed':
+                    already_done.add(ff.get('fileName', ''))
+        except Exception:
+            pass
+
+        to_process = [(fn, mt, data) for fn, mt, data in files_data if fn not in already_done]
+
+        _processing_jobs[practice_id] = {
+            'status': 'running',
+            'progress': 0,
+            'total': len(to_process),
+            'skipped': len(files_data) - len(to_process),
+            'results': [],
+            'error': None,
+            'started_at': datetime.utcnow().isoformat(),
+        }
+
+        # Lancia in background
+        from flask import current_app
+        app = current_app._get_current_object()
+
+        def _bg_process():
+            with app.app_context():
+                from app import db_session as bg_db
+                job = _processing_jobs[practice_id]
+                try:
+                    for i, (fn, mt, data) in enumerate(to_process):
+                        try:
+                            files = {f"file_0": (data, mt, fn)}
+                            result = ao_service.practice_process(agent_id, practice_id, files=files)
+                            output = result.get('output', {})
+                            info = output.get('info', output)
+
+                            # Salva in PracticeResult
+                            pr = bg_db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+                            if pr:
+                                rd = dict(pr.result_data or {})
+                                if 'files' not in rd:
+                                    rd['files'] = {}
+                                for fh, fd in (info.get('files', {})).items():
+                                    rd['files'][fh] = fd
+                                pr.result_data = rd
+                                bg_db.commit()
+
+                            job['results'].append({'file': fn, 'ok': True})
+                        except Exception as e:
+                            job['results'].append({'file': fn, 'ok': False, 'error': str(e)})
+                            logger.error(f"BG process file {fn}: {e}")
+
+                        job['progress'] = i + 1
+
+                    job['status'] = 'completed'
+                except Exception as e:
+                    job['status'] = 'error'
+                    job['error'] = str(e)
+                    logger.error(f"BG process-all error: {e}")
+
+        t = threading.Thread(target=_bg_process, daemon=True)
+        t.start()
+
+        return jsonify({
+            "ok": True,
+            "total": len(to_process),
+            "skipped": len(files_data) - len(to_process),
+        })
+    except Exception as e:
+        logger.error(f"AO process-all: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@pratiche_bp.route('/practice/<practice_id>/process-status', methods=['GET'])
+def ao_practice_process_status(practice_id):
+    """Polling stato elaborazione in background."""
+    job = _processing_jobs.get(practice_id)
+    if not job:
+        return jsonify({"status": "none"})
+    return jsonify(job)
 
 
 @pratiche_bp.route('/practice/<agent_id>/<practice_id>/process-stream', methods=['POST'])

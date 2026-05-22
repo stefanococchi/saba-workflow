@@ -467,7 +467,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
             <button class="btn btn-outline-primary btn-sm" id="btnSaveFiles" onclick="saveFilesToDb()" style="border-radius:8px">
               <i class="bi bi-cloud-upload"></i> Salva file
             </button>
-            <button class="btn btn-primary btn-sm" onclick="processAllFiles()" style="border-radius:8px">
+            <button class="btn btn-primary btn-sm" onclick="processAllFilesBackground()" style="border-radius:8px">
               <i class="bi bi-play-fill"></i> Elabora <span id="stagedCountBtn">0</span> documenti
             </button>
           </div>
@@ -1038,6 +1038,133 @@ async function saveFilesToDb() {
   }
 }
 
+async function processAllFilesBackground() {
+  const agentId = getAgentId();
+  const practiceId = getPracticeId();
+  if (!agentId) return alert('Seleziona un agente');
+  if (stagedFiles.length === 0) return alert('Nessun file da elaborare');
+
+  const totalFiles = stagedFiles.length;
+
+  // 1. Salva pratica nel DB
+  await savePracticeToDb(practiceId, agentId, { files: {} });
+
+  // 2. Upload file nel DB
+  const fd = new FormData();
+  stagedFiles.forEach((f, i) => fd.append('file_' + i, f));
+  // Salva blob per PDF viewer
+  for (const f of stagedFiles) processedFileBlobs[f.name] = f;
+
+  try {
+    const upRes = await fetch(`/api/ao/practice-files/${practiceId}/upload`, { method: 'POST', body: fd });
+    const upData = await upRes.json();
+    if (upData.error) throw new Error(upData.error);
+  } catch (e) {
+    alert('Upload fallito: ' + e.message);
+    return;
+  }
+
+  // 3. Prepara UI
+  document.getElementById('dropZoneContainer').style.display = 'none';
+  document.getElementById('practiceResults').style.display = 'flex';
+  document.getElementById('previewPanel').style.display = 'none';
+  document.getElementById('infoPracticeId').textContent = practiceId;
+  document.getElementById('infoCreated').textContent = '-';
+  document.getElementById('infoUpdated').textContent = '-';
+  document.getElementById('fileTabsBar').innerHTML = '';
+  document.getElementById('validateBar').style.display = 'none';
+
+  const dataScroll = document.getElementById('dataScroll');
+  dataScroll.innerHTML = `
+    <div class="text-center py-5">
+      <div class="prat-spinner" style="width:30px;height:30px;border-width:3px"></div>
+      <div style="margin-top:12px;font-weight:500;font-size:0.85rem" id="bgProcessMsg">Avvio elaborazione...</div>
+      <div style="margin-top:6px;font-size:0.78rem;color:var(--md-on-surface-variant)" id="bgProcessDetail">
+        Puoi navigare altrove — l'elaborazione continua in background
+      </div>
+    </div>`;
+
+  stagedFiles = [];
+  renderStagedFiles();
+  if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+
+  // 4. Trigger elaborazione in background
+  try {
+    const r = await fetch(`/api/ao/practice/${agentId}/${practiceId}/process-all`, { method: 'POST' });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    document.getElementById('bgProcessMsg').textContent = `Elaborazione ${data.total} file in corso...`;
+    if (data.skipped > 0) {
+      document.getElementById('bgProcessDetail').textContent = `${data.skipped} file già elaborati — puoi navigare altrove`;
+    }
+
+    // 5. Poll per stato
+    pollProcessingStatus(practiceId, agentId);
+  } catch (e) {
+    dataScroll.innerHTML = `<div class="text-center py-4" style="color:var(--md-error)"><i class="bi bi-exclamation-triangle"></i> Errore: ${e.message}</div>`;
+  }
+}
+
+function pollProcessingStatus(practiceId, agentId) {
+  const poll = async () => {
+    try {
+      const r = await fetch(`/api/ao/practice/${practiceId}/process-status`);
+      const job = await r.json();
+
+      if (job.status === 'none') return; // nessun job
+
+      const msg = document.getElementById('bgProcessMsg');
+      const detail = document.getElementById('bgProcessDetail');
+
+      if (job.status === 'running') {
+        if (msg) msg.textContent = `Elaborazione: ${job.progress}/${job.total} file completati...`;
+        if (detail) detail.textContent = 'Puoi navigare altrove — l\'elaborazione continua in background';
+        setTimeout(poll, 2000);
+      } else if (job.status === 'completed' || job.status === 'error') {
+        // Elaborazione finita — ricarica risultati
+        document.getElementById('previewPanel').style.display = '';
+        document.getElementById('infoValidation').innerHTML = job.status === 'completed'
+          ? '<span class="badge-ok">Elaborazione completata</span>'
+          : '<span class="badge-ko">Errore elaborazione</span>';
+
+        const cached = await loadPracticeFromDb(practiceId);
+        if (cached?.result_data) {
+          await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+        }
+        if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+      }
+    } catch (e) {
+      console.error('Poll error:', e);
+      setTimeout(poll, 5000);
+    }
+  };
+  setTimeout(poll, 2000);
+}
+
+// Controlla se c'è un'elaborazione in corso quando si apre una pratica
+async function checkOngoingProcessing(practiceId) {
+  try {
+    const r = await fetch(`/api/ao/practice/${practiceId}/process-status`);
+    const job = await r.json();
+    if (job.status === 'running') {
+      // Mostra stato e riprendi polling
+      const dataScroll = document.getElementById('dataScroll');
+      dataScroll.innerHTML = `
+        <div class="text-center py-5">
+          <div class="prat-spinner" style="width:30px;height:30px;border-width:3px"></div>
+          <div style="margin-top:12px;font-weight:500;font-size:0.85rem" id="bgProcessMsg">Elaborazione: ${job.progress}/${job.total} file...</div>
+          <div style="margin-top:6px;font-size:0.78rem;color:var(--md-on-surface-variant)" id="bgProcessDetail">Elaborazione in corso in background</div>
+        </div>`;
+      document.getElementById('previewPanel').style.display = 'none';
+      document.getElementById('infoValidation').innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${job.progress}/${job.total}</span>`;
+      pollProcessingStatus(practiceId, getAgentId());
+      return true;
+    }
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
 async function processAllFiles() {
   const agentId = getAgentId();
   const practiceId = getPracticeId();
@@ -1514,8 +1641,12 @@ async function showPracticeResult(result, practiceId) {
   }
   document.getElementById('filesList').innerHTML = legacyHtml;
 
-  // Select first tab
-  if (firstHash) switchFileTab(firstHash);
+  // Check if there's ongoing background processing
+  const isProcessing = await checkOngoingProcessing(practiceId);
+  if (!isProcessing) {
+    // Select first tab
+    if (firstHash) switchFileTab(firstHash);
+  }
 
   // Load workflow stepper if practice has one
   loadPracticeWorkflow(practiceId);
