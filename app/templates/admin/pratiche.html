@@ -1668,9 +1668,17 @@ function switchFileTab(hash) {
 
 function setupFieldEditing() {
   document.querySelectorAll('.field-card[data-field-key]').forEach(card => {
+    // Single click → highlight value in PDF preview
     card.addEventListener('click', function(e) {
       if (this.classList.contains('editing')) return;
-      // If click was on a nested container, skip
+      if (e.target.closest('.fields-grid') && e.target.closest('.field-card') !== this) return;
+      const search = this.dataset.search;
+      if (search) highlightPreviewText(search);
+    });
+
+    // Double-click → inline editing
+    card.addEventListener('dblclick', function(e) {
+      if (this.classList.contains('editing')) return;
       if (e.target.closest('.fields-grid') && e.target.closest('.field-card') !== this) return;
 
       const valueEl = this.querySelector('.fc-value');
@@ -1715,14 +1723,6 @@ function setupFieldEditing() {
         if (e.key === 'Enter') input.blur();
         if (e.key === 'Escape') { input.value = currentValue; input.blur(); }
       });
-    });
-  });
-
-  // Double-click on field → highlight value in preview panel
-  document.querySelectorAll('.field-card[data-pdf][data-search]').forEach(card => {
-    card.addEventListener('dblclick', function() {
-      const search = this.dataset.search;
-      if (search) highlightPreviewText(search);
     });
   });
 }
