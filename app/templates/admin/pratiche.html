@@ -2735,7 +2735,7 @@ async function completeCurrentStep(action) {
 async function loadWorkflowSelector() {
   const sel = document.getElementById('wfSelectorDropdown');
   try {
-    const r = await fetch('/api/workflows?status=active');
+    const r = await fetch('/api/workflows');
     const data = await r.json();
     const workflows = data.workflows || data || [];
     sel.innerHTML = '<option value="">Nessuno (verifica libera)</option>';
