@@ -1862,9 +1862,14 @@ function switchFileTab(hash) {
       <div class="text-center py-5" style="color:var(--md-on-surface-variant)">
         <i class="bi bi-hourglass" style="font-size:2rem;opacity:0.3;display:block;margin-bottom:10px"></i>
         <div style="margin-bottom:12px">${isDbOnly ? 'Non ancora elaborato' : 'Elaborazione: ' + exState}</div>
-        <button class="btn btn-primary btn-sm" onclick="reprocessFile('${hash}')" style="border-radius:10px">
-          <i class="bi bi-play-fill"></i> Elabora
-        </button>
+        <div class="d-flex gap-2 justify-content-center">
+          <button class="btn btn-primary btn-sm" onclick="reprocessFile('${hash}')" style="border-radius:10px">
+            <i class="bi bi-play-fill"></i> Elabora
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="showManualDataEntry('${hash}', '${_escAttr(fn)}')" style="border-radius:10px">
+            <i class="bi bi-pencil-square"></i> Inserisci dati manualmente
+          </button>
+        </div>
       </div>`;
     return;
   }
@@ -1878,6 +1883,7 @@ function switchFileTab(hash) {
         <div>Nessun dato estratto</div>
         <div class="mt-2 d-flex gap-2 justify-content-center">
           <button class="btn btn-sm btn-outline-secondary" onclick="reprocessFile('${hash}')" style="border-radius:8px"><i class="bi bi-arrow-repeat"></i> Rielabora</button>
+          <button class="btn btn-sm btn-outline-primary" onclick="showManualDataEntry('${hash}', '${_escAttr(fn)}')" style="border-radius:8px"><i class="bi bi-pencil-square"></i> Inserisci dati</button>
           <button class="btn btn-sm btn-outline-secondary" onclick="openSintesiForFile('${hash}')" style="border-radius:8px"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
         </div>
       </div>`;
@@ -2832,6 +2838,152 @@ document.addEventListener('click', e => {
     openPdfAndSearch(pdf, search);
   }
 });
+
+// ── Manual Data Entry ───────────────────────────────────────────────
+let _cachedCatalog = null;
+
+async function loadAgentCatalog() {
+  if (_cachedCatalog) return _cachedCatalog;
+  const agentId = getAgentId();
+  if (!agentId) return null;
+  try {
+    const r = await fetch(`/api/ao/catalog/${agentId}`);
+    const data = await r.json();
+    _cachedCatalog = data.output?.catalog || data.catalog || data;
+    return _cachedCatalog;
+  } catch (e) {
+    console.error('Load catalog:', e);
+    return null;
+  }
+}
+
+async function showManualDataEntry(hash, fileName) {
+  const dataScroll = document.getElementById('dataScroll');
+  const catalog = await loadAgentCatalog();
+
+  // Raccoglie tutti i campi da tutti i tipi documento del catalogo
+  let allFields = [];
+  let docTypes = [];
+  if (catalog && typeof catalog === 'object') {
+    for (const [typeId, typeDef] of Object.entries(catalog)) {
+      if (typeDef._disabled) continue;
+      docTypes.push(typeId);
+      const questions = typeDef.extraction?.questions || [];
+      questions.forEach(q => {
+        if (!q.disabled && !allFields.find(f => f.id === q.id)) {
+          allFields.push({ id: q.id, format: q.outputFormat || 'string' });
+        }
+      });
+    }
+  }
+
+  // Se non ci sono campi dal catalogo, usa campi generici
+  if (allFields.length === 0) {
+    allFields = [
+      { id: 'cognome', format: 'string' },
+      { id: 'nome', format: 'string' },
+      { id: 'codice_fiscale', format: 'string' },
+      { id: 'data_nascita', format: 'string' },
+      { id: 'luogo_nascita', format: 'string' },
+      { id: 'residenza', format: 'string' },
+      { id: 'tipo_documento', format: 'string' },
+      { id: 'numero_documento', format: 'string' },
+    ];
+  }
+
+  // Tipo documento selector
+  let docTypeSelector = '';
+  if (docTypes.length > 0) {
+    docTypeSelector = `<div class="mb-3">
+      <label class="form-label" style="font-size:0.78rem;font-weight:600">Tipo documento</label>
+      <select class="form-select form-select-sm" id="manualDocType" style="border-radius:8px" onchange="updateManualFields()">
+        ${docTypes.map(t => `<option value="${t}">${humanLabel(t)}</option>`).join('')}
+      </select>
+    </div>`;
+  }
+
+  // Form campi
+  let fieldsHtml = allFields.map(f => `
+    <div class="mb-2">
+      <label class="form-label" style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:var(--md-on-surface-variant);margin-bottom:2px">${humanLabel(f.id)}</label>
+      <input type="text" class="form-control form-control-sm" id="manual_${f.id}" data-field-id="${f.id}"
+             style="border-radius:8px;font-size:0.85rem" placeholder="${humanLabel(f.id)}">
+    </div>
+  `).join('');
+
+  dataScroll.innerHTML = `
+    <div style="max-width:600px">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-pencil-square" style="font-size:1.2rem;color:var(--md-primary)"></i>
+        <div>
+          <div style="font-weight:600;font-size:0.95rem">Inserimento dati manuale</div>
+          <div style="font-size:0.75rem;color:var(--md-on-surface-variant)">${fileName} — compila i campi e salva</div>
+        </div>
+      </div>
+      ${docTypeSelector}
+      <div id="manualFieldsContainer">${fieldsHtml}</div>
+      <div class="d-flex gap-2 mt-3">
+        <button class="btn btn-primary btn-sm" onclick="saveManualData('${hash}', '${_escAttr(fileName)}')" style="border-radius:10px">
+          <i class="bi bi-check-lg"></i> Salva dati
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="switchFileTab('${hash}')" style="border-radius:10px">
+          <i class="bi bi-arrow-left"></i> Annulla
+        </button>
+      </div>
+    </div>`;
+
+  dataScroll.scrollTop = 0;
+}
+
+function updateManualFields() {
+  const typeId = document.getElementById('manualDocType')?.value;
+  if (!typeId || !_cachedCatalog || !_cachedCatalog[typeId]) return;
+  const questions = _cachedCatalog[typeId].extraction?.questions || [];
+  const container = document.getElementById('manualFieldsContainer');
+  container.innerHTML = questions.filter(q => !q.disabled).map(q => `
+    <div class="mb-2">
+      <label class="form-label" style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:var(--md-on-surface-variant);margin-bottom:2px">${humanLabel(q.id)}</label>
+      <input type="text" class="form-control form-control-sm" id="manual_${q.id}" data-field-id="${q.id}"
+             style="border-radius:8px;font-size:0.85rem" placeholder="${humanLabel(q.id)}">
+    </div>
+  `).join('');
+}
+
+async function saveManualData(hash, fileName) {
+  // Raccogli valori dai campi
+  const data = {};
+  document.querySelectorAll('#manualFieldsContainer input[data-field-id]').forEach(input => {
+    const val = input.value.trim();
+    if (val) data[input.dataset.fieldId] = val;
+  });
+
+  if (Object.keys(data).length === 0) {
+    alert('Inserisci almeno un campo');
+    return;
+  }
+
+  const docType = document.getElementById('manualDocType')?.value || 'documento';
+
+  // Salva nella struttura file della pratica
+  const files = window._practiceFiles || {};
+  if (!files[hash]) {
+    files[hash] = { fileName, state: {}, identification: {}, extraction: {} };
+  }
+  files[hash].state = { identification: 'completed', extraction: 'completed' };
+  files[hash].identification = { documentId: docType, documentTypeId: docType };
+  files[hash].extraction = { data };
+  window._practiceFiles = files;
+
+  // Salva nel DB
+  const practiceId = window._practiceId;
+  const agentId = getAgentId();
+  if (practiceId && agentId) {
+    await savePracticeToDb(practiceId, agentId, { files });
+  }
+
+  // Mostra i dati appena inseriti nella vista normale
+  switchFileTab(hash);
+}
 
 // ── Backoffice Workflow Stepper ─────────────────────────────────────
 let practiceWorkflow = null; // { steps, current_step_order, workflow_name, ... }
