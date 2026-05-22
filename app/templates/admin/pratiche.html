@@ -2341,7 +2341,8 @@ function renderCatalogTypes() {
     return;
   }
 
-  for (const [typeId, typeDef] of types) {
+  for (let [typeId, typeDef] of types) {
+    if (!typeDef || typeof typeDef !== 'object') continue;
     const ident = typeDef.identification || {};
     const questions = Array.isArray(typeDef.extraction?.questions) ? typeDef.extraction.questions : [];
     const activeQ = questions.filter(q => !q.disabled).length;
@@ -2510,12 +2511,15 @@ async function deleteCatalogType(typeId) {
 function openCatalogEdit(typeId) {
   try {
     editingTypeId = typeId;
-    const def = catalogData[typeId];
+    let def = catalogData[typeId];
     if (!def) { alert('Tipo "' + typeId + '" non trovato nel catalogo'); return; }
-    if (!def.identification) def.identification = {};
+    // Normalizza: se def non è un oggetto plain, wrappalo
+    if (typeof def !== 'object' || def === null) {
+      def = {}; catalogData[typeId] = def;
+    }
+    if (!def.identification) def.identification = { aiEnabled: true, regexEnabled: false, instructions: '', hint: '' };
     const ident = def.identification;
-    // Assicura che extraction.questions esista come array nell'oggetto
-    if (!def.extraction) def.extraction = {};
+    if (!def.extraction || typeof def.extraction !== 'object') def.extraction = {};
     if (!Array.isArray(def.extraction.questions)) def.extraction.questions = [];
     const questions = def.extraction.questions;
 
