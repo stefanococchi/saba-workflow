@@ -821,6 +821,8 @@ function renderNodeSubtitle(step) {
             var dcTypes = (step.config.doc_types || []);
             var dcLabel = dcTypes.length > 0 ? dcTypes.join(', ') : 'tutti i tipi';
             return (step.config.ao_agent_name || 'Agent non configurato') + ' · ' + dcLabel;
+        case 'sister_visura':
+            return 'SISTER · ' + (step.config.operation || 'visuraStorica') + ' · ' + (step.config.tipo_catasto || 'F');
         default:
             return capitalize(step.type);
     }
@@ -1792,6 +1794,89 @@ function _renderStepEditFormInner(step, index, common) {
                 </div>
             `;
         }
+
+        case 'sister_visura': {
+            return common + `
+                <div class="mb-3">
+                    <label class="form-label"><i class="bi bi-building"></i> Operazione</label>
+                    <select class="form-select" id="editSisterOperation">
+                        <option value="visuraStorica" ${(step.config.operation || 'visuraStorica') === 'visuraStorica' ? 'selected' : ''}>Visura Storica</option>
+                        <option value="visuraAttuale" ${step.config.operation === 'visuraAttuale' ? 'selected' : ''}>Visura Attuale</option>
+                    </select>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Tipo Catasto</label>
+                        <select class="form-select" id="editSisterTipoCatasto">
+                            <option value="F" ${(step.config.tipo_catasto || 'F') === 'F' ? 'selected' : ''}>Fabbricati (F)</option>
+                            <option value="T" ${step.config.tipo_catasto === 'T' ? 'selected' : ''}>Terreni (T)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Tipo Visura</label>
+                        <select class="form-select" id="editSisterTipoVisura">
+                            <option value="sintetica" ${(step.config.tipo_visura || 'sintetica') === 'sintetica' ? 'selected' : ''}>Sintetica</option>
+                            <option value="completa" ${step.config.tipo_visura === 'completa' ? 'selected' : ''}>Completa</option>
+                        </select>
+                    </div>
+                </div>
+                <hr>
+                <h6 class="text-muted"><i class="bi bi-arrow-left-right"></i> Mapping campi (da step precedenti)</h6>
+                <div class="form-text mb-2">Indica il nome del campo estratto negli step precedenti. Lascia vuoto per inserire manualmente.</div>
+                <div class="row mb-2">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.82rem">Provincia ← campo</label>
+                        <input type="text" class="form-control form-control-sm" id="editSisterMapProvincia"
+                               value="${step.config.field_mapping?.provincia || 'provincia'}" placeholder="es. provincia">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.82rem">Comune ← campo</label>
+                        <input type="text" class="form-control form-control-sm" id="editSisterMapComune"
+                               value="${step.config.field_mapping?.comune || 'comune'}" placeholder="es. comune">
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:0.82rem">Foglio ← campo</label>
+                        <input type="text" class="form-control form-control-sm" id="editSisterMapFoglio"
+                               value="${step.config.field_mapping?.foglio || 'foglio'}" placeholder="es. foglio">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:0.82rem">Particella ← campo</label>
+                        <input type="text" class="form-control form-control-sm" id="editSisterMapParticella"
+                               value="${step.config.field_mapping?.particella || 'particella'}" placeholder="es. particella">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:0.82rem">Subalterno ← campo</label>
+                        <input type="text" class="form-control form-control-sm" id="editSisterMapSubalterno"
+                               value="${step.config.field_mapping?.subalterno || 'subalterno'}" placeholder="es. subalterno">
+                    </div>
+                </div>
+                <hr>
+                <h6 class="text-muted"><i class="bi bi-key"></i> Credenziali SISTER</h6>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.82rem">Username</label>
+                        <input type="text" class="form-control form-control-sm" id="editSisterUsername"
+                               value="${step.config.auth_username || ''}" placeholder="Username SISTER">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.82rem">Password</label>
+                        <input type="password" class="form-control form-control-sm" id="editSisterPassword"
+                               value="${step.config.auth_password || ''}" placeholder="Password SISTER">
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <small><i class="bi bi-info-circle"></i>
+                    <strong>Visura SISTER:</strong><br>
+                    1. Legge i dati catastali dagli step precedenti (foglio, particella, ecc.)<br>
+                    2. Chiama l'agente sister-agent su AO<br>
+                    3. Salva il PDF della visura nella pratica<br>
+                    4. Gli step successivi possono elaborare la visura
+                    </small>
+                </div>
+            `;
+        }
     }
 }
 
@@ -2708,6 +2793,20 @@ function saveStepEdit() {
                 step.config.doc_types.push(cb.value);
             });
             break;
+        case 'sister_visura':
+            step.config.operation = document.getElementById('editSisterOperation')?.value || 'visuraStorica';
+            step.config.tipo_catasto = document.getElementById('editSisterTipoCatasto')?.value || 'F';
+            step.config.tipo_visura = document.getElementById('editSisterTipoVisura')?.value || 'sintetica';
+            step.config.field_mapping = {
+                provincia: document.getElementById('editSisterMapProvincia')?.value || 'provincia',
+                comune: document.getElementById('editSisterMapComune')?.value || 'comune',
+                foglio: document.getElementById('editSisterMapFoglio')?.value || 'foglio',
+                particella: document.getElementById('editSisterMapParticella')?.value || 'particella',
+                subalterno: document.getElementById('editSisterMapSubalterno')?.value || 'subalterno',
+            };
+            step.config.auth_username = document.getElementById('editSisterUsername')?.value || '';
+            step.config.auth_password = document.getElementById('editSisterPassword')?.value || '';
+            break;
     }
 
     // Save next_step for all step types
@@ -3179,6 +3278,18 @@ function saveWorkflow() {
                     if_rejected: step.config.if_rejected || 'stop',
                     if_rejected_step: step.config.if_rejected_step || 0,
                     doc_types: step.config.doc_types || []
+                };
+            }
+
+            // For sister_visura steps
+            if (step.type === 'sister_visura') {
+                stepData.skip_conditions = {
+                    operation: step.config.operation || 'visuraStorica',
+                    tipo_catasto: step.config.tipo_catasto || 'F',
+                    tipo_visura: step.config.tipo_visura || 'sintetica',
+                    field_mapping: step.config.field_mapping || {},
+                    auth_username: step.config.auth_username || '',
+                    auth_password: step.config.auth_password || '',
                 };
             }
 
@@ -3701,7 +3812,8 @@ var DR_TYPE_ICONS = {
     survey: 'bi-ui-checks', human_approval: 'bi-person-check-fill',
     excel_write: 'bi-file-earmark-spreadsheet-fill', whatsapp: 'bi-whatsapp',
     document_processing: 'bi-file-earmark-check-fill',
-    document_check: 'bi-file-earmark-ruled-fill'
+    document_check: 'bi-file-earmark-ruled-fill',
+    sister_visura: 'bi-building-fill'
 };
 
 var DR_TYPE_COLORS = {
@@ -3710,7 +3822,8 @@ var DR_TYPE_COLORS = {
     survey: '#0277BD', export_data: '#6D4C41', excel_write: '#6D4C41',
     sms: '#E65100', webhook: '#455A64',
     document_processing: '#1565C0',
-    document_check: '#6A1B9A'
+    document_check: '#6A1B9A',
+    sister_visura: '#00695C'
 };
 
 function switchReviewTab(tab) {

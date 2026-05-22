@@ -30,6 +30,7 @@ class StepType(str, Enum):
     WHATSAPP = 'whatsapp'
     DOCUMENT_PROCESSING = 'document_processing'
     DOCUMENT_CHECK = 'document_check'
+    SISTER_VISURA = 'sister_visura'
 
 
 class ParticipantStatus(str, Enum):

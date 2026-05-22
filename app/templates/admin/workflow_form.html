@@ -1289,6 +1289,13 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
                             <small>Elabora documenti con AO, attendi validazione operatore, poi avanza</small>
                         </div>
                     </div>
+                    <div class="step-template" draggable="true" data-type="sister_visura">
+                        <i class="bi bi-building"></i>
+                        <div>
+                            <strong>Visura SISTER</strong><br>
+                            <small>Richiedi visura catastale usando dati estratti dagli step precedenti</small>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="mt-3 p-3 bg-light rounded">
@@ -1751,7 +1758,14 @@ try {
             if_validated_step: _skipCond.if_validated_step || 0,
             if_rejected: _skipCond.if_rejected || 'stop',
             if_rejected_step: _skipCond.if_rejected_step || 0,
-            doc_types: _skipCond.doc_types || []
+            doc_types: _skipCond.doc_types || [],
+            // Sister visura
+            operation: _skipCond.operation || 'visuraStorica',
+            tipo_catasto: _skipCond.tipo_catasto || 'F',
+            tipo_visura: _skipCond.tipo_visura || 'sintetica',
+            field_mapping: _skipCond.field_mapping || {},
+            auth_username: _skipCond.auth_username || '',
+            auth_password: _skipCond.auth_password || ''
         },
         _dfPos: _skipCond._dfPos || null
     });

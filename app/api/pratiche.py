@@ -885,7 +885,7 @@ def complete_practice_step(practice_id):
         # Esegui azioni automatiche dello step (email, whatsapp, ecc.)
         step_type = current_step.type.name
         exec_result = {}
-        if action != 'skip' and step_type in ('EMAIL', 'WHATSAPP', 'WEBHOOK'):
+        if action != 'skip' and step_type in ('EMAIL', 'WHATSAPP', 'WEBHOOK', 'SISTER_VISURA'):
             exec_result = _execute_backoffice_step(current_step, pr, body)
             step_states[str(current_order)]['exec_result'] = exec_result
 
@@ -951,8 +951,139 @@ def _execute_backoffice_step(step, practice_result, body):
         elif step_type == 'WHATSAPP':
             result['note'] = 'WhatsApp non ancora implementato per workflow pratica'
 
+        elif step_type == 'SISTER_VISURA':
+            result = _execute_sister_visura(step, practice_result, config)
+
     except Exception as e:
         result['error'] = str(e)
         logger.error(f"Execute backoffice step error: {e}")
+
+    return result
+
+
+def _execute_sister_visura(step, practice_result, config):
+    """Chiama sister-agent con dati catastali dal contesto accumulato della pratica."""
+    result = {'type': 'SISTER_VISURA'}
+
+    # Trova agent_id per sister-agent
+    sister_agent_id = config.get('sister_agent_id', '')
+    if not sister_agent_id:
+        agents_list = ao_service.list_agents()
+        sa = next((a for a in agents_list if 'sister' in (a.get('name', '') or '').lower()), None)
+        if sa:
+            sister_agent_id = sa['id']
+        else:
+            result['error'] = 'Agente sister-agent non trovato'
+            return result
+
+    # Raccogli dati catastali dal contesto accumulato (step precedenti)
+    accumulated = {}
+    step_states = practice_result.step_states or {}
+    for order_key, state in step_states.items():
+        if state.get('status') == 'completed' and state.get('extracted_data'):
+            for doc_type, fields in state['extracted_data'].items():
+                if isinstance(fields, dict):
+                    accumulated.update(fields)
+
+    # Mapping: campo estratto → campo sister input
+    field_mapping = config.get('field_mapping', {})
+    sister_input = {
+        'operation': config.get('operation', 'visuraStorica'),
+        'tipoCatasto': config.get('tipo_catasto', 'F'),
+        'tipoVisura': config.get('tipo_visura', 'sintetica'),
+    }
+
+    # Applica mapping: per ogni campo sister, cerca il valore nel contesto
+    mapping_fields = {
+        'provincia': 'provincia',
+        'comune': 'comune',
+        'foglio': 'foglio',
+        'particella': 'particella',
+        'subalterno': 'subalterno',
+    }
+    # Merge mapping custom dalla config
+    mapping_fields.update(field_mapping)
+
+    for sister_key, source_key in mapping_fields.items():
+        # Cerca nel contesto accumulato (case-insensitive)
+        val = None
+        for k, v in accumulated.items():
+            if k.lower() == source_key.lower() or k.lower().replace(' ', '_') == source_key.lower():
+                val = v
+                break
+        # Override manuale dal body della request
+        if not val:
+            val = config.get(sister_key, '')
+        if val:
+            sister_input[sister_key] = str(val)
+
+    # Credenziali auth
+    if config.get('auth_username'):
+        sister_input['authProvider'] = config.get('auth_provider', 'sister')
+        sister_input['authUsername'] = config['auth_username']
+        sister_input['authPassword'] = config.get('auth_password', '')
+
+    result['input'] = sister_input
+    logger.info(f"Sister visura input: {sister_input}")
+
+    # Chiama sister-agent
+    try:
+        run_result = ao_service.run_agent(sister_agent_id, sister_input)
+        task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
+        output = task_result.get('output', {})
+
+        # Cerca file PDF nell'output
+        file_data = None
+        file_name = f"visura_{sister_input.get('comune', 'visura')}_{sister_input.get('foglio', '')}_{sister_input.get('particella', '')}.pdf"
+
+        # L'output potrebbe contenere il file in diversi formati
+        if isinstance(output, dict):
+            # Cerca binary/file data
+            for key in ('file', 'pdf', 'data', 'document', 'binary'):
+                if key in output and output[key]:
+                    file_data = output[key]
+                    break
+            if output.get('fileName'):
+                file_name = output['fileName']
+
+        # Se abbiamo il file, salvalo nella pratica
+        if file_data:
+            import base64
+            if isinstance(file_data, str):
+                # Probabilmente base64
+                content = base64.b64decode(file_data)
+            elif isinstance(file_data, dict) and file_data.get('data'):
+                content = base64.b64decode(file_data['data'])
+            else:
+                content = file_data
+
+            # Salva come PracticeFile
+            existing = db.query(PracticeFile).filter_by(
+                practice_id=practice_result.practice_id, file_name=file_name
+            ).first()
+            if existing:
+                existing.data = content
+                existing.mime_type = 'application/pdf'
+            else:
+                db.add(PracticeFile(
+                    practice_id=practice_result.practice_id,
+                    file_name=file_name,
+                    mime_type='application/pdf',
+                    data=content,
+                ))
+            db.flush()
+
+            result['file_saved'] = file_name
+            result['file_size'] = len(content)
+            logger.info(f"Sister visura: saved {file_name} ({len(content)} bytes)")
+        else:
+            result['raw_output'] = str(output)[:500]
+            result['note'] = 'Nessun file trovato nella risposta AO'
+
+        result['status'] = task_result.get('status', 'unknown')
+
+    except Exception as e:
+        result['error'] = f'Errore chiamata sister-agent: {str(e)}'
+        logger.error(f"Sister visura error: {e}")
 
     return result
