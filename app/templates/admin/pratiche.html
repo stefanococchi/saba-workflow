@@ -2312,7 +2312,12 @@ async function loadCatalog(agentId) {
     const r = await fetch(`/api/ao/catalog/${agentId}`);
     const data = await r.json();
     if (data.error) throw new Error(data.error);
-    const freshCatalog = data.output?.catalog || data.output || data.catalog || data;
+    console.log('Catalog raw response:', JSON.stringify(data).substring(0, 500));
+    let freshCatalog = data.output?.catalog || data.output || data.catalog || data;
+    // Se il catalogo è wrappato in un ulteriore livello (es. {info: {catalog: {...}}})
+    if (freshCatalog.info?.catalog) freshCatalog = freshCatalog.info.catalog;
+    if (freshCatalog.catalog && typeof freshCatalog.catalog === 'object' && !freshCatalog.identification) freshCatalog = freshCatalog.catalog;
+    console.log('Catalog keys:', Object.keys(freshCatalog));
     // Ripristina tipi sospesi da localStorage (definizioni complete)
     const suspended = loadSuspended();
     for (const [id, fullDef] of Object.entries(suspended)) {
