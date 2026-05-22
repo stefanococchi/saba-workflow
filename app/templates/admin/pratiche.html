@@ -2328,6 +2328,15 @@ async function loadCatalog(agentId) {
       }
     }
     freshCatalog = filtered;
+
+    // Se AO non ha tipi, carica dal fallback locale
+    if (Object.keys(freshCatalog).length === 0) {
+      const localCatalog = loadLocalCatalog();
+      if (Object.keys(localCatalog).length > 0) {
+        freshCatalog = localCatalog;
+      }
+    }
+
     // Ripristina tipi sospesi da localStorage (definizioni complete)
     const suspended = loadSuspended();
     for (const [id, fullDef] of Object.entries(suspended)) {
@@ -2426,6 +2435,7 @@ function allCatalogTypesOn() {
 async function syncCatalogToAO() {
   const agentId = selectedCatalogAgentId;
   if (!agentId) return;
+  saveLocalCatalog();
   try {
     const r = await fetch(`/api/ao/catalog/${agentId}`, {
       method: 'PUT',
@@ -2437,6 +2447,27 @@ async function syncCatalogToAO() {
   } catch (e) {
     console.error('Sync catalogo:', e);
   }
+}
+
+// ── Persistenza catalogo locale (fallback per agenti senza catalogo AO) ──
+function getLocalCatalogKey() {
+  return 'catalog_local_' + (selectedCatalogAgentId || '');
+}
+
+function saveLocalCatalog() {
+  const payload = buildCatalogPayload();
+  if (Object.keys(payload).length > 0) {
+    localStorage.setItem(getLocalCatalogKey(), JSON.stringify(payload));
+  } else {
+    localStorage.removeItem(getLocalCatalogKey());
+  }
+}
+
+function loadLocalCatalog() {
+  try {
+    const raw = localStorage.getItem(getLocalCatalogKey());
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
 }
 
 // ── Persistenza tipi sospesi in localStorage ──
@@ -2735,6 +2766,7 @@ async function saveCatalogEdit() {
     const data = await r.json();
     console.log('Catalog save response:', data);
     if (data.error) throw new Error(data.error);
+    saveLocalCatalog();
     alert('Catalogo salvato');
     closeCatalogEdit();
     loadCatalog();
