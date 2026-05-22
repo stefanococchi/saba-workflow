@@ -1175,7 +1175,15 @@ function pollProcessingStatus(practiceId, agentId) {
       const r = await fetch(`/api/ao/practice/${practiceId}/process-status`);
       const job = await r.json();
 
-      if (job.status === 'none') return;
+      if (job.status === 'none') {
+        // Job non più in memoria (server restart?) — ricarica dal DB
+        const cached = await loadPracticeFromDb(practiceId);
+        if (cached?.result_data?.files && Object.keys(cached.result_data.files).length > 0) {
+          document.getElementById('previewPanel').style.display = '';
+          await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+        }
+        return;
+      }
 
       if (job.status === 'running') {
         // Aggiorna info bar con progresso
