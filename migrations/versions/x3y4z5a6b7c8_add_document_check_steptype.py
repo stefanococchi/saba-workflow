@@ -14,7 +14,7 @@ depends_on = None
 
 
 def upgrade():
-    op.execute("ALTER TYPE steptype ADD VALUE IF NOT EXISTS 'document_check'")
+    op.execute("ALTER TYPE steptype ADD VALUE IF NOT EXISTS 'DOCUMENT_CHECK'")
 
 
 def downgrade():
