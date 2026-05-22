@@ -3093,6 +3093,19 @@ function saveWorkflow() {
                 };
             }
 
+            // For document_check steps
+            if (step.type === 'document_check') {
+                stepData.skip_conditions = {
+                    ao_agent_id: step.config.ao_agent_id || '',
+                    ao_agent_name: step.config.ao_agent_name || '',
+                    delay_hours: step.config.delay_hours || 0,
+                    if_validated: step.config.if_validated || 'continue',
+                    if_validated_step: step.config.if_validated_step || 0,
+                    if_rejected: step.config.if_rejected || 'stop',
+                    if_rejected_step: step.config.if_rejected_step || 0
+                };
+            }
+
             // For excel_write steps
             if (step.type === 'excel_write') {
                 stepData.skip_conditions = {
