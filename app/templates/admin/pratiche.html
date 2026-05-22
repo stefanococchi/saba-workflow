@@ -162,11 +162,11 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 @keyframes pratspin { to { transform: rotate(360deg); } }
 
 /* Elabora 3-column layout */
-.elabora-layout { display: flex; gap: 16px; min-height: 500px; }
-.elabora-col-agents { width: 200px; min-width: 120px; max-width: 350px; flex-shrink: 0; overflow: hidden; resize: horizontal; }
-.elabora-col-practices { width: 240px; min-width: 150px; max-width: 400px; flex-shrink: 0; overflow: hidden; resize: horizontal; }
-.elabora-col-agents .card, .elabora-col-practices .card { border-radius: 16px; height: 100%; }
-.elabora-col-detail { flex: 1; min-width: 0; overflow: hidden; }
+.elabora-layout { display: flex; gap: 0; height: calc(100vh - 160px); min-height: 500px; border: 1px solid var(--md-outline-variant); border-radius: 16px; }
+.elabora-col-agents { width: 56px; flex-shrink: 0; background: var(--md-surface-container-lowest); border-right: 1px solid var(--md-outline-variant); overflow: visible; position: relative; z-index: 10; border-radius: 16px 0 0 16px; }
+.elabora-col-practices { width: 250px; flex-shrink: 0; background: var(--md-surface-container-lowest); border-right: 1px solid var(--md-outline-variant); overflow-y: auto; }
+.elabora-col-agents .card, .elabora-col-practices .card { border-radius: 0; height: 100%; border: none; }
+.elabora-col-detail { flex: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 
 .practice-row {
   padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--md-outline-variant);
@@ -180,6 +180,147 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 
 @media (max-width: 1024px) { .elabora-col-practices { display: none; } }
 @media (max-width: 768px) { .elabora-col-agents, .elabora-col-practices { display: none; } }
+
+/* Agent icon rail */
+.agent-rail-item {
+  padding: 12px 0; cursor: pointer; border-bottom: 1px solid var(--md-outline-variant);
+  display: flex; align-items: center; justify-content: center; transition: background 0.1s;
+  position: relative;
+}
+.agent-rail-item:hover { background: var(--md-surface-container-low); }
+.agent-rail-item.active { background: rgba(139,105,20,0.12); }
+.agent-rail-item.active::before {
+  content: ''; position: absolute; left: 0; top: 25%; bottom: 25%; width: 3px;
+  background: var(--md-primary); border-radius: 0 3px 3px 0;
+}
+.agent-rail-item .agent-icon { background: var(--md-surface-container); }
+.agent-rail-item.active .agent-icon { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+/* Agent tooltip (rendered via JS to escape overflow clipping) */
+.agent-rail-tooltip {
+  position: fixed; padding: 5px 12px; border-radius: 8px; font-size: 0.78rem;
+  white-space: nowrap; z-index: 9999; pointer-events: none;
+  background: var(--md-on-surface, #1D1B16); color: var(--md-surface-container-lowest, #fff);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.12s;
+}
+.agent-rail-tooltip.visible { opacity: 1; }
+
+/* Split view */
+.split-view { display: flex; flex: 1; overflow: hidden; }
+.preview-panel {
+  width: 42%; flex-shrink: 0; background: #2a2a2a; display: flex; flex-direction: column;
+  border-right: 3px solid var(--md-outline-variant); position: relative;
+}
+.preview-header {
+  padding: 8px 14px; background: #333; color: #ccc; font-size: 0.78rem;
+  display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+}
+.preview-header .preview-btn { background: none; border: none; color: #aaa; cursor: pointer; font-size: 0.9rem; padding: 2px 4px; }
+.preview-header .preview-btn:hover { color: #fff; }
+.preview-body { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 16px; }
+.preview-placeholder { color: #888; text-align: center; font-size: 0.82rem; }
+.preview-placeholder i { font-size: 2.5rem; display: block; margin-bottom: 10px; opacity: 0.3; }
+
+/* File tabs in split view */
+.file-tabs-bar {
+  display: flex; border-bottom: 2px solid var(--md-outline-variant); padding: 0 12px;
+  background: var(--md-surface-container-lowest); flex-shrink: 0; gap: 2px; overflow-x: auto;
+}
+.file-tab-item {
+  padding: 9px 14px; font-size: 0.8rem; cursor: pointer; border-bottom: 3px solid transparent;
+  margin-bottom: -2px; display: flex; align-items: center; gap: 5px; color: var(--md-on-surface-variant);
+  transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+}
+.file-tab-item:hover { background: rgba(139,105,20,0.04); color: var(--md-on-surface); }
+.file-tab-item.active { color: var(--md-primary); border-bottom-color: var(--md-primary); font-weight: 600; }
+.file-tab-badge { font-size: 0.62rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+
+/* Data panel (right side of split) */
+.data-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.data-scroll { flex: 1; overflow-y: auto; padding: 16px 20px; }
+
+/* Document type header */
+.doc-type-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--md-outline-variant);
+}
+.doc-type-icon-lg { width: 38px; height: 38px; border-radius: 10px; background: var(--md-primary-container); display: flex; align-items: center; justify-content: center; font-size: 1rem; color: var(--md-on-primary-container); }
+.doc-type-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--md-on-surface-variant); font-weight: 600; }
+.doc-type-name { font-size: 0.95rem; font-weight: 600; }
+.doc-type-actions { margin-left: auto; display: flex; gap: 5px; }
+.doc-type-actions button { background: none; border: 1px solid var(--md-outline-variant); border-radius: 8px; padding: 5px 9px; cursor: pointer; font-size: 0.75rem; color: var(--md-on-surface-variant); display: flex; align-items: center; gap: 4px; transition: all 0.15s; }
+.doc-type-actions button:hover { border-color: var(--md-primary); color: var(--md-primary); }
+
+/* Field groups */
+.field-group { margin-bottom: 16px; }
+.field-group-title {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--md-on-surface-variant); font-weight: 700; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+}
+.field-group-title i { font-size: 0.75rem; opacity: 0.5; }
+.fields-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px;
+}
+.field-card {
+  padding: 8px 12px; background: var(--md-surface-container-lowest); border-radius: 8px;
+  border: 1.5px solid var(--md-outline-variant); cursor: pointer; transition: all 0.15s;
+}
+.field-card:hover { border-color: var(--md-primary); box-shadow: 0 2px 8px rgba(139,105,20,0.1); }
+.field-card.editing { border-color: var(--md-primary); box-shadow: 0 0 0 3px rgba(139,105,20,0.15); }
+.field-card.low-confidence { border-left: 4px solid var(--md-warning, #7C5800); }
+.field-card .fc-label {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--md-on-surface-variant); font-weight: 600; margin-bottom: 2px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.field-card .fc-value { font-size: 0.88rem; font-weight: 500; }
+.field-card .fc-edit-icon { font-size: 0.6rem; opacity: 0; transition: opacity 0.15s; color: var(--md-on-surface-variant); }
+.field-card:hover .fc-edit-icon { opacity: 0.6; }
+.field-card input.fc-input {
+  font-size: 0.88rem; font-weight: 500; border: none; background: transparent;
+  width: 100%; outline: none; padding: 0; font-family: inherit; color: var(--md-on-surface);
+  border-bottom: 2px solid var(--md-primary);
+}
+.confidence-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--md-warning, #7C5800); flex-shrink: 0;
+}
+
+/* Confidence callout */
+.confidence-callout {
+  background: var(--md-warning-container, #FFDEA1); border-radius: 10px; padding: 10px 14px;
+  margin-bottom: 14px; display: flex; align-items: center; gap: 8px; font-size: 0.8rem;
+  color: var(--md-on-primary-container, #2B1D00);
+}
+.confidence-callout i { font-size: 1rem; color: var(--md-warning, #7C5800); flex-shrink: 0; }
+
+/* Validate bar */
+.validate-bar {
+  padding: 10px 20px; background: var(--md-surface-container-lowest);
+  border-top: 1px solid var(--md-outline-variant); display: flex;
+  justify-content: space-between; align-items: center; flex-shrink: 0;
+}
+.validate-bar .vb-left { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--md-on-surface-variant); }
+.validate-bar .vb-right { display: flex; gap: 6px; }
+.btn-validate {
+  background: var(--md-success, #386A20); color: white; border: none; border-radius: 10px;
+  padding: 8px 20px; font-weight: 600; font-size: 0.82rem; cursor: pointer;
+  display: flex; align-items: center; gap: 5px; transition: all 0.15s;
+}
+.btn-validate:hover { filter: brightness(0.9); box-shadow: 0 2px 8px rgba(56,106,32,0.3); }
+
+/* Empty state in detail */
+.detail-empty-state {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--md-on-surface-variant); gap: 10px;
+}
+.detail-empty-state i { font-size: 2.5rem; opacity: 0.2; }
+
+/* Slide-in animation */
+@keyframes detailSlideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.detail-animate { animation: detailSlideIn 0.2s ease-out; }
 
 /* Catalog two-column layout */
 .catalog-layout { display: flex; gap: 20px; min-height: 500px; }
@@ -240,11 +381,11 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
   <select id="agentSelect" style="display:none"></select>
   <div class="elabora-layout">
 
-    <!-- COL 1: Agents -->
+    <!-- COL 1: Agents (icon rail) -->
     <div class="elabora-col-agents">
       <div class="card" style="height:100%">
-        <div class="card-header" style="font-size:0.85rem;font-weight:600">
-          <i class="bi bi-cpu"></i> Agenti
+        <div class="card-header text-center" style="font-size:1rem;padding:12px 0;color:var(--md-primary)">
+          <i class="bi bi-cpu"></i>
         </div>
         <div id="elaboraAgentsList" style="overflow-y:auto"></div>
       </div>
@@ -271,13 +412,13 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
     <div class="elabora-col-detail">
 
       <!-- Empty state -->
-      <div id="elaboraEmpty" class="text-center py-5" style="color:var(--md-on-surface-variant)">
-        <i class="bi bi-file-earmark-check" style="font-size:2.5rem;opacity:0.2;display:block;margin-bottom:10px"></i>
+      <div id="elaboraEmpty" class="detail-empty-state">
+        <i class="bi bi-file-earmark-check"></i>
         <div>Seleziona una pratica o creane una nuova</div>
       </div>
 
       <!-- New practice: drop zone + staged files -->
-      <div id="dropZoneContainer" style="display:none">
+      <div id="dropZoneContainer" style="display:none;padding:20px">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h6 class="mb-0" style="font-weight:600"><i class="bi bi-plus-circle" style="opacity:0.5"></i> Nuova pratica</h6>
           <div class="d-flex gap-2 align-items-center">
@@ -312,44 +453,80 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
       </div>
 
       <!-- Processing spinner -->
-      <div id="processingSpinner" class="text-center py-5" style="display:none">
+      <div id="processingSpinner" class="detail-empty-state" style="display:none">
         <div class="prat-spinner" style="width:30px;height:30px;border-width:3px"></div>
-        <div style="margin-top:10px;font-weight:500;font-size:0.85rem" id="processingMsg">Elaborazione...</div>
+        <div style="font-weight:500;font-size:0.85rem" id="processingMsg">Elaborazione...</div>
       </div>
 
       <!-- Results area -->
-      <div id="practiceResults" style="display:none">
+      <div id="practiceResults" style="display:none;flex:1;flex-direction:column;overflow:hidden">
         <!-- Practice info bar -->
-        <div class="card mb-3">
-          <div class="card-body py-2 px-3" style="font-size:0.8rem">
-            <div class="d-flex gap-4 align-items-center flex-wrap">
-              <span><strong>ID:</strong> <span id="infoPracticeId">-</span></span>
-              <span id="infoAgent" style="display:none"></span>
-              <span><strong>Creata:</strong> <span id="infoCreated">-</span></span>
-              <span><strong>Aggiornata:</strong> <span id="infoUpdated">-</span></span>
-              <span><strong>Validazione:</strong> <span id="infoValidation">-</span></span>
-              <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deleteSavedPractice()" style="border-radius:6px;font-size:0.72rem"><i class="bi bi-trash3"></i></button>
+        <div style="padding:8px 16px;background:var(--md-surface-container-lowest);border-bottom:1px solid var(--md-outline-variant);font-size:0.78rem;flex-shrink:0">
+          <div class="d-flex gap-3 align-items-center flex-wrap">
+            <span><strong>ID:</strong> <span id="infoPracticeId">-</span></span>
+            <span id="infoAgent" style="display:none"></span>
+            <span><strong>Creata:</strong> <span id="infoCreated">-</span></span>
+            <span><strong>Aggiornata:</strong> <span id="infoUpdated">-</span></span>
+            <span><strong>Validazione:</strong> <span id="infoValidation">-</span></span>
+            <div style="margin-left:auto;display:flex;gap:5px">
+              <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('addFileInput').click()" style="border-radius:6px;font-size:0.7rem;padding:2px 8px"><i class="bi bi-plus-lg"></i> Aggiungi file</button>
+              <input type="file" id="addFileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="processAdditionalFiles(this.files)">
+              <button class="btn btn-sm btn-outline-danger" onclick="deleteSavedPractice()" style="border-radius:6px;font-size:0.7rem;padding:2px 8px"><i class="bi bi-trash3"></i></button>
             </div>
           </div>
         </div>
 
-      <!-- RIGHT: Files stepper / results -->
-      <div>
-        <!-- Validation box -->
-        <div id="validationContainer" style="display:none;margin-bottom:16px"></div>
+        <!-- Validation box (collapsible) -->
+        <div id="validationContainer" style="display:none;padding:8px 16px;flex-shrink:0"></div>
 
-        <!-- Files list -->
-        <div class="card" id="filesCard">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-files"></i> Documenti</span>
-            <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('addFileInput').click()" style="border-radius:12px">
-              <i class="bi bi-plus-lg"></i> Aggiungi file
-            </button>
-            <input type="file" id="addFileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="processAdditionalFiles(this.files)">
+        <!-- Split view: Preview + Data -->
+        <div class="split-view">
+          <!-- LEFT: PDF/image preview -->
+          <div class="preview-panel" id="previewPanel">
+            <div class="preview-header">
+              <span><i class="bi bi-eye"></i> Anteprima</span>
+              <div style="display:flex;gap:6px;align-items:center">
+                <button class="preview-btn" onclick="zoomPreview(-0.1)" title="Zoom out"><i class="bi bi-zoom-out"></i></button>
+                <span id="previewZoomLabel" style="font-size:0.72rem;color:#999;min-width:32px;text-align:center">100%</span>
+                <button class="preview-btn" onclick="zoomPreview(0.1)" title="Zoom in"><i class="bi bi-zoom-in"></i></button>
+                <button class="preview-btn" onclick="openPreviewExternal()" title="Apri in nuova finestra" style="margin-left:6px"><i class="bi bi-box-arrow-up-right"></i></button>
+              </div>
+            </div>
+            <div class="preview-body" id="previewBody">
+              <div class="preview-placeholder">
+                <i class="bi bi-file-earmark-image"></i>
+                <div>Seleziona un documento per visualizzarlo</div>
+              </div>
+            </div>
           </div>
+
+          <!-- RIGHT: Data panel with file tabs -->
+          <div class="data-panel">
+            <div class="file-tabs-bar" id="fileTabsBar"></div>
+            <div class="data-scroll" id="dataScroll">
+              <div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.82rem">
+                Nessun file nella pratica
+              </div>
+            </div>
+
+            <!-- Validate bar (sticky bottom) -->
+            <div class="validate-bar" id="validateBar" style="display:none">
+              <div class="vb-left">
+                <i class="bi bi-info-circle"></i>
+                <span id="validateInfo">-</span>
+              </div>
+              <div class="vb-right">
+                <button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem" onclick="rejectPractice()"><i class="bi bi-x-lg"></i> Rifiuta</button>
+                <button class="btn-validate" onclick="validatePractice()"><i class="bi bi-check-lg"></i> Valida pratica</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Legacy files list (hidden, used during processing) -->
+        <div id="filesCard" style="display:none">
           <div id="filesList"></div>
         </div>
-      </div>
       </div><!-- end practiceResults -->
 
     </div><!-- end elabora-col-detail -->
@@ -551,20 +728,32 @@ function renderCatalogAgents() {
 }
 
 // ── Elabora: agents & practices columns ────────────────────────────
+const AGENT_ICONS = {
+  'anti-riciclaggio': 'bi-search', 'conformita-titoli': 'bi-shield-check', 'conformita': 'bi-shield-check',
+  'post-stipula': 'bi-file-earmark-check', 'compare': 'bi-arrow-left-right',
+  'askquestions': 'bi-question-circle', 'document.identifier': 'bi-tag', 'document': 'bi-tag',
+  'playground': 'bi-joystick',
+};
+function getAgentIcon(name) {
+  const n = (name || '').toLowerCase();
+  for (const [k, v] of Object.entries(AGENT_ICONS)) { if (n.includes(k)) return v; }
+  return 'bi-cpu';
+}
+
 function renderElaboraAgents() {
   const list = document.getElementById('elaboraAgentsList');
   if (!agents.length) {
-    list.innerHTML = '<div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.82rem">Nessun agente</div>';
+    list.innerHTML = '<div class="text-center py-3" style="color:var(--md-on-surface-variant);font-size:0.75rem"><i class="bi bi-dash" style="opacity:0.4"></i></div>';
     return;
   }
   list.innerHTML = '';
   agents.forEach(a => {
     const name = a.name || a.agentName || a.id;
     const isActive = a.id === selectedElaboraAgentId;
+    const icon = getAgentIcon(name);
     list.innerHTML += `
-      <div class="agent-row ${isActive ? 'active' : ''}" onclick="selectElaboraAgent('${a.id}')">
-        <div class="agent-icon"><i class="bi bi-cpu"></i></div>
-        <div class="agent-name" title="${name}">${name}</div>
+      <div class="agent-rail-item ${isActive ? 'active' : ''}" onclick="selectElaboraAgent('${a.id}')" data-tooltip="${name}">
+        <div class="agent-icon"><i class="bi ${icon}"></i></div>
       </div>`;
   });
 }
@@ -578,7 +767,7 @@ async function selectElaboraAgent(agentId) {
   document.getElementById('btnNewPractice').disabled = false;
 
   // Show practices for this agent
-  document.getElementById('elaboraEmpty').style.display = '';
+  document.getElementById('elaboraEmpty').style.display = 'flex';
   document.getElementById('dropZoneContainer').style.display = 'none';
   document.getElementById('practiceResults').style.display = 'none';
   document.getElementById('processingSpinner').style.display = 'none';
@@ -809,7 +998,7 @@ async function processAllFiles() {
 
   // Prepara UI
   document.getElementById('dropZoneContainer').style.display = 'none';
-  document.getElementById('practiceResults').style.display = '';
+  document.getElementById('practiceResults').style.display = 'flex';
   document.getElementById('infoPracticeId').textContent = practiceId;
   document.getElementById('infoAgent').textContent = document.getElementById('agentSelect').selectedOptions[0]?.text || '-';
   document.getElementById('infoCreated').textContent = '-';
@@ -817,7 +1006,7 @@ async function processAllFiles() {
   document.getElementById('infoValidation').innerHTML = '<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> 0/' + totalFiles + '</span>';
   document.getElementById('validationContainer').style.display = 'none';
 
-  // Mostra lista file in coda con stato
+  // Mostra lista file in coda con stato (nella data-scroll area)
   let queueHtml = '';
   for (let i = 0; i < totalFiles; i++) {
     const f = stagedFiles[i];
@@ -836,6 +1025,12 @@ async function processAllFiles() {
       </div>
       <div id="queue-extraction-${i}" style="display:none"></div>`;
   }
+  // Render queue in the data-scroll panel
+  document.getElementById('dataScroll').innerHTML = queueHtml;
+  document.getElementById('fileTabsBar').innerHTML = '';
+  document.getElementById('validateBar').style.display = 'none';
+  // Hide preview panel during processing
+  document.getElementById('previewPanel').style.display = 'none';
   document.getElementById('filesList').innerHTML = queueHtml;
 
   const filesToProcess = [...stagedFiles];
@@ -1015,6 +1210,16 @@ async function processAllFiles() {
 
   // Refresh practices list
   if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+
+  // After processing, re-show the split-view with final results
+  document.getElementById('previewPanel').style.display = '';
+  if (lastInfo) {
+    // Reload from DB to get merged data, then render split-view
+    const cached = await loadPracticeFromDb(practiceId);
+    if (cached?.result_data) {
+      await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+    }
+  }
 }
 
 function processAdditionalFiles(files) {
@@ -1100,7 +1305,7 @@ function resetPractice() {
   document.getElementById('practiceIdInput').value = '';
   document.getElementById('practiceResults').style.display = 'none';
   document.getElementById('dropZoneContainer').style.display = 'none';
-  document.getElementById('elaboraEmpty').style.display = '';
+  document.getElementById('elaboraEmpty').style.display = 'flex';
   const vc = document.getElementById('validationContainer');
   if (vc) vc.style.display = 'none';
   stagedFiles = [];
@@ -1136,7 +1341,8 @@ async function showPracticeResult(result, practiceId) {
   const hasFiles = Object.keys(info.files).length > 0;
   document.getElementById('dropZoneContainer').style.display = hasFiles ? 'none' : '';
   document.getElementById('elaboraEmpty').style.display = 'none';
-  document.getElementById('practiceResults').style.display = '';
+  document.getElementById('practiceResults').style.display = 'flex';
+  document.getElementById('previewPanel').style.display = '';
 
   // Info bar
   document.getElementById('infoPracticeId').textContent = info.practiceId || practiceId;
@@ -1200,53 +1406,118 @@ async function showPracticeResult(result, practiceId) {
     infoVal.innerHTML = '<span class="badge-draft">N/A</span>';
   }
 
-  // Files
+  // Files — render as tabs + split view
   const files = info.files || {};
-  const filesList = document.getElementById('filesList');
-  let filesHtml = '';
-  for (const [hash, file] of Object.entries(files)) {
-    const idState = file.state?.identification || 'pending';
+  const fileEntries = Object.entries(files);
+  const tabsBar = document.getElementById('fileTabsBar');
+  const dataScroll = document.getElementById('dataScroll');
+  const validateBar = document.getElementById('validateBar');
+
+  // Store current practice files globally for tab switching
+  window._practiceFiles = files;
+  window._practiceId = practiceId;
+
+  if (fileEntries.length === 0) {
+    tabsBar.innerHTML = '';
+    dataScroll.innerHTML = '<div class="text-center py-4" style="color:var(--md-on-surface-variant)">Nessun file nella pratica</div>';
+    validateBar.style.display = 'none';
+    // Also populate legacy filesList for processing compatibility
+    document.getElementById('filesList').innerHTML = '';
+    return;
+  }
+
+  // Build file tabs
+  let tabsHtml = '';
+  let firstHash = null;
+  for (const [hash, file] of fileEntries) {
+    if (!firstHash) firstHash = hash;
     const exState = file.state?.extraction || 'pending';
-    const idBadge = idState === 'completed' ? '<span class="badge-ok"><i class="bi bi-check2"></i> Identificato</span>' : '<span class="badge-pending">' + idState + '</span>';
-    const exBadge = exState === 'completed' ? '<span class="badge-ok"><i class="bi bi-check2"></i> Estratto</span>' : '<span class="badge-pending">' + exState + '</span>';
-    const docType = file.identification?.documentId || file.identification?.documentTypeId || '';
+    const idState = file.state?.identification || 'pending';
+    const isOk = exState === 'completed' && idState === 'completed';
+    const isErr = exState === 'error' || idState === 'error';
     const ext = (file.fileName || '').split('.').pop().toLowerCase();
     const icon = ext === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark-image';
-    const isDbOnly = hash.startsWith('db_');
-
-    filesHtml += `
-      <div class="file-row">
-        <div class="file-icon"><i class="bi ${icon}"></i></div>
-        <div class="file-info">
-          <div class="file-name">${file.fileName || hash}</div>
-          <div class="file-type">${docType || (isDbOnly ? 'Non ancora elaborato' : '')}</div>
-        </div>
-        <div class="file-badges">${idBadge} ${exBadge}</div>
-        <div class="file-actions">
-          ${isDbOnly ? `
-            <button class="btn btn-sm btn-primary" onclick="reprocessFile('${hash}')" style="border-radius:8px"><i class="bi bi-play-fill"></i> Elabora</button>
-          ` : `
-            <button class="btn btn-sm btn-outline-secondary" onclick="toggleExtraction('ext-${hash}')" style="border-radius:8px"><i class="bi bi-table"></i> Dati</button>
-            <button class="btn btn-sm btn-outline-secondary" onclick="openSintesiForFile('${hash}')" style="border-radius:8px"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
-            <button class="btn btn-sm btn-outline-secondary" onclick="reprocessFile('${hash}')" style="border-radius:8px"><i class="bi bi-arrow-repeat"></i></button>
-          `}
-          <button class="btn btn-sm btn-outline-danger" onclick="deleteFile('${hash}')" style="border-radius:8px"><i class="bi bi-trash3"></i></button>
-        </div>
-      </div>`;
-
-    // Extraction data
-    if (file.extraction?.data && Object.keys(file.extraction.data).length > 0) {
-      filesHtml += `<div class="extraction-grid" id="ext-${hash}" style="display:none">`;
-      filesHtml += renderExtraction(file.extraction.data, file.fileName);
-      filesHtml += '</div>';
-    }
+    const badgeClass = isErr ? 'badge-ko' : isOk ? 'badge-ok' : 'badge-pending';
+    const badgeIcon = isErr ? 'bi-x-lg' : isOk ? 'bi-check2' : 'bi-hourglass';
+    tabsHtml += `<div class="file-tab-item" data-hash="${hash}" onclick="switchFileTab('${hash}')">
+      <i class="bi ${icon}"></i> ${file.fileName || hash}
+      <span class="file-tab-badge ${badgeClass}"><i class="bi ${badgeIcon}"></i></span>
+    </div>`;
   }
-  if (!filesHtml) filesHtml = '<div class="text-center py-4" style="color:var(--md-on-surface-variant)">Nessun file nella pratica</div>';
-  filesList.innerHTML = filesHtml;
+  tabsBar.innerHTML = tabsHtml;
+
+  // Show validate bar with stats
+  let totalFields = 0;
+  for (const [, file] of fileEntries) {
+    if (file.extraction?.data) totalFields += Object.keys(file.extraction.data).length;
+  }
+  document.getElementById('validateInfo').textContent = `${fileEntries.length} document${fileEntries.length !== 1 ? 'i' : 'o'} · ${totalFields} campi estratti`;
+  validateBar.style.display = '';
+
+  // Show practiceResults with flex
+  document.getElementById('practiceResults').style.display = 'flex';
+
+  // Also populate legacy filesList for processing compatibility
+  let legacyHtml = '';
+  for (const [hash, file] of fileEntries) {
+    legacyHtml += `<div class="file-row" id="file-row-${hash}"></div>`;
+  }
+  document.getElementById('filesList').innerHTML = legacyHtml;
+
+  // Select first tab
+  if (firstHash) switchFileTab(firstHash);
 }
 
 function _escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
+// Human-readable label mapping
+const FIELD_LABELS = {
+  codice_fiscale: 'Codice Fiscale', cognome: 'Cognome', nome: 'Nome', data_nascita: 'Data Nascita',
+  luogo_nascita: 'Luogo Nascita', nazionalita: 'Nazionalità', residenza: 'Residenza',
+  tipo_documento: 'Tipo Documento', numero_documento: 'Numero Documento', lato_documento: 'Lato Documento',
+  ente_rilascio: 'Ente Rilascio', data_rilascio: 'Data Rilascio', data_scadenza: 'Data Scadenza',
+  ruolo_soggetto: 'Ruolo Soggetto', sesso: 'Sesso', stato_civile: 'Stato Civile',
+  data_atto: 'Data Atto', numero_repertorio: 'Numero Repertorio', numero_raccolta: 'Numero Raccolta',
+  notaio: 'Notaio', importo: 'Importo', iban: 'IBAN', banca: 'Banca',
+};
+
+function humanLabel(key) {
+  if (FIELD_LABELS[key.toLowerCase()]) return FIELD_LABELS[key.toLowerCase()];
+  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Field grouping rules
+const FIELD_GROUPS = {
+  anagrafica: { icon: 'bi-person', label: 'Dati Anagrafici', keys: ['cognome','nome','codice_fiscale','data_nascita','luogo_nascita','nazionalita','sesso','stato_civile','residenza'] },
+  documento: { icon: 'bi-card-heading', label: 'Dati Documento', keys: ['tipo_documento','numero_documento','lato_documento','ente_rilascio','data_rilascio','data_scadenza'] },
+  atto: { icon: 'bi-journal-text', label: 'Dati Atto', keys: ['data_atto','numero_repertorio','numero_raccolta','notaio'] },
+  pagamento: { icon: 'bi-credit-card', label: 'Dati Pagamento', keys: ['importo','iban','banca'] },
+};
+
+function groupFields(data) {
+  const groups = {};
+  const assigned = new Set();
+
+  for (const [groupId, groupDef] of Object.entries(FIELD_GROUPS)) {
+    const fields = [];
+    for (const key of groupDef.keys) {
+      const match = Object.keys(data).find(k => k.toLowerCase() === key);
+      if (match) { fields.push([match, data[match]]); assigned.add(match); }
+    }
+    if (fields.length) groups[groupId] = { ...groupDef, fields };
+  }
+
+  // Remaining fields → "Altro"
+  const other = [];
+  for (const [key, val] of Object.entries(data)) {
+    if (!assigned.has(key)) other.push([key, val]);
+  }
+  if (other.length) groups['altro'] = { icon: 'bi-tag', label: 'Altro', fields: other };
+
+  return groups;
+}
+
+// Legacy renderExtraction (still used during processing)
 function renderExtraction(data, fileName) {
   let html = '';
   const fn = fileName || '';
@@ -1272,6 +1543,244 @@ function renderExtraction(data, fileName) {
 function toggleExtraction(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = el.style.display === 'none' ? 'grid' : 'none';
+}
+
+// ── Split-view: file tabs & grouped extraction ─────────────────────
+let currentPreviewZoom = 1;
+
+function switchFileTab(hash) {
+  // Highlight active tab
+  document.querySelectorAll('.file-tab-item').forEach(t => t.classList.remove('active'));
+  const activeTab = document.querySelector(`.file-tab-item[data-hash="${hash}"]`);
+  if (activeTab) activeTab.classList.add('active');
+
+  const files = window._practiceFiles || {};
+  const file = files[hash];
+  if (!file) return;
+
+  const dataScroll = document.getElementById('dataScroll');
+  const fn = file.fileName || hash;
+  const docType = file.identification?.documentId || file.identification?.documentTypeId || '';
+  const isDbOnly = hash.startsWith('db_');
+  const exState = file.state?.extraction || 'pending';
+  const idState = file.state?.identification || 'pending';
+
+  // Update preview panel
+  loadPreview(fn, hash);
+
+  // If not yet processed
+  if (isDbOnly || (exState !== 'completed' && idState !== 'completed')) {
+    dataScroll.innerHTML = `
+      <div class="text-center py-5" style="color:var(--md-on-surface-variant)">
+        <i class="bi bi-hourglass" style="font-size:2rem;opacity:0.3;display:block;margin-bottom:10px"></i>
+        <div style="margin-bottom:12px">${isDbOnly ? 'Non ancora elaborato' : 'Elaborazione: ' + exState}</div>
+        <button class="btn btn-primary btn-sm" onclick="reprocessFile('${hash}')" style="border-radius:10px">
+          <i class="bi bi-play-fill"></i> Elabora
+        </button>
+      </div>`;
+    return;
+  }
+
+  // Has extraction data?
+  const data = file.extraction?.data;
+  if (!data || Object.keys(data).length === 0) {
+    dataScroll.innerHTML = `
+      <div class="text-center py-5" style="color:var(--md-on-surface-variant)">
+        <i class="bi bi-check-circle" style="font-size:2rem;opacity:0.3;display:block;margin-bottom:10px"></i>
+        <div>Nessun dato estratto</div>
+        <div class="mt-2 d-flex gap-2 justify-content-center">
+          <button class="btn btn-sm btn-outline-secondary" onclick="reprocessFile('${hash}')" style="border-radius:8px"><i class="bi bi-arrow-repeat"></i> Rielabora</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="openSintesiForFile('${hash}')" style="border-radius:8px"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Render grouped fields
+  let html = '';
+
+  // Document type header
+  const docIcon = docType.includes('identit') ? 'bi-person-badge' : docType.includes('success') ? 'bi-journal-text' : 'bi-file-earmark-text';
+  html += `<div class="doc-type-header">
+    <div class="doc-type-icon-lg"><i class="bi ${docIcon}"></i></div>
+    <div>
+      <div class="doc-type-label">Tipo documento</div>
+      <div class="doc-type-name">${humanLabel(docType || 'documento')}</div>
+    </div>
+    <div class="doc-type-actions">
+      <button onclick="reprocessFile('${hash}')" title="Rielabora"><i class="bi bi-arrow-repeat"></i></button>
+      <button onclick="openSintesiForFile('${hash}')" title="Genera sintesi"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+      <button onclick="deleteFile('${hash}')" title="Elimina file" style="color:var(--md-error)"><i class="bi bi-trash3"></i></button>
+    </div>
+  </div>`;
+
+  // Group and render fields
+  const groups = groupFields(data);
+  for (const [groupId, group] of Object.entries(groups)) {
+    html += `<div class="field-group">
+      <div class="field-group-title"><i class="bi ${group.icon}"></i> ${group.label}</div>
+      <div class="fields-grid">`;
+
+    for (const [key, val] of group.fields) {
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        // Nested object — render as sub-grid spanning full width
+        html += `<div class="field-card" style="grid-column:1/-1;cursor:default">
+          <div class="fc-label">${humanLabel(key)}</div>
+          <div class="fields-grid" style="margin-top:6px">`;
+        for (const [k2, v2] of Object.entries(val)) {
+          html += `<div class="field-card" data-file-hash="${hash}" data-field-key="${_escAttr(key + '.' + k2)}" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(v2).substring(0,100))}">
+            <div class="fc-label">${humanLabel(k2)} <span class="fc-edit-icon"><i class="bi bi-pencil"></i></span></div>
+            <div class="fc-value">${v2 ?? '-'}</div>
+          </div>`;
+        }
+        html += `</div></div>`;
+      } else {
+        const displayVal = Array.isArray(val) ? val.join(', ') : (val ?? '-');
+        const isWide = String(displayVal).length > 50;
+        html += `<div class="field-card${isWide ? '" style="grid-column:1/-1' : ''}" data-file-hash="${hash}" data-field-key="${_escAttr(key)}" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(displayVal).substring(0,100))}">
+          <div class="fc-label">${humanLabel(key)} <span class="fc-edit-icon"><i class="bi bi-pencil"></i></span></div>
+          <div class="fc-value">${displayVal}</div>
+        </div>`;
+      }
+    }
+    html += `</div></div>`;
+  }
+
+  dataScroll.innerHTML = html;
+  dataScroll.classList.add('detail-animate');
+  setTimeout(() => dataScroll.classList.remove('detail-animate'), 250);
+
+  // Setup inline editing for field cards
+  setupFieldEditing();
+}
+
+function setupFieldEditing() {
+  document.querySelectorAll('.field-card[data-field-key]').forEach(card => {
+    card.addEventListener('click', function(e) {
+      if (this.classList.contains('editing')) return;
+      // If click was on a nested container, skip
+      if (e.target.closest('.fields-grid') && e.target.closest('.field-card') !== this) return;
+
+      const valueEl = this.querySelector('.fc-value');
+      if (!valueEl) return;
+      const currentValue = valueEl.textContent;
+      this.classList.add('editing');
+      valueEl.innerHTML = `<input class="fc-input" type="text" value="${currentValue.replace(/"/g, '&quot;')}">`;
+      const input = valueEl.querySelector('input');
+      input.focus();
+      input.select();
+
+      const finish = () => {
+        const newVal = input.value;
+        this.classList.remove('editing');
+        valueEl.textContent = newVal;
+        if (newVal !== currentValue) {
+          valueEl.style.color = 'var(--md-primary)';
+          this.style.background = 'rgba(139,105,20,0.04)';
+          // Update in-memory data
+          const hash = this.dataset.fileHash;
+          const key = this.dataset.fieldKey;
+          if (window._practiceFiles?.[hash]?.extraction?.data && key) {
+            if (key.includes('.')) {
+              const [k1, k2] = key.split('.');
+              if (window._practiceFiles[hash].extraction.data[k1]) {
+                window._practiceFiles[hash].extraction.data[k1][k2] = newVal;
+              }
+            } else {
+              window._practiceFiles[hash].extraction.data[key] = newVal;
+            }
+            // Auto-save to DB
+            const practiceId = window._practiceId;
+            const agentId = getAgentId();
+            if (practiceId && agentId) {
+              savePracticeToDb(practiceId, agentId, { files: window._practiceFiles });
+            }
+          }
+        }
+      };
+      input.addEventListener('blur', finish);
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') { input.value = currentValue; input.blur(); }
+      });
+    });
+  });
+
+  // Also handle click-to-open-PDF for fields with data-pdf
+  document.querySelectorAll('.field-card[data-pdf][data-search]').forEach(card => {
+    card.addEventListener('dblclick', function() {
+      const pdf = this.dataset.pdf;
+      const search = this.dataset.search;
+      if (pdf && search) openPdfAndSearch(pdf, search);
+    });
+  });
+}
+
+// Preview panel logic
+function loadPreview(fileName, hash) {
+  const previewBody = document.getElementById('previewBody');
+  const practiceId = window._practiceId;
+  if (!fileName || !practiceId) {
+    previewBody.innerHTML = '<div class="preview-placeholder"><i class="bi bi-file-earmark-image"></i><div>Nessuna anteprima</div></div>';
+    return;
+  }
+
+  const ext = fileName.split('.').pop().toLowerCase();
+  currentPreviewZoom = 1;
+  document.getElementById('previewZoomLabel').textContent = '100%';
+
+  if (ext === 'pdf') {
+    const fileUrl = `/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`;
+    previewBody.innerHTML = `<iframe src="${fileUrl}#toolbar=0" style="width:100%;height:100%;border:none;border-radius:4px;background:#fff"></iframe>`;
+  } else if (['png','jpg','jpeg','gif','webp'].includes(ext)) {
+    const fileUrl = `/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`;
+    previewBody.innerHTML = `<img id="previewImg" src="${fileUrl}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,0.3);transition:transform 0.2s" onerror="this.parentElement.innerHTML='<div class=\\'preview-placeholder\\'><i class=\\'bi bi-exclamation-triangle\\'></i><div>Impossibile caricare</div></div>'">`;
+  } else {
+    previewBody.innerHTML = `<div class="preview-placeholder"><i class="bi bi-file-earmark"></i><div>${fileName}</div><div style="font-size:0.75rem;margin-top:4px">Formato non visualizzabile</div></div>`;
+  }
+}
+
+function zoomPreview(delta) {
+  currentPreviewZoom = Math.max(0.3, Math.min(3, currentPreviewZoom + delta));
+  document.getElementById('previewZoomLabel').textContent = Math.round(currentPreviewZoom * 100) + '%';
+  const img = document.getElementById('previewImg');
+  if (img) img.style.transform = `scale(${currentPreviewZoom})`;
+}
+
+function openPreviewExternal() {
+  const activeTab = document.querySelector('.file-tab-item.active');
+  if (!activeTab) return;
+  const hash = activeTab.dataset.hash;
+  const file = window._practiceFiles?.[hash];
+  if (!file?.fileName) return;
+  const practiceId = window._practiceId;
+  if (!practiceId) return;
+  const fileUrl = `/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(file.fileName)}`;
+  window.open(fileUrl, '_blank');
+}
+
+// Validate/reject practice (placeholder actions)
+async function validatePractice() {
+  const practiceId = window._practiceId;
+  const agentId = getAgentId();
+  if (!practiceId) return;
+  // Save validation status
+  const files = window._practiceFiles || {};
+  await savePracticeToDb(practiceId, agentId, { files, validation: { outcome: 'OK', anomalies: [] } });
+  document.getElementById('infoValidation').innerHTML = '<span class="badge-ok"><i class="bi bi-check2"></i> Validata</span>';
+  if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+}
+
+async function rejectPractice() {
+  const practiceId = window._practiceId;
+  const agentId = getAgentId();
+  if (!practiceId) return;
+  const reason = prompt('Motivo del rifiuto (opzionale):');
+  if (reason === null) return;
+  const files = window._practiceFiles || {};
+  await savePracticeToDb(practiceId, agentId, { files, validation: { outcome: 'REJECTED', anomalies: [{ severity: 'error', message: reason || 'Rifiutata manualmente' }] } });
+  document.getElementById('infoValidation').innerHTML = '<span class="badge-ko"><i class="bi bi-x-lg"></i> Rifiutata</span>';
+  if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
 }
 
 // ── Persistence (DB) ───────────────────────────────────────────────
@@ -1316,7 +1825,7 @@ async function deleteSavedPractice() {
     if (data.error) throw new Error(data.error);
     selectedPracticeId = null;
     document.getElementById('practiceResults').style.display = 'none';
-    document.getElementById('elaboraEmpty').style.display = '';
+    document.getElementById('elaboraEmpty').style.display = 'flex';
     if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
   } catch (e) {
     alert('Errore eliminazione: ' + e.message);
@@ -1881,5 +2390,29 @@ document.addEventListener('click', e => {
     openPdfAndSearch(pdf, search);
   }
 });
+
+// ── Agent rail tooltip (appended to body to avoid overflow clip) ────
+(function() {
+  const tip = document.createElement('div');
+  tip.className = 'agent-rail-tooltip';
+  document.body.appendChild(tip);
+
+  document.addEventListener('mouseenter', e => {
+    const item = e.target.closest('.agent-rail-item[data-tooltip]');
+    if (!item) return;
+    tip.textContent = item.dataset.tooltip;
+    const rect = item.getBoundingClientRect();
+    tip.style.left = (rect.right + 8) + 'px';
+    tip.style.top = (rect.top + rect.height / 2) + 'px';
+    tip.style.transform = 'translateY(-50%)';
+    tip.classList.add('visible');
+  }, true);
+
+  document.addEventListener('mouseleave', e => {
+    const item = e.target.closest('.agent-rail-item[data-tooltip]');
+    if (!item) return;
+    tip.classList.remove('visible');
+  }, true);
+})();
 </script>
 {% endblock %}

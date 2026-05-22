@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup — Verifica Dati Estratti (Migliorato)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+/* === M3 Design Tokens (dal progetto) === */
+:root {
+  --md-primary: #8B6914;
+  --md-on-primary: #FFFFFF;
+  --md-primary-container: #FFDEA1;
+  --md-on-primary-container: #2B1D00;
+  --md-secondary: #7a5a10;
+  --md-tertiary: #9C5A2E;
+  --md-tertiary-container: #FFDBC9;
+  --md-error: #B3261E;
+  --md-error-container: #F9DEDC;
+  --md-surface: #FFFBF5;
+  --md-surface-container-lowest: #FFFFFF;
+  --md-surface-container-low: #FAF6EE;
+  --md-surface-container: #F4F0E8;
+  --md-surface-container-high: #EDE9E1;
+  --md-on-surface: #1D1B16;
+  --md-on-surface-variant: #4D4639;
+  --md-outline: #7F7667;
+  --md-outline-variant: #D1C8B8;
+  --md-success: #386A20;
+  --md-success-container: #B6F29B;
+  --md-warning: #7C5800;
+  --md-warning-container: #FFDEA1;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--md-surface); color: var(--md-on-surface); }
+
+/* === Layout === */
+.layout { display: flex; height: 100vh; }
+
+/* COL 1: Agents — collapsed icon rail */
+.col-agents {
+  width: 56px; flex-shrink: 0; background: var(--md-surface-container-lowest);
+  border-right: 1px solid var(--md-outline-variant); display: flex; flex-direction: column;
+}
+.col-agents .header {
+  padding: 14px 0; text-align: center; font-size: 1rem; color: var(--md-primary);
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.agent-item {
+  padding: 12px 0; cursor: pointer; border-bottom: 1px solid var(--md-outline-variant);
+  display: flex; align-items: center; justify-content: center; transition: background 0.1s;
+  position: relative;
+}
+.agent-item:hover { background: var(--md-surface-container-low); }
+.agent-item.active { background: rgba(139,105,20,0.12); }
+.agent-item.active::before {
+  content: ''; position: absolute; left: 0; top: 25%; bottom: 25%; width: 3px;
+  background: var(--md-primary); border-radius: 0 3px 3px 0;
+}
+.agent-icon {
+  width: 32px; height: 32px; border-radius: 8px; background: var(--md-surface-container);
+  display: flex; align-items: center; justify-content: center; color: var(--md-primary); font-size: 0.95rem;
+}
+.agent-item.active .agent-icon { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+/* Agent tooltip on hover */
+.agent-item[data-tooltip]:hover::after {
+  content: attr(data-tooltip); position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
+  background: var(--md-on-surface); color: var(--md-surface-container-lowest); padding: 5px 12px;
+  border-radius: 8px; font-size: 0.78rem; white-space: nowrap; z-index: 100; pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+/* COL 2: Pratiche */
+.col-practices {
+  width: 250px; flex-shrink: 0; background: var(--md-surface-container-lowest);
+  border-right: 1px solid var(--md-outline-variant); display: flex; flex-direction: column;
+}
+.col-practices .header { padding: 12px 16px; font-weight: 600; font-size: 0.85rem; border-bottom: 1px solid var(--md-outline-variant); display: flex; justify-content: space-between; align-items: center; }
+.practice-item {
+  padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--md-outline-variant); transition: all 0.15s;
+}
+.practice-item:hover { background: var(--md-surface-container-low); }
+.practice-item.active { background: rgba(139,105,20,0.12); }
+.practice-name { font-weight: 600; font-size: 0.85rem; }
+.practice-sub { font-size: 0.72rem; color: var(--md-on-surface-variant); margin-top: 2px; }
+.practice-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 0.68rem; padding: 1px 7px; border-radius: 6px; font-weight: 600; margin-top: 4px; }
+.practice-badge.ok { background: #d4edda; color: #155724; }
+.practice-badge.pending { background: #fff3cd; color: #856404; }
+
+/* COL 3: Dettaglio */
+.col-detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Empty state */
+.empty-state {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--md-on-surface-variant); gap: 12px;
+}
+.empty-state i { font-size: 3rem; opacity: 0.2; }
+.empty-state div { font-size: 0.9rem; }
+
+/* Detail content (hidden initially) */
+.detail-content { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+.detail-content.visible { display: flex; }
+
+/* Info bar */
+.info-bar {
+  padding: 10px 20px; background: var(--md-surface-container-lowest);
+  border-bottom: 1px solid var(--md-outline-variant); font-size: 0.8rem;
+  display: flex; gap: 20px; align-items: center; flex-wrap: wrap; flex-shrink: 0;
+}
+.info-bar strong { color: var(--md-on-surface-variant); font-weight: 600; }
+
+/* Split view container */
+.split-view { display: flex; flex: 1; overflow: hidden; }
+
+/* LEFT: PDF preview */
+.preview-panel {
+  width: 42%; flex-shrink: 0; background: #2a2a2a; display: flex; flex-direction: column;
+  border-right: 3px solid var(--md-outline-variant); position: relative;
+}
+.preview-header {
+  padding: 10px 16px; background: #333; color: #ccc; font-size: 0.8rem;
+  display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+}
+.preview-body { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 20px; }
+/* Simulated document image */
+.fake-doc {
+  background: #fff; border-radius: 4px; padding: 30px; width: 320px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  font-size: 0.75rem; color: #333; line-height: 1.8;
+}
+.fake-doc .doc-title { text-align: center; font-weight: 700; font-size: 0.9rem; margin-bottom: 16px; color: #1a1a5e; text-transform: uppercase; letter-spacing: 1px; }
+.fake-doc .highlight { background: rgba(139,105,20,0.25); padding: 1px 3px; border-radius: 2px; }
+.resize-handle {
+  position: absolute; right: -4px; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 10;
+}
+
+/* RIGHT: Data panel */
+.data-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* File tabs */
+.file-tabs {
+  display: flex; border-bottom: 2px solid var(--md-outline-variant); padding: 0 16px;
+  background: var(--md-surface-container-lowest); flex-shrink: 0; gap: 2px;
+}
+.file-tab {
+  padding: 10px 16px; font-size: 0.82rem; cursor: pointer; border-bottom: 3px solid transparent;
+  margin-bottom: -2px; display: flex; align-items: center; gap: 6px; color: var(--md-on-surface-variant);
+  transition: all 0.15s; white-space: nowrap;
+}
+.file-tab:hover { background: rgba(139,105,20,0.04); color: var(--md-on-surface); }
+.file-tab.active { color: var(--md-primary); border-bottom-color: var(--md-primary); font-weight: 600; }
+.file-tab .tab-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+.file-tab .tab-badge.ok { background: #d4edda; color: #155724; }
+.file-tab .tab-badge.err { background: #f8d7da; color: #721c24; }
+.file-tab .tab-badge.pending { background: #fff3cd; color: #856404; }
+
+/* Data scrollable area */
+.data-scroll { flex: 1; overflow-y: auto; padding: 20px; }
+
+/* Document type header */
+.doc-type-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--md-outline-variant);
+}
+.doc-type-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--md-primary-container); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: var(--md-on-primary-container); }
+.doc-type-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--md-on-surface-variant); font-weight: 600; }
+.doc-type-name { font-size: 1rem; font-weight: 600; }
+.doc-type-actions { margin-left: auto; display: flex; gap: 6px; }
+.doc-type-actions button { background: none; border: 1px solid var(--md-outline-variant); border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 0.78rem; color: var(--md-on-surface-variant); display: flex; align-items: center; gap: 4px; transition: all 0.15s; }
+.doc-type-actions button:hover { border-color: var(--md-primary); color: var(--md-primary); }
+
+/* Field groups */
+.field-group { margin-bottom: 20px; }
+.field-group-title {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--md-on-surface-variant); font-weight: 700; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+.field-group-title i { font-size: 0.8rem; opacity: 0.5; }
+
+.fields-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;
+}
+
+/* Single field */
+.field-card {
+  padding: 10px 14px; background: var(--md-surface-container-lowest); border-radius: 10px;
+  border: 1.5px solid var(--md-outline-variant); cursor: pointer; transition: all 0.15s;
+  position: relative;
+}
+.field-card:hover { border-color: var(--md-primary); box-shadow: 0 2px 8px rgba(139,105,20,0.1); }
+.field-card.editing { border-color: var(--md-primary); box-shadow: 0 0 0 3px rgba(139,105,20,0.15); }
+.field-card.low-confidence { border-left: 4px solid var(--md-warning); }
+.field-card.low-confidence .confidence-dot { display: block; }
+.field-card .field-label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--md-on-surface-variant); font-weight: 600; margin-bottom: 3px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.field-card .field-value { font-size: 0.92rem; font-weight: 500; }
+.field-card input.field-edit {
+  font-size: 0.92rem; font-weight: 500; border: none; background: transparent;
+  width: 100%; outline: none; padding: 0; font-family: inherit; color: var(--md-on-surface);
+  border-bottom: 2px solid var(--md-primary);
+}
+.confidence-dot {
+  display: none; width: 8px; height: 8px; border-radius: 50%; background: var(--md-warning);
+  flex-shrink: 0;
+}
+.field-card .edit-icon { font-size: 0.65rem; opacity: 0; transition: opacity 0.15s; color: var(--md-on-surface-variant); }
+.field-card:hover .edit-icon { opacity: 0.6; }
+
+/* Sticky validate bar */
+.validate-bar {
+  padding: 12px 20px; background: var(--md-surface-container-lowest);
+  border-top: 1px solid var(--md-outline-variant); display: flex;
+  justify-content: space-between; align-items: center; flex-shrink: 0;
+}
+.validate-bar .left { display: flex; align-items: center; gap: 12px; font-size: 0.82rem; color: var(--md-on-surface-variant); }
+.validate-bar .right { display: flex; gap: 8px; }
+.btn-validate {
+  background: var(--md-success); color: white; border: none; border-radius: 12px;
+  padding: 10px 24px; font-weight: 600; font-size: 0.88rem; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: all 0.15s;
+}
+.btn-validate:hover { background: #2d5619; box-shadow: 0 2px 8px rgba(56,106,32,0.3); }
+.btn-secondary-action {
+  background: none; border: 1.5px solid var(--md-outline-variant); border-radius: 12px;
+  padding: 10px 16px; font-size: 0.82rem; cursor: pointer; color: var(--md-on-surface-variant);
+  display: flex; align-items: center; gap: 5px; transition: all 0.15s;
+}
+.btn-secondary-action:hover { border-color: var(--md-primary); color: var(--md-primary); }
+
+/* New practice button */
+.btn-new { background: var(--md-primary); color: white; border: none; border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+
+/* Badges */
+.badge-ok { background: #d4edda; color: #155724; padding: 2px 10px; border-radius: 8px; font-size: 0.72rem; font-weight: 600; }
+.badge-pending { background: #fff3cd; color: #856404; padding: 2px 10px; border-radius: 8px; font-size: 0.72rem; font-weight: 600; }
+
+/* Warning callout */
+.confidence-callout {
+  background: var(--md-warning-container); border-radius: 12px; padding: 12px 16px;
+  margin-bottom: 16px; display: flex; align-items: center; gap: 10px; font-size: 0.82rem;
+  color: var(--md-on-primary-container);
+}
+.confidence-callout i { font-size: 1.1rem; color: var(--md-warning); flex-shrink: 0; }
+.confidence-callout strong { font-weight: 600; }
+
+/* Tooltip (generic, bottom) */
+[data-tooltip-bottom] { position: relative; }
+[data-tooltip-bottom]:hover::after {
+  content: attr(data-tooltip-bottom); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  background: var(--md-on-surface); color: var(--md-surface-container-lowest); padding: 4px 10px;
+  border-radius: 6px; font-size: 0.72rem; white-space: nowrap; z-index: 100; pointer-events: none;
+}
+
+/* Slide-in animation */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.detail-content.visible { animation: slideIn 0.25s ease-out; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ==================== COL 1: AGENTS (icon rail) ==================== -->
+  <div class="col-agents">
+    <div class="header"><i class="bi bi-cpu"></i></div>
+    <div>
+      <div class="agent-item" data-tooltip="conformita-titoli"><div class="agent-icon"><i class="bi bi-shield-check"></i></div></div>
+      <div class="agent-item" data-tooltip="post-stipula-sintesi"><div class="agent-icon"><i class="bi bi-file-earmark-check"></i></div></div>
+      <div class="agent-item active" data-tooltip="anti-riciclaggio"><div class="agent-icon"><i class="bi bi-search"></i></div></div>
+      <div class="agent-item" data-tooltip="compare"><div class="agent-icon"><i class="bi bi-arrow-left-right"></i></div></div>
+      <div class="agent-item" data-tooltip="askquestions"><div class="agent-icon"><i class="bi bi-question-circle"></i></div></div>
+      <div class="agent-item" data-tooltip="document.identifier"><div class="agent-icon"><i class="bi bi-tag"></i></div></div>
+    </div>
+  </div>
+
+  <!-- ==================== COL 2: PRATICHE ==================== -->
+  <div class="col-practices">
+    <div class="header">
+      <span><i class="bi bi-folder2-open"></i> Pratiche</span>
+      <button class="btn-new"><i class="bi bi-plus-lg"></i> Nuova</button>
+    </div>
+    <div>
+      <div class="practice-item" data-practice="romano">
+        <div class="practice-name">Romano Aniello</div>
+        <div class="practice-sub">3 file &middot; 21/05/2026</div>
+        <div class="practice-badge pending"><i class="bi bi-clock"></i> In attesa</div>
+      </div>
+      <div class="practice-item" data-practice="bianchi">
+        <div class="practice-name">Bianchi Marco</div>
+        <div class="practice-sub">2 file &middot; 21/05/2026</div>
+        <div class="practice-badge ok"><i class="bi bi-check2"></i> Validata</div>
+      </div>
+      <div class="practice-item" data-practice="esposito">
+        <div class="practice-name">Esposito Lucia</div>
+        <div class="practice-sub">2 file &middot; 21/05/2026</div>
+        <div class="practice-badge pending"><i class="bi bi-clock"></i> In attesa</div>
+      </div>
+      <div class="practice-item" data-practice="verdi">
+        <div class="practice-name">Verdi Giuseppe</div>
+        <div class="practice-sub">3 file &middot; 20/05/2026</div>
+        <div class="practice-badge ok"><i class="bi bi-check2"></i> Validata</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== COL 3: DETTAGLIO ==================== -->
+  <div class="col-detail">
+
+    <!-- Empty state (visible by default) -->
+    <div class="empty-state" id="emptyState">
+      <i class="bi bi-file-earmark-check"></i>
+      <div>Seleziona una pratica per verificare i dati estratti</div>
+    </div>
+
+    <!-- Detail content (hidden, shown on practice click) -->
+    <div class="detail-content" id="detailContent">
+
+      <!-- Info bar -->
+      <div class="info-bar">
+        <span><strong>ID:</strong> <span id="infoId">-</span></span>
+        <span><strong>Creata:</strong> <span id="infoDate">-</span></span>
+        <span><strong>Aggiornata:</strong> <span id="infoUpdated">-</span></span>
+        <span><strong>Validazione:</strong> <span id="infoValidation"></span></span>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn-secondary-action" style="padding:5px 10px;border-radius:8px;font-size:0.75rem"><i class="bi bi-plus-lg"></i> Aggiungi file</button>
+          <button class="btn-secondary-action" style="padding:5px 10px;border-radius:8px;font-size:0.75rem;border-color:#d9534f;color:#d9534f"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+
+      <!-- Split view: Preview + Data -->
+      <div class="split-view">
+
+        <!-- LEFT: Document preview -->
+        <div class="preview-panel" id="previewPanel">
+          <div class="preview-header">
+            <span><i class="bi bi-eye"></i> Anteprima</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button style="background:none;border:none;color:#aaa;cursor:pointer;font-size:0.9rem" data-tooltip-bottom="Zoom out"><i class="bi bi-zoom-out"></i></button>
+              <span style="font-size:0.75rem;color:#999">100%</span>
+              <button style="background:none;border:none;color:#aaa;cursor:pointer;font-size:0.9rem" data-tooltip-bottom="Zoom in"><i class="bi bi-zoom-in"></i></button>
+              <button style="background:none;border:none;color:#aaa;cursor:pointer;font-size:0.9rem;margin-left:8px" data-tooltip-bottom="Apri in nuova finestra"><i class="bi bi-box-arrow-up-right"></i></button>
+            </div>
+          </div>
+          <div class="preview-body">
+            <div class="fake-doc">
+              <div class="doc-title">Carta d'Identita</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:0.72rem">
+                <div><span style="color:#666">Cognome:</span> <strong class="highlight">ROMANO</strong></div>
+                <div><span style="color:#666">Nome:</span> <strong class="highlight">ANIELLO</strong></div>
+                <div><span style="color:#666">Nato il:</span> <strong class="highlight">19/09/1964</strong></div>
+                <div><span style="color:#666">a:</span> <strong>CASAMICCIOLA TERME (NA)</strong></div>
+                <div style="grid-column:1/-1"><span style="color:#666">Cod. Fiscale:</span> <strong class="highlight">RMNNLL64P19B924P</strong></div>
+                <div style="grid-column:1/-1"><span style="color:#666">Residenza:</span> <strong>LOCALITA' SOSSANA, N. 10 LEZZENO (CO)</strong></div>
+                <div><span style="color:#666">Rilasciata da:</span> <strong>LEZZENO</strong></div>
+                <div><span style="color:#666">N. Documento:</span> <strong class="highlight">CA47593MY</strong></div>
+                <div><span style="color:#666">Rilasciata il:</span> <strong>17/09/2022</strong></div>
+                <div><span style="color:#666">Scadenza:</span> <strong>19/09/2032</strong></div>
+              </div>
+            </div>
+          </div>
+          <div class="resize-handle"></div>
+        </div>
+
+        <!-- RIGHT: Extracted data -->
+        <div class="data-panel">
+
+          <!-- File tabs -->
+          <div class="file-tabs">
+            <div class="file-tab active">
+              <i class="bi bi-file-earmark-pdf"></i> ci.pdf
+              <span class="tab-badge ok"><i class="bi bi-check2"></i></span>
+            </div>
+            <div class="file-tab">
+              <i class="bi bi-file-earmark-pdf"></i> successione.pdf
+              <span class="tab-badge ok"><i class="bi bi-check2"></i></span>
+            </div>
+            <div class="file-tab">
+              <i class="bi bi-file-earmark-pdf"></i> cert plurimo.pdf
+              <span class="tab-badge err"><i class="bi bi-x-lg"></i></span>
+            </div>
+          </div>
+
+          <!-- Scrollable data area -->
+          <div class="data-scroll">
+
+            <!-- Document type header -->
+            <div class="doc-type-header">
+              <div class="doc-type-icon"><i class="bi bi-person-badge"></i></div>
+              <div>
+                <div class="doc-type-label">Tipo documento</div>
+                <div class="doc-type-name">Carta d'Identita</div>
+              </div>
+              <div class="doc-type-actions">
+                <button data-tooltip-bottom="Rielabora estrazione"><i class="bi bi-arrow-repeat"></i></button>
+                <button data-tooltip-bottom="Genera sintesi"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+              </div>
+            </div>
+
+            <!-- Confidence callout -->
+            <div class="confidence-callout">
+              <i class="bi bi-exclamation-triangle-fill"></i>
+              <div><strong>2 campi con bassa confidenza</strong> — verifica Data Nascita e Luogo Nascita</div>
+            </div>
+
+            <!-- GROUP: Dati Anagrafici -->
+            <div class="field-group">
+              <div class="field-group-title"><i class="bi bi-person"></i> Dati Anagrafici</div>
+              <div class="fields-grid">
+                <div class="field-card">
+                  <div class="field-label">Cognome <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">ROMANO</div>
+                </div>
+                <div class="field-card">
+                  <div class="field-label">Nome <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">ANIELLO</div>
+                </div>
+                <div class="field-card">
+                  <div class="field-label">Codice Fiscale <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">RMNNLL64P19B924P</div>
+                </div>
+                <div class="field-card low-confidence">
+                  <div class="field-label">Data Nascita <div class="confidence-dot" data-tooltip-bottom="Confidenza bassa: 72%"></div></div>
+                  <div class="field-value">1964-09-19</div>
+                </div>
+                <div class="field-card low-confidence">
+                  <div class="field-label">Luogo Nascita <div class="confidence-dot" data-tooltip-bottom="Confidenza bassa: 68%"></div></div>
+                  <div class="field-value">CASAMICCIOLA TERME (NA)</div>
+                </div>
+                <div class="field-card">
+                  <div class="field-label">Nazionalita <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">ITA</div>
+                </div>
+                <div class="field-card" style="grid-column: 1 / -1">
+                  <div class="field-label">Residenza <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">LOCALITA' SOSSANA, N. 10 LEZZENO (CO)</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- GROUP: Dati Documento -->
+            <div class="field-group">
+              <div class="field-group-title"><i class="bi bi-card-heading"></i> Dati Documento</div>
+              <div class="fields-grid">
+                <div class="field-card">
+                  <div class="field-label">Tipo Documento <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">carta_identita</div>
+                </div>
+                <div class="field-card">
+                  <div class="field-label">Numero Documento <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">CA47593MY</div>
+                </div>
+                <div class="field-card">
+                  <div class="field-label">Lato Documento <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">fronte_retro</div>
+                </div>
+                <div class="field-card">
+                  <div class="field-label">Ente Rilascio <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">LEZZENO</div>
+                </div>
+                <div class="field-card">
+                  <div class="field-label">Data Rilascio <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">2022-09-17</div>
+                </div>
+                <div class="field-card">
+                  <div class="field-label">Data Scadenza <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value">2032-09-19</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- GROUP: Altro -->
+            <div class="field-group">
+              <div class="field-group-title"><i class="bi bi-tag"></i> Altro</div>
+              <div class="fields-grid">
+                <div class="field-card">
+                  <div class="field-label">Ruolo Soggetto <span class="edit-icon"><i class="bi bi-pencil"></i></span></div>
+                  <div class="field-value" style="color:var(--md-on-surface-variant)">-</div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- end data-scroll -->
+
+          <!-- Sticky validate bar -->
+          <div class="validate-bar">
+            <div class="left">
+              <i class="bi bi-info-circle"></i>
+              <span>3 documenti &middot; 15 campi estratti &middot; 2 da verificare</span>
+            </div>
+            <div class="right">
+              <button class="btn-secondary-action"><i class="bi bi-x-lg"></i> Rifiuta</button>
+              <button class="btn-validate"><i class="bi bi-check-lg"></i> Valida pratica</button>
+            </div>
+          </div>
+
+        </div><!-- end data-panel -->
+      </div><!-- end split-view -->
+
+    </div><!-- end detail-content -->
+
+  </div><!-- end col-detail -->
+
+</div><!-- end layout -->
+
+<script>
+// Practice data for demo
+const practiceData = {
+  romano: { id: 'PRAT-1779389402913', date: '21/05/2026, 20:51', updated: '21/05/2026, 20:52', validation: 'pending', label: 'In attesa' },
+  bianchi: { id: 'PRAT-1779384246885', date: '21/05/2026, 18:30', updated: '21/05/2026, 19:15', validation: 'ok', label: 'Validata' },
+  esposito: { id: 'PRAT-1779384043679', date: '21/05/2026, 16:42', updated: '21/05/2026, 17:01', validation: 'pending', label: 'In attesa' },
+  verdi: { id: 'PRAT-1779383530574', date: '20/05/2026, 14:20', updated: '20/05/2026, 15:33', validation: 'ok', label: 'Validata' },
+};
+
+// Click practice → show detail
+document.querySelectorAll('.practice-item').forEach(item => {
+  item.addEventListener('click', function() {
+    document.querySelectorAll('.practice-item').forEach(i => i.classList.remove('active'));
+    this.classList.add('active');
+
+    const key = this.dataset.practice;
+    const data = practiceData[key];
+    if (!data) return;
+
+    document.getElementById('infoId').textContent = data.id;
+    document.getElementById('infoDate').textContent = data.date;
+    document.getElementById('infoUpdated').textContent = data.updated;
+    document.getElementById('infoValidation').innerHTML =
+      data.validation === 'ok'
+        ? '<span class="badge-ok">Validata</span>'
+        : '<span class="badge-pending">In attesa</span>';
+
+    document.getElementById('emptyState').style.display = 'none';
+    const detail = document.getElementById('detailContent');
+    detail.classList.remove('visible');
+    // Force reflow for animation restart
+    void detail.offsetWidth;
+    detail.classList.add('visible');
+  });
+});
+
+// Click on field to edit inline
+document.querySelectorAll('.field-card').forEach(card => {
+  card.addEventListener('click', function() {
+    if (this.classList.contains('editing')) return;
+    const valueEl = this.querySelector('.field-value');
+    if (!valueEl) return;
+    const currentValue = valueEl.textContent;
+    this.classList.add('editing');
+    valueEl.innerHTML = `<input class="field-edit" type="text" value="${currentValue.replace(/"/g, '&quot;')}">`;
+    const input = valueEl.querySelector('input');
+    input.focus();
+    input.select();
+
+    const finish = () => {
+      const newVal = input.value;
+      card.classList.remove('editing');
+      valueEl.textContent = newVal;
+      if (newVal !== currentValue) {
+        valueEl.style.color = 'var(--md-primary)';
+        card.style.background = 'rgba(139,105,20,0.04)';
+      }
+    };
+    input.addEventListener('blur', finish);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.value = currentValue; input.blur(); } });
+  });
+});
+
+// Click file tabs to switch
+document.querySelectorAll('.file-tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.file-tab').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+// Click agent items
+document.querySelectorAll('.agent-item').forEach(item => {
+  item.addEventListener('click', function() {
+    document.querySelectorAll('.agent-item').forEach(i => i.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>
+
+</body>
+</html>
