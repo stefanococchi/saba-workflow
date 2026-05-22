@@ -216,9 +216,18 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 }
 .preview-header .preview-btn { background: none; border: none; color: #aaa; cursor: pointer; font-size: 0.9rem; padding: 2px 4px; }
 .preview-header .preview-btn:hover { color: #fff; }
-.preview-body { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 16px; }
+.preview-body { flex: 1; overflow: auto; padding: 8px; background: #404040; }
+.preview-body.centered { display: flex; align-items: center; justify-content: center; }
 .preview-placeholder { color: #888; text-align: center; font-size: 0.82rem; }
 .preview-placeholder i { font-size: 2.5rem; display: block; margin-bottom: 10px; opacity: 0.3; }
+/* PDF pages in preview */
+.preview-page { position: relative; margin: 6px auto; background: white; box-shadow: 0 1px 6px rgba(0,0,0,0.4); }
+.preview-page canvas { display: block; }
+.preview-page .hl-marker { position: absolute; background: rgba(255,210,0,.4); border: 2px solid rgba(240,180,0,.7); border-radius: 2px; pointer-events: none; }
+/* Page number label */
+.preview-page-num {
+  text-align: center; color: #888; font-size: 0.65rem; padding: 2px 0; user-select: none;
+}
 
 /* File tabs in split view */
 .file-tabs-bar {
@@ -672,7 +681,10 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
 // ── State ──────────────────────────────────────────────────────────
 let agents = [];
 let catalogData = {};
@@ -1706,37 +1718,153 @@ function setupFieldEditing() {
     });
   });
 
-  // Also handle click-to-open-PDF for fields with data-pdf
+  // Double-click on field → highlight value in preview panel
   document.querySelectorAll('.field-card[data-pdf][data-search]').forEach(card => {
     card.addEventListener('dblclick', function() {
-      const pdf = this.dataset.pdf;
       const search = this.dataset.search;
-      if (pdf && search) openPdfAndSearch(pdf, search);
+      if (search) highlightPreviewText(search);
     });
   });
 }
 
-// Preview panel logic
-function loadPreview(fileName, hash) {
+// ── Preview panel logic (PDF.js rendering) ─────────────────────────
+let previewPdf = null;
+let previewPages = [];
+let previewTextContents = [];
+let previewFileName = '';
+
+async function loadPreview(fileName, hash) {
   const previewBody = document.getElementById('previewBody');
   const practiceId = window._practiceId;
+  previewPdf = null;
+  previewPages = [];
+  previewTextContents = [];
+  previewFileName = fileName || '';
+
   if (!fileName || !practiceId) {
+    previewBody.classList.add('centered');
     previewBody.innerHTML = '<div class="preview-placeholder"><i class="bi bi-file-earmark-image"></i><div>Nessuna anteprima</div></div>';
     return;
   }
 
   const ext = fileName.split('.').pop().toLowerCase();
+  const fileUrl = `/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`;
   currentPreviewZoom = 1;
   document.getElementById('previewZoomLabel').textContent = '100%';
 
   if (ext === 'pdf') {
-    const fileUrl = `/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`;
-    previewBody.innerHTML = `<iframe src="${fileUrl}#toolbar=0" style="width:100%;height:100%;border:none;border-radius:4px;background:#fff"></iframe>`;
+    previewBody.classList.remove('centered');
+    previewBody.innerHTML = '<div style="text-align:center;padding:40px"><div class="prat-spinner" style="width:24px;height:24px;border-width:3px;border-top-color:#ccc;border-color:#555"></div><div style="color:#888;font-size:0.78rem;margin-top:8px">Caricamento PDF...</div></div>';
+
+    try {
+      previewPdf = await pdfjsLib.getDocument(fileUrl).promise;
+      await renderPreviewPages();
+    } catch (e) {
+      previewBody.classList.add('centered');
+      previewBody.innerHTML = `<div class="preview-placeholder"><i class="bi bi-exclamation-triangle"></i><div>Errore: ${e.message}</div></div>`;
+    }
   } else if (['png','jpg','jpeg','gif','webp'].includes(ext)) {
-    const fileUrl = `/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`;
+    previewBody.classList.add('centered');
     previewBody.innerHTML = `<img id="previewImg" src="${fileUrl}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,0.3);transition:transform 0.2s" onerror="this.parentElement.innerHTML='<div class=\\'preview-placeholder\\'><i class=\\'bi bi-exclamation-triangle\\'></i><div>Impossibile caricare</div></div>'">`;
   } else {
+    previewBody.classList.add('centered');
     previewBody.innerHTML = `<div class="preview-placeholder"><i class="bi bi-file-earmark"></i><div>${fileName}</div><div style="font-size:0.75rem;margin-top:4px">Formato non visualizzabile</div></div>`;
+  }
+}
+
+async function renderPreviewPages() {
+  if (!previewPdf) return;
+  const previewBody = document.getElementById('previewBody');
+  const containerWidth = previewBody.clientWidth - 20;
+  previewBody.innerHTML = '';
+  previewBody.classList.remove('centered');
+  previewPages = [];
+  previewTextContents = [];
+
+  for (let i = 1; i <= previewPdf.numPages; i++) {
+    const page = await previewPdf.getPage(i);
+    const vp1 = page.getViewport({ scale: 1 });
+    // Fit to container width, then apply zoom
+    const fitScale = containerWidth / vp1.width;
+    const scale = fitScale * currentPreviewZoom;
+    const vp = page.getViewport({ scale });
+
+    const div = document.createElement('div');
+    div.className = 'preview-page';
+    div.style.width = vp.width + 'px';
+    div.style.height = vp.height + 'px';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width;
+    canvas.height = vp.height;
+    div.appendChild(canvas);
+    previewBody.appendChild(div);
+
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+
+    // Extract text content for highlighting
+    const tc = await page.getTextContent();
+    previewTextContents.push({ items: tc.items, text: tc.items.map(t => t.str).join(' '), scale, vp });
+    previewPages.push({ div, page, vp, scale });
+
+    // Page number
+    if (previewPdf.numPages > 1) {
+      const numEl = document.createElement('div');
+      numEl.className = 'preview-page-num';
+      numEl.textContent = `${i} / ${previewPdf.numPages}`;
+      previewBody.appendChild(numEl);
+    }
+  }
+}
+
+function highlightPreviewText(searchText) {
+  if (!searchText || !previewPages.length) return;
+  // Remove old highlights
+  document.querySelectorAll('.preview-page .hl-marker').forEach(e => e.remove());
+
+  const lower = searchText.toLowerCase().trim();
+  const terms = [lower];
+  const words = lower.split(/\s+/);
+  if (words.length > 3) terms.push(words.slice(0, 4).join(' '));
+  if (words.length > 1) terms.push(words.slice(0, 2).join(' '));
+
+  for (let p = 0; p < previewTextContents.length; p++) {
+    const tc = previewTextContents[p];
+    const ft = tc.text.toLowerCase();
+    let found = false;
+    for (const term of terms) {
+      if (!term) continue;
+      let pos = 0;
+      while ((pos = ft.indexOf(term, pos)) !== -1) {
+        let cc = 0;
+        for (const item of tc.items) {
+          const ie = cc + item.str.length;
+          if (pos >= cc && pos < ie + 1) {
+            const tx = item.transform;
+            const x = tx[4] * tc.scale;
+            const y = tc.vp.height - tx[5] * tc.scale - (item.height || 12) * tc.scale;
+            const w = (item.width || 80) * tc.scale;
+            const h = (item.height || 12) * tc.scale;
+            const hl = document.createElement('div');
+            hl.className = 'hl-marker';
+            hl.style.left = x + 'px';
+            hl.style.top = y + 'px';
+            hl.style.width = Math.min(w + 12, tc.vp.width - x) + 'px';
+            hl.style.height = (h + 3) + 'px';
+            previewPages[p].div.appendChild(hl);
+            if (!found) {
+              // Scroll first highlight into view
+              setTimeout(() => hl.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+            }
+            found = true;
+            break;
+          }
+          cc = ie + 1;
+        }
+        pos += term.length;
+      }
+      if (found) break;
+    }
   }
 }
 
@@ -1744,7 +1872,11 @@ function zoomPreview(delta) {
   currentPreviewZoom = Math.max(0.3, Math.min(3, currentPreviewZoom + delta));
   document.getElementById('previewZoomLabel').textContent = Math.round(currentPreviewZoom * 100) + '%';
   const img = document.getElementById('previewImg');
-  if (img) img.style.transform = `scale(${currentPreviewZoom})`;
+  if (img) {
+    img.style.transform = `scale(${currentPreviewZoom})`;
+  } else if (previewPdf) {
+    renderPreviewPages();
+  }
 }
 
 function openPreviewExternal() {
@@ -1755,8 +1887,11 @@ function openPreviewExternal() {
   if (!file?.fileName) return;
   const practiceId = window._practiceId;
   if (!practiceId) return;
+
   const fileUrl = `/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(file.fileName)}`;
-  window.open(fileUrl, '_blank');
+  // Open in the full PDF viewer with search
+  const viewerUrl = `/admin/pdf-viewer?file=${encodeURIComponent(fileUrl)}&name=${encodeURIComponent(file.fileName)}`;
+  window.open(viewerUrl, 'pdfviewer', `width=${Math.min(850, screen.width * 0.5)},height=${Math.min(950, screen.height * 0.9)},resizable=yes,scrollbars=yes`);
 }
 
 // Validate/reject practice (placeholder actions)
