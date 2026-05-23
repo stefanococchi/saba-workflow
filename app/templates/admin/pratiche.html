@@ -1241,21 +1241,21 @@ function pollProcessingStatus(practiceId, agentId) {
         delete _activePolls[practiceId];
         delete _lastPollProgress[practiceId];
 
-        // Aggiorna SEMPRE la UI al completamento — anche se l'utente ha navigato
-        // e poi è tornato, selectedPracticeId potrebbe non matchare
-        if (isVisible || selectedPracticeId === practiceId || window._practiceId === practiceId) {
-          document.getElementById('previewPanel').style.display = '';
-          const statusLabel = job.status === 'completed'
-            ? '<span class="badge-ok">Elaborazione completata</span>'
-            : job.status === 'stopped'
-              ? '<span class="badge-ko">Elaborazione interrotta</span>'
-              : '<span class="badge-ko">Errore elaborazione</span>';
-          document.getElementById('infoValidation').innerHTML = statusLabel;
+        // Forza la pratica come selezionata (il polling è partito da questa pratica)
+        selectedPracticeId = practiceId;
+        window._practiceId = practiceId;
 
-          const cached = await loadPracticeFromDb(practiceId);
-          if (cached?.result_data) {
-            await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
-          }
+        document.getElementById('previewPanel').style.display = '';
+        const statusLabel = job.status === 'completed'
+          ? '<span class="badge-ok">Elaborazione completata</span>'
+          : job.status === 'stopped'
+            ? '<span class="badge-ko">Elaborazione interrotta</span>'
+            : '<span class="badge-ko">Errore elaborazione</span>';
+        document.getElementById('infoValidation').innerHTML = statusLabel;
+
+        const cached = await loadPracticeFromDb(practiceId);
+        if (cached?.result_data) {
+          await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
         }
         if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
       }
@@ -3358,14 +3358,17 @@ function updateValidateBarForWorkflow(wf) {
 }
 
 function _renderStepSummaries(wf) {
-  // Mostra summary_fields degli step completati nella stepper area
   const completedSteps = (wf.steps || []).filter(s => s.state?.status === 'completed' && s.display_data?.summary_fields?.length > 0);
+
+  // Rimuovi eventuali banner precedenti
+  document.querySelectorAll('.step-summary-banner').forEach(el => el.remove());
+
   if (completedSteps.length === 0) return;
 
   const dotsEl = document.getElementById('wfStepperDots');
   if (!dotsEl) return;
 
-  // Aggiungi tooltip con summary ai dot completati
+  // Tooltip sui dot completati
   for (const s of completedSteps) {
     const dot = dotsEl.querySelector(`.wf-step-dot[title*="Step ${s.order}:"]`);
     if (dot) {
@@ -3374,6 +3377,39 @@ function _renderStepSummaries(wf) {
         return `${icon} ${f.label}: ${f.value}`;
       }).join('\n');
       dot.title = `Step ${s.order}: ${s.name}\n${summary}`;
+    }
+  }
+
+  // Banner visibile sotto lo stepper per step auto-eseguiti
+  const autoSteps = completedSteps.filter(s => s.display_data?.auto_execute);
+  if (autoSteps.length > 0) {
+    const stepperBar = document.getElementById('workflowStepperBar');
+    if (stepperBar) {
+      let bannerHtml = '';
+      for (const s of autoSteps) {
+        const fields = s.display_data.summary_fields || [];
+        const hasErrors = fields.some(f => f.status === 'error');
+        const borderColor = hasErrors ? 'var(--md-error, #B3261E)' : 'var(--md-success, #386A20)';
+        const bgColor = hasErrors ? 'rgba(179,38,30,0.06)' : 'rgba(56,106,32,0.06)';
+        const icon = hasErrors ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill';
+        const iconColor = hasErrors ? 'var(--md-error)' : 'var(--md-success)';
+
+        let fieldsHtml = fields.map(f => {
+          const fIcon = f.status === 'ok' ? '<i class="bi bi-check-lg" style="color:var(--md-success)"></i>'
+            : f.status === 'error' ? '<i class="bi bi-x-lg" style="color:var(--md-error)"></i>'
+            : '<i class="bi bi-hourglass" style="color:var(--md-on-surface-variant)"></i>';
+          return `<div style="display:flex;gap:6px;align-items:center;font-size:0.78rem;padding:2px 0">${fIcon} <span style="color:var(--md-on-surface-variant)">${f.label}:</span> <strong>${f.value}</strong></div>`;
+        }).join('');
+
+        bannerHtml += `<div class="step-summary-banner" style="padding:10px 16px;background:${bgColor};border-left:3px solid ${borderColor};margin:4px 16px 8px;border-radius:0 8px 8px 0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <i class="bi ${icon}" style="color:${iconColor};font-size:1rem"></i>
+            <strong style="font-size:0.82rem">Step ${s.order}: ${s.name}</strong>
+          </div>
+          <div style="margin-left:24px">${fieldsHtml}</div>
+        </div>`;
+      }
+      stepperBar.insertAdjacentHTML('afterend', bannerHtml);
     }
   }
 }
