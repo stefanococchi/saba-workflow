@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 # In-memory job tracking for background processing
 _processing_jobs = {}  # practice_id -> {status, progress, total, results, error, started_at}
+_stop_flags = {}  # practice_id -> threading.Event (set = stop requested)
 
 pratiche_bp = Blueprint('pratiche', __name__)
 
@@ -166,94 +167,232 @@ def ao_practice_process(agent_id, practice_id):
         return jsonify({"error": str(e)}), 500
 
 
-@pratiche_bp.route('/practice/<agent_id>/<practice_id>/process-all', methods=['POST'])
-def ao_practice_process_all(agent_id, practice_id):
-    """Avvia elaborazione di tutti i file pendenti in background. Non si interrompe se l'utente naviga via."""
+@pratiche_bp.route('/practice/<agent_id>/<practice_id>/init-and-process', methods=['POST'])
+def ao_practice_init_and_process(agent_id, practice_id):
+    """Crea pratica, salva file, assegna workflow e avvia elaborazione — tutto atomicamente."""
     try:
-        # Raccogli file dal DB
-        db_files = db.query(PracticeFile).filter_by(practice_id=practice_id).all()
-        if not db_files:
-            return jsonify({"error": "Nessun file da elaborare"}), 400
+        workflow_id = request.form.get('workflow_id', type=int)
 
-        # Controlla se già in corso
-        job = _processing_jobs.get(practice_id)
-        if job and job['status'] == 'running':
-            return jsonify({"ok": True, "already_running": True, "progress": job['progress'], "total": job['total']})
+        # ── 1. Crea o trova PracticeResult ──
+        pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if not pr:
+            pr = PracticeResult(
+                practice_id=practice_id,
+                agent_id=agent_id,
+                agent_name=request.form.get('agent_name', ''),
+                result_data={'files': {}},
+            )
+            db.add(pr)
+        else:
+            pr.agent_id = agent_id
 
-        # Prepara dati file (leggi dal DB prima di passare al thread)
-        files_data = [(pf.file_name, pf.mime_type, bytes(pf.data)) for pf in db_files]
+        # ── 2. Salva file nel DB (upsert: se esiste già stesso nome, sovrascrive) ──
+        existing_names = {pf.file_name for pf in db.query(PracticeFile).filter_by(practice_id=practice_id).all()}
+        saved = []
+        for key in request.files:
+            upload = request.files[key]
+            content = upload.read()
+            if not content:
+                continue
+            if upload.filename in existing_names:
+                # Aggiorna file esistente
+                pf = db.query(PracticeFile).filter_by(practice_id=practice_id, file_name=upload.filename).first()
+                if pf:
+                    pf.data = content
+                    pf.mime_type = upload.content_type or 'application/octet-stream'
+            else:
+                pf = PracticeFile(
+                    practice_id=practice_id,
+                    file_name=upload.filename,
+                    mime_type=upload.content_type or 'application/octet-stream',
+                    data=content,
+                )
+                db.add(pf)
+            saved.append(upload.filename)
 
-        # Controlla file già elaborati su AO
-        already_done = set()
-        try:
-            info_r = ao_service.practice_info(agent_id, practice_id)
-            existing_files = info_r.get('output', {}).get('info', {}).get('files', {})
-            for h, ff in existing_files.items():
-                if ff.get('state', {}).get('extraction') == 'completed' and ff.get('state', {}).get('identification') == 'completed':
-                    already_done.add(ff.get('fileName', ''))
-        except Exception:
-            pass
+        # ── 3. Assegna workflow (se specificato) ──
+        if workflow_id:
+            from app.models import Workflow
+            workflow = db.get(Workflow, workflow_id)
+            if workflow:
+                steps = sorted(workflow.steps, key=lambda s: s.order)
+                pr.workflow_id = workflow_id
+                pr.current_step_order = 1
+                pr.step_states = {str(s.order): {'status': 'pending'} for s in steps}
+                if steps:
+                    pr.step_states['1']['status'] = 'in_progress'
+        elif not pr.workflow_id and agent_id:
+            # Auto-bind workflow se nessuno specificato
+            _auto_bind_workflow(pr)
 
-        to_process = [(fn, mt, data) for fn, mt, data in files_data if fn not in already_done]
+        # ── 4. Commit unico — tutto salvato atomicamente ──
+        db.commit()
+        logger.info(f"Practice {practice_id} initialized: {len(saved)} files, workflow={pr.workflow_id}")
 
-        _processing_jobs[practice_id] = {
-            'status': 'running',
-            'progress': 0,
-            'total': len(to_process),
-            'skipped': len(files_data) - len(to_process),
-            'results': [],
-            'error': None,
-            'started_at': datetime.utcnow().isoformat(),
-        }
+        # ── 5. Avvia elaborazione in background (dopo il commit) ──
+        return _start_background_processing(agent_id, practice_id, pr)
 
-        # Lancia in background
-        from flask import current_app
-        app = current_app._get_current_object()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Init and process error: {e}")
+        return jsonify({"error": str(e)}), 500
 
-        def _bg_process():
-            with app.app_context():
-                from app import db_session as bg_db
-                job = _processing_jobs[practice_id]
-                try:
-                    for i, (fn, mt, data) in enumerate(to_process):
+
+def _start_background_processing(agent_id, practice_id, pr=None):
+    """Avvia elaborazione file in background. Usata da init-and-process e process-all."""
+    db_files = db.query(PracticeFile).filter_by(practice_id=practice_id).all()
+    if not db_files:
+        return jsonify({"error": "Nessun file da elaborare"}), 400
+
+    # Controlla se già in corso
+    job = _processing_jobs.get(practice_id)
+    if job and job['status'] == 'running':
+        return jsonify({"ok": True, "already_running": True, "progress": job['progress'], "total": job['total']})
+
+    # Prepara dati file
+    files_data = [(pf.file_name, pf.mime_type, bytes(pf.data)) for pf in db_files]
+
+    # Controlla file già elaborati su AO
+    already_done = set()
+    try:
+        info_r = ao_service.practice_info(agent_id, practice_id)
+        existing_files = info_r.get('output', {}).get('info', {}).get('files', {})
+        for h, ff in existing_files.items():
+            if ff.get('state', {}).get('extraction') == 'completed' and ff.get('state', {}).get('identification') == 'completed':
+                already_done.add(ff.get('fileName', ''))
+    except Exception:
+        pass
+
+    to_process = [(fn, mt, data) for fn, mt, data in files_data if fn not in already_done]
+
+    _processing_jobs[practice_id] = {
+        'status': 'running',
+        'progress': 0,
+        'total': len(to_process),
+        'skipped': len(files_data) - len(to_process),
+        'results': [],
+        'error': None,
+        'started_at': datetime.utcnow().isoformat(),
+    }
+
+    from flask import current_app
+    app = current_app._get_current_object()
+
+    stop_event = threading.Event()
+    _stop_flags[practice_id] = stop_event
+
+    def _bg_process():
+        with app.app_context():
+            from app import db_session as bg_db
+            from sqlalchemy.orm.attributes import flag_modified
+            job = _processing_jobs[practice_id]
+            try:
+                for i, (fn, mt, data) in enumerate(to_process):
+                    if stop_event.is_set():
+                        job['status'] = 'stopped'
+                        logger.info(f"BG process stopped by user at file {i+1}/{len(to_process)}")
+                        break
+
+                    MAX_RETRIES = 3
+                    RETRY_DELAYS = [5, 15, 30]  # secondi tra i tentativi
+                    last_error = None
+                    success = False
+
+                    for attempt in range(MAX_RETRIES):
+                        if stop_event.is_set():
+                            break
                         try:
+                            if attempt > 0:
+                                delay = RETRY_DELAYS[min(attempt - 1, len(RETRY_DELAYS) - 1)]
+                                logger.info(f"BG file {fn}: retry {attempt + 1}/{MAX_RETRIES} tra {delay}s...")
+                                import time as _time
+                                _time.sleep(delay)
+
                             files = {f"file_0": (data, mt, fn)}
                             result = ao_service.practice_process(agent_id, practice_id, files=files)
                             output = result.get('output', {})
                             info = output.get('info', output)
+                            ao_files = info.get('files', {})
+                            # Log documentId ritornati dall'AO (per debug matching doc_types)
+                            for _fh, _fd in ao_files.items():
+                                _did = _fd.get('identification', {}).get('documentId', '?')
+                                logger.info(f"BG file {fn}: AO documentId='{_did}' hash={_fh[:12]}")
 
-                            # Salva in PracticeResult
-                            pr = bg_db.query(PracticeResult).filter_by(practice_id=practice_id).first()
-                            if pr:
-                                rd = dict(pr.result_data or {})
+                            # Leggi dal DB fresco (refresh forza rilettura dopo commit precedente)
+                            bg_pr = bg_db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+                            if bg_pr:
+                                bg_db.refresh(bg_pr)
+                                rd = dict(bg_pr.result_data or {})
                                 if 'files' not in rd:
                                     rd['files'] = {}
-                                for fh, fd in (info.get('files', {})).items():
+                                for fh, fd in ao_files.items():
                                     rd['files'][fh] = fd
-                                pr.result_data = rd
+                                bg_pr.result_data = rd
+                                flag_modified(bg_pr, 'result_data')
                                 bg_db.commit()
+                                logger.info(f"BG file {fn}: AO returned {len(ao_files)}, total in DB={len(rd['files'])}")
+                            else:
+                                logger.error(f"BG process: PracticeResult not found for {practice_id}")
 
                             job['results'].append({'file': fn, 'ok': True})
+                            success = True
+                            break  # successo, esci dal retry loop
+
                         except Exception as e:
-                            job['results'].append({'file': fn, 'ok': False, 'error': str(e)})
-                            logger.error(f"BG process file {fn}: {e}")
+                            last_error = str(e)
+                            logger.warning(f"BG file {fn}: attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
 
-                        job['progress'] = i + 1
+                    if not success and not stop_event.is_set():
+                        job['results'].append({'file': fn, 'ok': False, 'error': last_error})
+                        logger.error(f"BG file {fn}: all {MAX_RETRIES} attempts failed: {last_error}")
 
+                        # Salva errore nel DB per consultazione da UI
+                        try:
+                            bg_pr = bg_db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+                            if bg_pr:
+                                bg_db.refresh(bg_pr)
+                                rd = dict(bg_pr.result_data or {})
+                                if '_ao_errors' not in rd:
+                                    rd['_ao_errors'] = []
+                                rd['_ao_errors'].append({
+                                    'file': fn,
+                                    'error': last_error,
+                                    'attempts': MAX_RETRIES,
+                                    'at': datetime.utcnow().isoformat(),
+                                })
+                                bg_pr.result_data = rd
+                                flag_modified(bg_pr, 'result_data')
+                                bg_db.commit()
+                        except Exception:
+                            pass  # non bloccare il flusso per un errore di logging
+
+                    job['progress'] = i + 1
+
+                if job['status'] != 'stopped':
                     job['status'] = 'completed'
-                except Exception as e:
-                    job['status'] = 'error'
-                    job['error'] = str(e)
-                    logger.error(f"BG process-all error: {e}")
+                    logger.info(f"BG process completed for {practice_id}")
+            except Exception as e:
+                job['status'] = 'error'
+                job['error'] = str(e)
+                logger.error(f"BG process-all error: {e}")
+            finally:
+                _stop_flags.pop(practice_id, None)
 
-        t = threading.Thread(target=_bg_process, daemon=True)
-        t.start()
+    t = threading.Thread(target=_bg_process, daemon=True)
+    t.start()
 
-        return jsonify({
-            "ok": True,
-            "total": len(to_process),
-            "skipped": len(files_data) - len(to_process),
-        })
+    return jsonify({
+        "ok": True,
+        "total": len(to_process),
+        "skipped": len(files_data) - len(to_process),
+    })
+
+
+@pratiche_bp.route('/practice/<agent_id>/<practice_id>/process-all', methods=['POST'])
+def ao_practice_process_all(agent_id, practice_id):
+    """Avvia elaborazione di tutti i file pendenti in background (legacy — usa init-and-process per flusso completo)."""
+    try:
+        return _start_background_processing(agent_id, practice_id)
     except Exception as e:
         logger.error(f"AO process-all: {e}")
         return jsonify({"error": str(e)}), 500
@@ -266,6 +405,21 @@ def ao_practice_process_status(practice_id):
     if not job:
         return jsonify({"status": "none"})
     return jsonify(job)
+
+
+@pratiche_bp.route('/practice/<practice_id>/process-stop', methods=['POST'])
+def ao_practice_process_stop(practice_id):
+    """Stop elaborazione in background su richiesta dell'utente."""
+    stop_event = _stop_flags.get(practice_id)
+    if not stop_event:
+        job = _processing_jobs.get(practice_id)
+        if not job or job['status'] != 'running':
+            return jsonify({"ok": True, "message": "Nessuna elaborazione in corso"})
+        return jsonify({"ok": True, "message": "Nessuna elaborazione in corso"})
+
+    stop_event.set()
+    logger.info(f"Stop requested for practice {practice_id}")
+    return jsonify({"ok": True, "message": "Stop richiesto — l'elaborazione si fermerà dopo il file corrente"})
 
 
 @pratiche_bp.route('/practice/<agent_id>/<practice_id>/process-stream', methods=['POST'])
@@ -843,7 +997,7 @@ def get_practice_workflow_status(practice_id):
 
 @pratiche_bp.route('/practice/<practice_id>/complete-step', methods=['POST'])
 def complete_practice_step(practice_id):
-    """Completa lo step corrente e avanza al prossimo. Per DOCUMENT_CHECK usa validate/reject."""
+    """Completa lo step corrente e avanza al prossimo. Salva tutto atomicamente nel DB."""
     try:
         body = request.get_json() or {}
         action = body.get('action', 'complete')  # complete | skip
@@ -865,50 +1019,98 @@ def complete_practice_step(practice_id):
             return jsonify({"error": "Step corrente non trovato"}), 400
 
         step_states = dict(pr.step_states or {})
+        config = current_step.skip_conditions or {}
+        step_doc_types = config.get('doc_types', [])
 
-        # Raccogli dati estratti dalla pratica per il contesto dello step
+        # ── 1. Raccogli dati estratti SOLO per i file rilevanti a questo step ──
         extracted_data = {}
+        validated_files = []
         if pr.result_data and isinstance(pr.result_data, dict):
             for fhash, fdata in (pr.result_data.get('files', {})).items():
+                doc_type = fdata.get('identification', {}).get('documentId', '') or \
+                           fdata.get('identification', {}).get('documentTypeId', fhash)
+
+                # Se lo step ha doc_types, filtra per pertinenza (normalizza spazi/underscore)
+                if step_doc_types:
+                    _norm = lambda s: s.lower().replace('_', '').replace(' ', '')
+                    match = any(
+                        _norm(t) in _norm(doc_type) or _norm(doc_type) in _norm(t)
+                        for t in step_doc_types
+                    )
+                    if not match:
+                        continue
+
+                validated_files.append({
+                    'hash': fhash,
+                    'fileName': fdata.get('fileName', ''),
+                    'documentId': doc_type,
+                })
                 if fdata.get('extraction', {}).get('data'):
-                    doc_type = fdata.get('identification', {}).get('documentId', fhash)
                     extracted_data[doc_type] = fdata['extraction']['data']
 
-        # Segna step corrente come completato
+        # ── 2. Salva lo step corrente come completato (atomico) ──
+        step_type = current_step.type.name
         step_states[str(current_order)] = {
             'status': 'skipped' if action == 'skip' else 'completed',
             'completed_at': datetime.utcnow().isoformat(),
             'result': step_result,
             'extracted_data': extracted_data,
+            'validated_files': validated_files,
         }
 
-        # Esegui azioni automatiche dello step (email, whatsapp, ecc.)
-        step_type = current_step.type.name
+        # Esegui azioni automatiche dello step corrente (email, whatsapp, ecc.)
         exec_result = {}
         if action != 'skip' and step_type in ('EMAIL', 'WHATSAPP', 'WEBHOOK', 'SISTER_VISURA'):
             exec_result = _execute_backoffice_step(current_step, pr, body)
             step_states[str(current_order)]['exec_result'] = exec_result
 
-        # Avanza al prossimo step
+        # ── 3. Pulisci validation dalla result_data (è negli step_states ora) ──
+        if pr.result_data and isinstance(pr.result_data, dict):
+            rd = dict(pr.result_data)
+            rd.pop('validation', None)
+            pr.result_data = rd
+
+        # ── 4. Avanza al prossimo step ──
         next_step = next((s for s in steps if s.order > current_order), None)
         if next_step:
             pr.current_step_order = next_step.order
             step_states[str(next_step.order)] = {'status': 'in_progress'}
+
+            # Auto-esegui il prossimo step se è di tipo automatico
+            next_type = next_step.type.name
+            if next_type in ('EMAIL', 'WHATSAPP', 'WEBHOOK', 'SISTER_VISURA'):
+                try:
+                    next_exec_result = _execute_backoffice_step(next_step, pr, body)
+                    step_states[str(next_step.order)]['status'] = 'completed'
+                    step_states[str(next_step.order)]['completed_at'] = datetime.utcnow().isoformat()
+                    step_states[str(next_step.order)]['exec_result'] = next_exec_result
+
+                    # Avanza ancora dopo l'auto-esecuzione
+                    after_next = next((s for s in steps if s.order > next_step.order), None)
+                    if after_next:
+                        pr.current_step_order = after_next.order
+                        step_states[str(after_next.order)] = {'status': 'in_progress'}
+                    else:
+                        pr.current_step_order = None
+                except Exception as e:
+                    logger.error(f"Auto-execute next step {next_step.order} failed: {e}")
+                    step_states[str(next_step.order)]['status'] = 'error'
+                    step_states[str(next_step.order)]['error'] = str(e)
         else:
             # Workflow completato
             pr.current_step_order = None
 
+        # ── 5. Salva tutto in un unico commit ──
         pr.step_states = step_states
         db.commit()
 
+        # ── 6. Rispondi con lo stato aggiornato (dal DB, non calcolato) ──
+        db.refresh(pr)
         return jsonify({
             "ok": True,
             "completed_step": current_order,
-            "completed_type": step_type,
-            "next_step_order": next_step.order if next_step else None,
-            "next_step_name": next_step.name if next_step else None,
-            "workflow_completed": next_step is None,
-            "exec_result": exec_result,
+            "workflow_completed": pr.current_step_order is None,
+            "current_step_order": pr.current_step_order,
         })
     except Exception as e:
         db.rollback()
@@ -961,6 +1163,43 @@ def _execute_backoffice_step(step, practice_result, body):
     return result
 
 
+@pratiche_bp.route('/test/sister-visura', methods=['POST'])
+def test_sister_visura():
+    """Test diretto Sister Visura — bypassa workflow e estrazione, usa dati manuali."""
+    try:
+        body = request.get_json() or {}
+        # Dati catastali obbligatori
+        sister_input = {
+            'operation': body.get('operation', 'visuraStorica'),
+            'tipoCatasto': body.get('tipoCatasto', 'F'),
+            'tipoVisura': body.get('tipoVisura', 'sintetica'),
+            'provincia': body.get('provincia', ''),
+            'comune': body.get('comune', ''),
+            'foglio': body.get('foglio', ''),
+            'particella': body.get('particella', ''),
+            'subalterno': body.get('subalterno', ''),
+        }
+        if body.get('authUsername'):
+            sister_input['authProvider'] = body.get('authProvider', 'sister')
+            sister_input['authUsername'] = body['authUsername']
+            sister_input['authPassword'] = body.get('authPassword', '')
+
+        # Trova sister-agent
+        agents_list = ao_service.list_agents()
+        sa = next((a for a in agents_list if 'sister' in (a.get('name', '') or '').lower()), None)
+        if not sa:
+            return jsonify({"error": "Agente sister-agent non trovato"}), 404
+
+        logger.info(f"TEST Sister visura input: {sister_input}")
+        run_result = ao_service.run_agent(sa['id'], sister_input)
+        task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
+
+        return jsonify({"ok": True, "task_result": task_result})
+    except Exception as e:
+        logger.error(f"TEST Sister visura error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 def _execute_sister_visura(step, practice_result, config):
     """Chiama sister-agent con dati catastali dal contesto accumulato della pratica."""
     result = {'type': 'SISTER_VISURA'}
@@ -984,6 +1223,10 @@ def _execute_sister_visura(step, practice_result, config):
             for doc_type, fields in state['extracted_data'].items():
                 if isinstance(fields, dict):
                     accumulated.update(fields)
+
+    logger.info(f"Sister visura accumulated data keys: {list(accumulated.keys())}")
+    if accumulated:
+        logger.info(f"Sister visura accumulated sample: { {k: v for k, v in list(accumulated.items())[:10]} }")
 
     # Mapping: campo estratto → campo sister input
     field_mapping = config.get('field_mapping', {})

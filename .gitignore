@@ -63,3 +63,4 @@ app/static/uploads/
 
 # Alembic
 # NON ignorare migrations/versions/ - va in Git!
+node_modules/

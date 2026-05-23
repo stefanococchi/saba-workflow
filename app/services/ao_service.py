@@ -81,14 +81,23 @@ def run_agent(agent_id, input_json, binary=None, team_id=None):
         "stream": False,
         "input": [node_item],
     }
-    r = requests.post(
-        f"{cfg['base_url']}/v1/agent/{agent_id}/run",
-        headers=_headers(),
-        json=payload,
-        timeout=_TIMEOUT,
-    )
-    r.raise_for_status()
-    return r.json()
+    url = f"{cfg['base_url']}/v1/agent/{agent_id}/run"
+    logger.info(f"AO run_agent: POST {url} | type={input_json.get('type')} practiceId={input_json.get('practiceId')} files={len(binary or {})}")
+    try:
+        r = requests.post(url, headers=_headers(), json=payload, timeout=_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+        logger.info(f"AO run_agent: taskId={data.get('taskId')} status={data.get('status')}")
+        return data
+    except requests.exceptions.Timeout as e:
+        logger.error(f"AO run_agent TIMEOUT: POST {url} timeout={_TIMEOUT}s | {e}")
+        raise
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"AO run_agent CONNECTION_ERROR: POST {url} | {e}")
+        raise
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"AO run_agent HTTP_ERROR: POST {url} status={e.response.status_code if e.response else '?'} body={e.response.text[:500] if e.response else '?'}")
+        raise
 
 
 def run_agent_stream(agent_id, input_json, binary=None, team_id=None):
@@ -146,27 +155,47 @@ def practice_process_stream(agent_id, practice_id, files=None, team_id=None):
 def get_task_status(task_id):
     """Controlla lo stato di un task."""
     cfg = _get_config()
-    r = requests.get(
-        f"{cfg['base_url']}/v1/task/{task_id}/status",
-        headers=_headers(),
-        timeout=_TIMEOUT,
-    )
-    r.raise_for_status()
-    data = r.json()
-    if data.get("output"):
-        data["output"] = _extract_useful_output(data["output"])
-    return data
+    url = f"{cfg['base_url']}/v1/task/{task_id}/status"
+    try:
+        r = requests.get(url, headers=_headers(), timeout=_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+        if data.get("output"):
+            data["output"] = _extract_useful_output(data["output"])
+        return data
+    except requests.exceptions.Timeout as e:
+        logger.error(f"AO get_task_status TIMEOUT: GET {url} timeout={_TIMEOUT}s | taskId={task_id}")
+        raise
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"AO get_task_status CONNECTION_ERROR: GET {url} | taskId={task_id} | {e}")
+        raise
 
 
 def poll_task(task_id, interval=2.0, max_wait=120.0):
     """Polling di un task fino a completamento o timeout."""
     elapsed = 0.0
+    poll_errors = 0
+    logger.info(f"AO poll_task: taskId={task_id} max_wait={max_wait}s")
     while elapsed < max_wait:
-        result = get_task_status(task_id)
-        if result["status"] in ("COMPLETED", "FAILED"):
-            return result
+        try:
+            result = get_task_status(task_id)
+            poll_errors = 0  # reset su successo
+            if result["status"] == "COMPLETED":
+                logger.info(f"AO poll_task: taskId={task_id} COMPLETED after {elapsed:.0f}s")
+                return result
+            if result["status"] == "FAILED":
+                error_msg = result.get('error', 'unknown')
+                logger.error(f"AO poll_task: taskId={task_id} FAILED after {elapsed:.0f}s | error={error_msg}")
+                return result
+        except Exception as e:
+            poll_errors += 1
+            if poll_errors >= 3:
+                logger.error(f"AO poll_task: taskId={task_id} | {poll_errors} consecutive poll errors, aborting | last={e}")
+                raise
+            logger.warning(f"AO poll_task: taskId={task_id} | poll error {poll_errors}/3 (will retry) | {e}")
         time.sleep(interval)
         elapsed += interval
+    logger.error(f"AO poll_task: taskId={task_id} TIMEOUT after {max_wait}s")
     return {"status": "TIMEOUT", "error": f"Task {task_id} non completato entro {max_wait}s"}
 
 
