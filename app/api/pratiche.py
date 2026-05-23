@@ -265,17 +265,28 @@ def _start_background_processing(agent_id, practice_id, pr=None):
 
     to_process = [(fn, mt, data) for fn, mt, data in files_data if fn not in already_done]
 
-    _processing_jobs[practice_id] = {
+    # Salva stato processing nel DB (non in memoria — multi-worker safe)
+    _proc_state = {
         'status': 'running',
         'progress': 0,
         'total': len(to_process),
         'skipped': len(files_data) - len(to_process),
-        'results': [],
-        'error': None,
         'current_file': '',
         'activity': [],
         'started_at': datetime.utcnow().isoformat(),
     }
+    # Anche in memoria per backward compat (stesso worker)
+    _processing_jobs[practice_id] = _proc_state
+
+    # Salva nel DB
+    pr_for_status = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+    if pr_for_status:
+        rd = dict(pr_for_status.result_data or {})
+        rd['_processing'] = _proc_state
+        pr_for_status.result_data = rd
+        from sqlalchemy.orm.attributes import flag_modified as _fm
+        _fm(pr_for_status, 'result_data')
+        db.commit()
 
     from flask import current_app
     app = current_app._get_current_object()
@@ -283,21 +294,49 @@ def _start_background_processing(agent_id, practice_id, pr=None):
     stop_event = threading.Event()
     _stop_flags[practice_id] = stop_event
 
+    def _update_proc_db(bg_db, practice_id, updates):
+        """Aggiorna _processing nel DB in modo atomico."""
+        bg_pr = bg_db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if bg_pr:
+            bg_db.refresh(bg_pr)
+            rd = dict(bg_pr.result_data or {})
+            proc = rd.get('_processing', {})
+            proc.update(updates)
+            rd['_processing'] = proc
+            bg_pr.result_data = rd
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(bg_pr, 'result_data')
+            return bg_pr, rd
+        return None, None
+
     def _bg_process():
         with app.app_context():
             from app import db_session as bg_db
             from sqlalchemy.orm.attributes import flag_modified
-            job = _processing_jobs[practice_id]
-            _log = lambda msg: job['activity'].append({'at': datetime.utcnow().strftime('%H:%M:%S'), 'msg': msg})
+
+            def _log(msg):
+                act = {'at': datetime.utcnow().strftime('%H:%M:%S'), 'msg': msg}
+                # In memoria (stesso worker)
+                job = _processing_jobs.get(practice_id, {})
+                if 'activity' in job:
+                    job['activity'].append(act)
+
             try:
                 for i, (fn, mt, data) in enumerate(to_process):
                     short_fn = fn[:40] + ('...' if len(fn) > 40 else '')
-                    job['current_file'] = fn
                     _log(f"📄 Invio file {i+1}/{len(to_process)}: {short_fn}")
 
+                    # Aggiorna progresso nel DB
+                    _update_proc_db(bg_db, practice_id, {
+                        'current_file': fn, 'progress': i,
+                        'activity': _processing_jobs.get(practice_id, {}).get('activity', []),
+                    })
+                    bg_db.commit()
+
                     if stop_event.is_set():
-                        job['status'] = 'stopped'
                         _log("⏹ Elaborazione interrotta dall'utente")
+                        _update_proc_db(bg_db, practice_id, {'status': 'stopped'})
+                        bg_db.commit()
                         logger.info(f"BG process stopped by user at file {i+1}/{len(to_process)}")
                         break
 
@@ -329,7 +368,7 @@ def _start_background_processing(agent_id, practice_id, pr=None):
                                 _log(f"✅ Identificato: {_did}")
                                 logger.info(f"BG file {fn}: AO documentId='{_did}' hash={_fh[:12]}")
 
-                            # Leggi dal DB fresco
+                            # Salva file + aggiorna progresso nel DB
                             bg_pr = bg_db.query(PracticeResult).filter_by(practice_id=practice_id).first()
                             if bg_pr:
                                 bg_db.refresh(bg_pr)
@@ -346,49 +385,53 @@ def _start_background_processing(agent_id, practice_id, pr=None):
                             else:
                                 logger.error(f"BG process: PracticeResult not found for {practice_id}")
 
-                            job['results'].append({'file': fn, 'ok': True})
                             success = True
                             break
 
                         except Exception as e:
                             last_error = str(e)
-                            short_err = str(e)[:80]
-                            _log(f"❌ Errore: {short_err}")
+                            _log(f"❌ Errore: {str(e)[:80]}")
                             logger.warning(f"BG file {fn}: attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
 
                     if not success and not stop_event.is_set():
-                        job['results'].append({'file': fn, 'ok': False, 'error': last_error})
                         logger.error(f"BG file {fn}: all {MAX_RETRIES} attempts failed: {last_error}")
-
-                        # Salva errore nel DB per consultazione da UI
+                        # Salva errore nel DB
                         try:
-                            bg_pr = bg_db.query(PracticeResult).filter_by(practice_id=practice_id).first()
-                            if bg_pr:
-                                bg_db.refresh(bg_pr)
-                                rd = dict(bg_pr.result_data or {})
+                            bg_pr, rd = _update_proc_db(bg_db, practice_id, {})
+                            if rd:
                                 if '_ao_errors' not in rd:
                                     rd['_ao_errors'] = []
-                                rd['_ao_errors'].append({
-                                    'file': fn,
-                                    'error': last_error,
-                                    'attempts': MAX_RETRIES,
-                                    'at': datetime.utcnow().isoformat(),
-                                })
+                                rd['_ao_errors'].append({'file': fn, 'error': last_error, 'attempts': MAX_RETRIES, 'at': datetime.utcnow().isoformat()})
                                 bg_pr.result_data = rd
                                 flag_modified(bg_pr, 'result_data')
                                 bg_db.commit()
                         except Exception:
-                            pass  # non bloccare il flusso per un errore di logging
+                            pass
 
-                    job['progress'] = i + 1
+                # Stato finale nel DB
+                final_status = 'stopped' if stop_event.is_set() else 'completed'
+                _update_proc_db(bg_db, practice_id, {
+                    'status': final_status, 'progress': len(to_process),
+                    'activity': _processing_jobs.get(practice_id, {}).get('activity', []),
+                })
+                bg_db.commit()
+                logger.info(f"BG process {final_status} for {practice_id}")
 
-                if job['status'] != 'stopped':
-                    job['status'] = 'completed'
-                    logger.info(f"BG process completed for {practice_id}")
+                # Aggiorna anche in memoria
+                job = _processing_jobs.get(practice_id, {})
+                job['status'] = final_status
+                job['progress'] = len(to_process)
+
             except Exception as e:
+                logger.error(f"BG process-all error: {e}")
+                try:
+                    _update_proc_db(bg_db, practice_id, {'status': 'error', 'error': str(e)})
+                    bg_db.commit()
+                except Exception:
+                    pass
+                job = _processing_jobs.get(practice_id, {})
                 job['status'] = 'error'
                 job['error'] = str(e)
-                logger.error(f"BG process-all error: {e}")
             finally:
                 _stop_flags.pop(practice_id, None)
 
@@ -414,11 +457,20 @@ def ao_practice_process_all(agent_id, practice_id):
 
 @pratiche_bp.route('/practice/<practice_id>/process-status', methods=['GET'])
 def ao_practice_process_status(practice_id):
-    """Polling stato elaborazione in background."""
+    """Polling stato elaborazione — legge da memoria (stesso worker) o DB (altro worker)."""
+    # Prima prova in memoria (stesso worker, più veloce)
     job = _processing_jobs.get(practice_id)
-    if not job:
-        return jsonify({"status": "none"})
-    return jsonify(job)
+    if job:
+        return jsonify(job)
+
+    # Fallback: leggi dal DB (altro worker in prod)
+    pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+    if pr and pr.result_data and isinstance(pr.result_data, dict):
+        proc = pr.result_data.get('_processing')
+        if proc and proc.get('status') in ('running', 'completed', 'error', 'stopped'):
+            return jsonify(proc)
+
+    return jsonify({"status": "none"})
 
 
 @pratiche_bp.route('/practice/<practice_id>/process-stop', methods=['POST'])
