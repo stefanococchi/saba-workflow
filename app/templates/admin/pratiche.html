@@ -3363,6 +3363,10 @@ function _renderStepSummaries(wf) {
   // Rimuovi eventuali banner precedenti
   document.querySelectorAll('.step-summary-banner').forEach(el => el.remove());
 
+  // Debug: log per capire cosa arriva dal server
+  const allSteps = (wf.steps || []);
+  console.log('_renderStepSummaries:', allSteps.map(s => ({order: s.order, status: s.state?.status, display_data: s.display_data, has_summary: s.display_data?.summary_fields?.length})));
+
   if (completedSteps.length === 0) return;
 
   const dotsEl = document.getElementById('wfStepperDots');
@@ -3380,13 +3384,12 @@ function _renderStepSummaries(wf) {
     }
   }
 
-  // Banner visibile sotto lo stepper per step auto-eseguiti
-  const autoSteps = completedSteps.filter(s => s.display_data?.auto_execute);
-  if (autoSteps.length > 0) {
+  // Banner visibile sotto lo stepper per step completati con risultati
+  if (completedSteps.length > 0) {
     const stepperBar = document.getElementById('workflowStepperBar');
     if (stepperBar) {
       let bannerHtml = '';
-      for (const s of autoSteps) {
+      for (const s of completedSteps) {
         const fields = s.display_data.summary_fields || [];
         const hasErrors = fields.some(f => f.status === 'error');
         const borderColor = hasErrors ? 'var(--md-error, #B3261E)' : 'var(--md-success, #386A20)';
