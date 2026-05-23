@@ -766,18 +766,20 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAgents();
 
   // Fallback: ogni 5s controlla se lo spinner è bloccato (processing finito ma UI non aggiornata)
+  let _fallbackTriggered = {};
   setInterval(async () => {
     const spinner = document.getElementById('bgProcessMsg');
-    if (!spinner || !spinner.offsetParent) return; // spinner non visibile
+    if (!spinner || !spinner.offsetParent) {
+      _fallbackTriggered = {}; // reset quando spinner sparisce
+      return;
+    }
     const pid = selectedPracticeId || window._practiceId;
-    if (!pid) return;
-    // Se c'è un polling attivo, lascia fare a quello
-    if (_activePolls[pid]) return;
+    if (!pid || _activePolls[pid] || _fallbackTriggered[pid]) return;
     try {
       const r = await fetch(`/api/ao/practice/${pid}/process-status`);
       const job = await r.json();
       if (job.status !== 'running') {
-        console.log('FALLBACK: spinner bloccato, ricarico pratica', pid);
+        _fallbackTriggered[pid] = true; // scatta una sola volta per pratica
         await selectPractice(pid);
       }
     } catch (e) { /* ignore */ }
@@ -1262,14 +1264,11 @@ function pollProcessingStatus(practiceId, agentId) {
       } else if (job.status === 'completed' || job.status === 'error' || job.status === 'stopped') {
         delete _activePolls[practiceId];
         delete _lastPollProgress[practiceId];
-        console.log('POLL COMPLETED for', practiceId, 'status:', job.status);
-
         // Ricarica la pratica come se l'utente cliccasse sulla lista
         try {
           await selectPractice(practiceId);
-          console.log('selectPractice OK for', practiceId);
         } catch (selErr) {
-          console.error('selectPractice FAILED:', selErr);
+          console.error('Poll completion selectPractice failed:', selErr);
         }
         if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
       }
@@ -3376,10 +3375,6 @@ function _renderStepSummaries(wf) {
 
   // Rimuovi eventuali banner precedenti
   document.querySelectorAll('.step-summary-banner').forEach(el => el.remove());
-
-  // Debug: log per capire cosa arriva dal server
-  const allSteps = (wf.steps || []);
-  console.log('_renderStepSummaries:', allSteps.map(s => ({order: s.order, status: s.state?.status, display_data: s.display_data, has_summary: s.display_data?.summary_fields?.length})));
 
   if (completedSteps.length === 0) return;
 
