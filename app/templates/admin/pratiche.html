@@ -418,13 +418,13 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
       <div class="card" style="height:100%">
         <div class="card-header d-flex justify-content-between align-items-center" style="font-size:0.85rem;font-weight:600">
           <span><i class="bi bi-folder2-open"></i> Pratiche</span>
-          <button class="btn btn-sm btn-primary" onclick="startNewPractice()" style="border-radius:6px;font-size:0.75rem" id="btnNewPractice" disabled>
+          <button class="btn btn-sm btn-primary" onclick="startNewPractice()" style="border-radius:6px;font-size:0.75rem" id="btnNewPractice">
             <i class="bi bi-plus-lg"></i> Nuova
           </button>
         </div>
         <div id="elaboraPracticesList" style="overflow-y:auto">
           <div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.82rem">
-            <i class="bi bi-arrow-left" style="opacity:0.4"></i> Seleziona un agente
+            <div class="prat-spinner" style="width:18px;height:18px;border-width:2px"></div>
           </div>
         </div>
       </div>
@@ -443,44 +443,42 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
       <div id="dropZoneContainer" style="display:none;padding:20px">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h6 class="mb-0" style="font-weight:600"><i class="bi bi-plus-circle" style="opacity:0.5"></i> Nuova pratica</h6>
-          <div class="d-flex gap-2 align-items-center">
-            <input type="text" id="practiceIdInput" class="form-control form-control-sm" style="border-radius:8px;width:200px" placeholder="ID (vuoto = auto)">
-          </div>
-        </div>
-        <div class="drop-zone" id="dropZone">
-          <i class="bi bi-cloud-arrow-up"></i>
-          <div style="font-size:0.95rem;font-weight:500">Trascina qui i documenti</div>
-          <div style="font-size:0.8rem;margin-top:4px">PDF, PNG, JPG</div>
-          <input type="file" id="fileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none">
+          <input type="hidden" id="practiceIdInput" value="">
         </div>
 
-        <div id="stagedFilesCard" class="card mt-3" style="display:none">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-files"></i> Documenti (<span id="stagedCount">0</span>)</span>
-            <div class="d-flex gap-2">
-              <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('fileInput').click()" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-plus-lg"></i> Aggiungi</button>
-              <button class="btn btn-sm btn-outline-danger" onclick="clearStagedFiles()" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-trash3"></i> Svuota</button>
-            </div>
+        <!-- Step 1: Scegli workflow -->
+        <div class="card mb-3" id="newPracticeWorkflowCard">
+          <div class="card-body">
+            <label class="form-label" style="font-weight:600"><i class="bi bi-diagram-3"></i> Scegli il workflow</label>
+            <select id="newPracticeWorkflow" class="form-select" style="border-radius:8px" onchange="_onWorkflowSelected()">
+              <option value="">Seleziona un workflow...</option>
+            </select>
           </div>
-          <div id="stagedFilesList"></div>
-          <!-- Workflow selector prima di elaborare -->
-          <div class="card-body border-top" id="newPracticeWorkflowRow">
-            <div class="d-flex align-items-center gap-2">
-              <label style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:var(--md-on-surface-variant)">
-                <i class="bi bi-diagram-3"></i> Workflow:
-              </label>
-              <select id="newPracticeWorkflow" class="form-select form-select-sm" style="flex:1;border-radius:8px;font-size:0.78rem">
-                <option value="">Nessuno (elaborazione libera)</option>
-              </select>
-            </div>
+        </div>
+
+        <!-- Step 2: Carica documenti (visibile dopo selezione workflow) -->
+        <div id="newPracticeUploadArea" style="display:none">
+          <div class="drop-zone" id="dropZone">
+            <i class="bi bi-cloud-arrow-up"></i>
+            <div style="font-size:0.95rem;font-weight:500">Trascina qui i documenti</div>
+            <div style="font-size:0.8rem;margin-top:4px">PDF, PNG, JPG</div>
+            <input type="file" id="fileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none">
           </div>
-          <div class="card-body border-top d-flex justify-content-end gap-2">
-            <button class="btn btn-outline-primary btn-sm" id="btnSaveFiles" onclick="saveFilesToDb()" style="border-radius:8px">
-              <i class="bi bi-cloud-upload"></i> Salva file
-            </button>
-            <button class="btn btn-primary btn-sm" onclick="processAllFilesBackground()" style="border-radius:8px">
-              <i class="bi bi-play-fill"></i> Elabora <span id="stagedCountBtn">0</span> documenti
-            </button>
+
+          <div id="stagedFilesCard" class="card mt-3" style="display:none">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span><i class="bi bi-files"></i> Documenti (<span id="stagedCount">0</span>)</span>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('fileInput').click()" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-plus-lg"></i> Aggiungi</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="clearStagedFiles()" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-trash3"></i> Svuota</button>
+              </div>
+            </div>
+            <div id="stagedFilesList"></div>
+            <div class="card-body border-top d-flex justify-content-end gap-2">
+              <button class="btn btn-primary btn-sm" onclick="processAllFilesBackground()" style="border-radius:8px">
+                <i class="bi bi-play-fill"></i> Elabora <span id="stagedCountBtn">0</span> documenti
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -817,6 +815,9 @@ async function loadAgents() {
     // Populate agent sidebars
     renderCatalogAgents();
     renderElaboraAgents();
+
+    // Carica tutte le pratiche all'avvio
+    loadElaboraPractices();
   } catch (e) {
     console.error('Errore caricamento agenti:', e);
   }
@@ -895,7 +896,10 @@ async function loadElaboraPractices(agentId) {
   try {
     const r = await fetch('/api/ao/results');
     const data = await r.json();
-    const results = (data.results || []).filter(pr => pr.agent_id === agentId);
+    // Se agentId specificato, filtra; altrimenti mostra tutte
+    const results = agentId
+      ? (data.results || []).filter(pr => pr.agent_id === agentId)
+      : (data.results || []);
 
     if (results.length === 0) {
       list.innerHTML = '<div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.8rem">Nessuna pratica</div>';
@@ -952,12 +956,12 @@ async function selectPractice(practiceId) {
 }
 
 function startNewPractice() {
-  if (!selectedElaboraAgentId) return alert('Seleziona un agente');
   selectedPracticeId = null;
-  document.getElementById('practiceIdInput').value = '';
-  document.getElementById('elaboraEmpty').style.display = 'none';
-  document.getElementById('practiceResults').style.display = 'none';
-  document.getElementById('dropZoneContainer').style.display = '';
+  const _pidInput = document.getElementById('practiceIdInput');
+  if (_pidInput) _pidInput.value = '';
+  const _ee = document.getElementById('elaboraEmpty'); if (_ee) _ee.style.display = 'none';
+  const _pr = document.getElementById('practiceResults'); if (_pr) _pr.style.display = 'none';
+  const _dz = document.getElementById('dropZoneContainer'); if (_dz) _dz.style.display = '';
   stagedFiles = [];
   renderStagedFiles();
 
@@ -968,18 +972,17 @@ function startNewPractice() {
   document.querySelectorAll('.practice-row').forEach(r => r.classList.remove('active'));
 }
 
+let _availableWorkflows = []; // cache workflow list
+
 async function loadNewPracticeWorkflows() {
   const sel = document.getElementById('newPracticeWorkflow');
-  sel.innerHTML = '<option value="">Nessuno (elaborazione libera)</option>';
+  sel.innerHTML = '<option value="">Seleziona un workflow...</option>';
   try {
     const r = await fetch('/api/workflows');
     const data = await r.json();
-    const workflows = data.workflows || [];
-    workflows.forEach(wf => {
-      // Evidenzia workflow associati a questo agente
-      const isMatch = wf.ao_agent_id === selectedElaboraAgentId;
-      const label = isMatch ? `${wf.name} (consigliato)` : wf.name;
-      sel.innerHTML += `<option value="${wf.id}" ${isMatch ? 'selected' : ''}>${label} — ${wf.steps_count || '?'} step</option>`;
+    _availableWorkflows = data.workflows || [];
+    _availableWorkflows.forEach(wf => {
+      sel.innerHTML += `<option value="${wf.id}">${wf.name} — ${wf.steps_count || '?'} step</option>`;
     });
   } catch (e) {
     console.error('Load workflows:', e);
@@ -995,7 +998,25 @@ function showPratPage(id, tab) {
 }
 
 // ── Practice operations ────────────────────────────────────────────
-function getAgentId() { return selectedElaboraAgentId || document.getElementById('agentSelect').value; }
+function _onWorkflowSelected() {
+  const wfId = document.getElementById('newPracticeWorkflow')?.value;
+  const uploadArea = document.getElementById('newPracticeUploadArea');
+  if (uploadArea) uploadArea.style.display = wfId ? '' : 'none';
+}
+
+function getAgentId() {
+  // Prima: agente dallo step corrente del workflow
+  const currentStep = practiceWorkflow?.steps?.find(s => s.order === practiceWorkflow?.current_step_order);
+  if (currentStep?.config?.ao_agent_id) return currentStep.config.ao_agent_id;
+  // Poi: agente del primo step del workflow selezionato
+  const wfId = document.getElementById('newPracticeWorkflow')?.value;
+  if (wfId) {
+    const wf = _availableWorkflows.find(w => String(w.id) === String(wfId));
+    if (wf?.ao_agent_id) return wf.ao_agent_id;
+  }
+  // Fallback: sidebar o select
+  return selectedElaboraAgentId || document.getElementById('agentSelect')?.value || '';
+}
 function getPracticeId() {
   let id = document.getElementById('practiceIdInput').value.trim();
   if (!id) { id = 'PRAT-' + Date.now(); document.getElementById('practiceIdInput').value = id; }
@@ -1131,9 +1152,11 @@ async function saveFilesToDb() {
 }
 
 async function processAllFilesBackground() {
+  const selectedWfId = document.getElementById('newPracticeWorkflow')?.value;
+  if (!selectedWfId) return alert('Seleziona un workflow');
   const agentId = getAgentId();
   const practiceId = getPracticeId();
-  if (!agentId) return alert('Seleziona un agente');
+  if (!agentId) return alert('Nessun agente configurato nel workflow. Configura un agente negli step.');
   if (stagedFiles.length === 0) return alert('Nessun file da elaborare');
 
   // Traccia la pratica come selezionata
