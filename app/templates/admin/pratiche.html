@@ -3311,36 +3311,71 @@ function updateValidateBarForWorkflow(wf) {
   const infoVal = document.getElementById('infoValidation');
 
   if (!wf || !wf.current_step_order) {
-    // Workflow completato
+    // Workflow completato — mostra riepilogo step completati
     document.getElementById('validateInfo').innerHTML = '<i class="bi bi-check-circle-fill" style="color:var(--md-success)"></i> Workflow completato';
     document.querySelector('.validate-bar .vb-right').innerHTML = '';
     infoVal.innerHTML = '<span class="badge-ok"><i class="bi bi-check-circle-fill"></i> Completato</span>';
+    _renderStepSummaries(wf);
     return;
   }
 
   const currentStep = wf.steps.find(s => s.order === wf.current_step_order);
   if (!currentStep) return;
 
-  // Aggiorna top bar (infoValidation) con lo step corrente
+  // Aggiorna top bar
   infoVal.innerHTML = `<span class="badge-pending"><i class="bi bi-arrow-right-short"></i> Step ${currentStep.order}/${wf.total_steps}: ${currentStep.name}</span>`;
 
-  const isDocCheck = currentStep.type === 'DOCUMENT_CHECK';
   const stepLabel = `Step ${currentStep.order}/${wf.total_steps}: ${currentStep.name}`;
   document.getElementById('validateInfo').innerHTML = `<strong>${stepLabel}</strong> <span style="opacity:0.6">(${currentStep.type})</span>`;
 
+  // Bottoni dal display_data dell'handler (server-driven)
+  const dd = currentStep.display_data || {};
+  const buttons = dd.buttons || [];
   let buttonsHtml = '';
-  if (isDocCheck) {
-    buttonsHtml = `
-      <button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem" onclick="rejectPractice()"><i class="bi bi-x-lg"></i> Rifiuta</button>
-      <button class="btn-validate" onclick="validateAndAdvance()"><i class="bi bi-check-lg"></i> Valida e avanza</button>
-    `;
+
+  if (buttons.length > 0) {
+    for (const btn of buttons) {
+      const isPrimary = btn.variant === 'primary';
+      const cls = isPrimary ? 'btn-validate' : `btn btn-sm btn-${btn.variant}`;
+      const style = isPrimary ? '' : 'style="border-radius:10px;font-size:0.8rem"';
+      const action = btn.action === 'skip' ? 'skipWorkflowStep()'
+        : btn.action === 'validate' ? 'validateAndAdvance()'
+        : btn.action === 'reject' ? 'rejectPractice()'
+        : 'executeAndAdvance()';
+      buttonsHtml += `<button class="${cls}" ${style} onclick="${action}"><i class="bi ${btn.icon}"></i> ${btn.label}</button> `;
+    }
   } else {
+    // Fallback se nessun display_data
     buttonsHtml = `
       <button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem" onclick="skipWorkflowStep()"><i class="bi bi-skip-forward"></i> Salta</button>
       <button class="btn-validate" onclick="executeAndAdvance()"><i class="bi bi-play-fill"></i> Esegui e avanza</button>
     `;
   }
   document.querySelector('.validate-bar .vb-right').innerHTML = buttonsHtml;
+
+  // Mostra riepilogo step completati
+  _renderStepSummaries(wf);
+}
+
+function _renderStepSummaries(wf) {
+  // Mostra summary_fields degli step completati nella stepper area
+  const completedSteps = (wf.steps || []).filter(s => s.state?.status === 'completed' && s.display_data?.summary_fields?.length > 0);
+  if (completedSteps.length === 0) return;
+
+  const dotsEl = document.getElementById('wfStepperDots');
+  if (!dotsEl) return;
+
+  // Aggiungi tooltip con summary ai dot completati
+  for (const s of completedSteps) {
+    const dot = dotsEl.querySelector(`.wf-step-dot[title*="Step ${s.order}:"]`);
+    if (dot) {
+      const summary = s.display_data.summary_fields.map(f => {
+        const icon = f.status === 'ok' ? '✅' : f.status === 'error' ? '❌' : '⏳';
+        return `${icon} ${f.label}: ${f.value}`;
+      }).join('\n');
+      dot.title = `Step ${s.order}: ${s.name}\n${summary}`;
+    }
+  }
 }
 
 async function validateAndAdvance() {

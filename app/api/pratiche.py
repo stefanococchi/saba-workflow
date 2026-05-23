@@ -989,19 +989,29 @@ def get_practice_workflow_status(practice_id):
             if ss.get('status') == 'completed' and ss.get('extracted_data'):
                 accumulated_data.update(ss['extracted_data'])
 
+        # Genera display_data per ogni step tramite il suo handler
+        from app.step_handlers import get_handler
+        steps_data = []
+        for s in steps:
+            ss = step_states.get(str(s.order), {'status': 'pending'})
+            handler = get_handler(s.type.name)
+            display_data = handler.get_display_data(s.skip_conditions or {}, ss) if handler else {}
+            steps_data.append({
+                'order': s.order,
+                'name': s.name,
+                'type': s.type.name,
+                'config': s.skip_conditions or {},
+                'state': ss,
+                'display_data': display_data,
+            })
+
         return jsonify({
             "has_workflow": True,
             "workflow_id": pr.workflow_id,
             "workflow_name": workflow.name,
             "current_step_order": pr.current_step_order,
             "total_steps": len(steps),
-            "steps": [{
-                'order': s.order,
-                'name': s.name,
-                'type': s.type.name,
-                'config': s.skip_conditions or {},
-                'state': step_states.get(str(s.order), {'status': 'pending'}),
-            } for s in steps],
+            "steps": steps_data,
             "accumulated_data": accumulated_data,
         })
     except Exception as e:
@@ -1072,9 +1082,11 @@ def complete_practice_step(practice_id):
             'validated_files': validated_files,
         }
 
-        # Esegui azioni automatiche dello step corrente (email, whatsapp, ecc.)
+        # Esegui azioni automatiche dello step corrente (via handler registry)
+        from app.step_handlers import get_handler
         exec_result = {}
-        if action != 'skip' and step_type in ('EMAIL', 'WHATSAPP', 'WEBHOOK', 'SISTER_VISURA'):
+        current_handler = get_handler(step_type)
+        if action != 'skip' and current_handler and current_handler.is_auto_execute:
             exec_result = _execute_backoffice_step(current_step, pr, body)
             step_states[str(current_order)]['exec_result'] = exec_result
 
@@ -1090,9 +1102,9 @@ def complete_practice_step(practice_id):
             pr.current_step_order = next_step.order
             step_states[str(next_step.order)] = {'status': 'in_progress'}
 
-            # Auto-esegui il prossimo step se è di tipo automatico
-            next_type = next_step.type.name
-            if next_type in ('EMAIL', 'WHATSAPP', 'WEBHOOK', 'SISTER_VISURA'):
+            # Auto-esegui il prossimo step se il suo handler lo prevede
+            next_handler = get_handler(next_step.type.name)
+            if next_handler and next_handler.is_auto_execute:
                 try:
                     next_exec_result = _execute_backoffice_step(next_step, pr, body)
                     step_states[str(next_step.order)]['status'] = 'completed'
@@ -1133,48 +1145,18 @@ def complete_practice_step(practice_id):
 
 
 def _execute_backoffice_step(step, practice_result, body):
-    """Esegue uno step automatico (email/whatsapp/webhook) nel contesto di una pratica."""
-    step_type = step.type.name
+    """Esegue uno step automatico tramite il suo handler registrato."""
+    from app.step_handlers import get_handler
     config = step.skip_conditions or {}
-    result = {'type': step_type}
-
+    handler = get_handler(step.type.name)
+    if not handler:
+        logger.warning(f"No handler for step type {step.type.name}")
+        return {'type': step.type.name, 'error': f'Nessun handler per {step.type.name}'}
     try:
-        if step_type == 'EMAIL':
-            from app.services.email_service import EmailService
-            to_email = config.get('custom_to', '') or body.get('to_email', '')
-            subject = config.get('subject', step.subject or '')
-            body_html = step.body_template or ''
-            if to_email and subject:
-                ok = EmailService.send_email(to_email=to_email, subject=subject, body_html=body_html)
-                result['sent'] = ok
-                result['to'] = to_email
-            else:
-                result['error'] = 'Email o subject mancante'
-
-        elif step_type == 'WEBHOOK':
-            import requests as req
-            url = config.get('webhook_url', '')
-            if url:
-                r = req.post(url, json={
-                    'practice_id': practice_result.practice_id,
-                    'step': step.name,
-                    'result_data': practice_result.result_data,
-                }, timeout=30)
-                result['status_code'] = r.status_code
-            else:
-                result['error'] = 'URL webhook mancante'
-
-        elif step_type == 'WHATSAPP':
-            result['note'] = 'WhatsApp non ancora implementato per workflow pratica'
-
-        elif step_type == 'SISTER_VISURA':
-            result = _execute_sister_visura(step, practice_result, config)
-
+        return handler.execute(step, practice_result, config, db)
     except Exception as e:
-        result['error'] = str(e)
-        logger.error(f"Execute backoffice step error: {e}")
-
-    return result
+        logger.error(f"Execute step {step.type.name} error: {e}")
+        return {'type': step.type.name, 'error': str(e)}
 
 
 @pratiche_bp.route('/test/sister-visura', methods=['POST'])
@@ -1214,133 +1196,4 @@ def test_sister_visura():
         return jsonify({"error": str(e)}), 500
 
 
-def _execute_sister_visura(step, practice_result, config):
-    """Chiama sister-agent con dati catastali dal contesto accumulato della pratica."""
-    result = {'type': 'SISTER_VISURA'}
-
-    # Trova agent_id per sister-agent
-    sister_agent_id = config.get('sister_agent_id', '')
-    if not sister_agent_id:
-        agents_list = ao_service.list_agents()
-        sa = next((a for a in agents_list if 'sister' in (a.get('name', '') or '').lower()), None)
-        if sa:
-            sister_agent_id = sa['id']
-        else:
-            result['error'] = 'Agente sister-agent non trovato'
-            return result
-
-    # Raccogli dati catastali dal contesto accumulato (step precedenti)
-    accumulated = {}
-    step_states = practice_result.step_states or {}
-    for order_key, state in step_states.items():
-        if state.get('status') == 'completed' and state.get('extracted_data'):
-            for doc_type, fields in state['extracted_data'].items():
-                if isinstance(fields, dict):
-                    accumulated.update(fields)
-
-    logger.info(f"Sister visura accumulated data keys: {list(accumulated.keys())}")
-    if accumulated:
-        logger.info(f"Sister visura accumulated sample: { {k: v for k, v in list(accumulated.items())[:10]} }")
-
-    # Mapping: campo estratto → campo sister input
-    field_mapping = config.get('field_mapping', {})
-    sister_input = {
-        'operation': config.get('operation', 'visuraStorica'),
-        'tipoCatasto': config.get('tipo_catasto', 'F'),
-        'tipoVisura': config.get('tipo_visura', 'sintetica'),
-    }
-
-    # Applica mapping: per ogni campo sister, cerca il valore nel contesto
-    mapping_fields = {
-        'provincia': 'provincia',
-        'comune': 'comune',
-        'foglio': 'foglio',
-        'particella': 'particella',
-        'subalterno': 'subalterno',
-    }
-    # Merge mapping custom dalla config
-    mapping_fields.update(field_mapping)
-
-    for sister_key, source_key in mapping_fields.items():
-        # Cerca nel contesto accumulato (case-insensitive)
-        val = None
-        for k, v in accumulated.items():
-            if k.lower() == source_key.lower() or k.lower().replace(' ', '_') == source_key.lower():
-                val = v
-                break
-        # Override manuale dal body della request
-        if not val:
-            val = config.get(sister_key, '')
-        if val:
-            sister_input[sister_key] = str(val)
-
-    # Credenziali auth
-    if config.get('auth_username'):
-        sister_input['authProvider'] = config.get('auth_provider', 'sister')
-        sister_input['authUsername'] = config['auth_username']
-        sister_input['authPassword'] = config.get('auth_password', '')
-
-    result['input'] = sister_input
-    logger.info(f"Sister visura input: {sister_input}")
-
-    # Chiama sister-agent
-    try:
-        run_result = ao_service.run_agent(sister_agent_id, sister_input)
-        task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
-        output = task_result.get('output', {})
-
-        # Cerca file PDF nell'output
-        file_data = None
-        file_name = f"visura_{sister_input.get('comune', 'visura')}_{sister_input.get('foglio', '')}_{sister_input.get('particella', '')}.pdf"
-
-        # L'output potrebbe contenere il file in diversi formati
-        if isinstance(output, dict):
-            # Cerca binary/file data
-            for key in ('file', 'pdf', 'data', 'document', 'binary'):
-                if key in output and output[key]:
-                    file_data = output[key]
-                    break
-            if output.get('fileName'):
-                file_name = output['fileName']
-
-        # Se abbiamo il file, salvalo nella pratica
-        if file_data:
-            import base64
-            if isinstance(file_data, str):
-                # Probabilmente base64
-                content = base64.b64decode(file_data)
-            elif isinstance(file_data, dict) and file_data.get('data'):
-                content = base64.b64decode(file_data['data'])
-            else:
-                content = file_data
-
-            # Salva come PracticeFile
-            existing = db.query(PracticeFile).filter_by(
-                practice_id=practice_result.practice_id, file_name=file_name
-            ).first()
-            if existing:
-                existing.data = content
-                existing.mime_type = 'application/pdf'
-            else:
-                db.add(PracticeFile(
-                    practice_id=practice_result.practice_id,
-                    file_name=file_name,
-                    mime_type='application/pdf',
-                    data=content,
-                ))
-            db.flush()
-
-            result['file_saved'] = file_name
-            result['file_size'] = len(content)
-            logger.info(f"Sister visura: saved {file_name} ({len(content)} bytes)")
-        else:
-            result['raw_output'] = str(output)[:500]
-            result['note'] = 'Nessun file trovato nella risposta AO'
-
-        result['status'] = task_result.get('status', 'unknown')
-
-    except Exception as e:
-        result['error'] = f'Errore chiamata sister-agent: {str(e)}'
-        logger.error(f"Sister visura error: {e}")
-
-    return result
+## _execute_sister_visura rimossa — logica spostata in app/step_handlers/sister_visura.py

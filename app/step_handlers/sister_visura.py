@@ -1,0 +1,160 @@
+"""Handler per step SISTER_VISURA — visure catastali da portale SISTER via AO."""
+import base64
+import logging
+from app.step_handlers import register
+from app.step_handlers.base import StepHandler
+
+logger = logging.getLogger(__name__)
+
+
+@register('SISTER_VISURA')
+class SisterVisuraHandler(StepHandler):
+
+    def execute(self, step, practice_result, config, db_session):
+        from app.services import ao_service
+        from app.models import PracticeFile
+
+        result = {'type': 'SISTER_VISURA'}
+
+        # ── 1. Trova sister-agent ──
+        sister_agent_id = config.get('sister_agent_id', '')
+        if not sister_agent_id:
+            agents_list = ao_service.list_agents()
+            sa = next((a for a in agents_list if 'sister' in (a.get('name', '') or '').lower()), None)
+            if sa:
+                sister_agent_id = sa['id']
+            else:
+                result['error'] = 'Agente sister-agent non trovato'
+                return result
+
+        # ── 2. Raccogli dati catastali dagli step precedenti ──
+        accumulated = self.get_accumulated_data(practice_result)
+
+        logger.info(f"Sister visura accumulated data keys: {list(accumulated.keys())}")
+        if accumulated:
+            logger.info(f"Sister visura accumulated sample: { {k: v for k, v in list(accumulated.items())[:10]} }")
+
+        # ── 3. Costruisci input per sister-agent ──
+        sister_input = {
+            'operation': config.get('operation', 'visuraStorica'),
+            'tipoCatasto': config.get('tipo_catasto', 'F'),
+            'tipoVisura': config.get('tipo_visura', 'sintetica'),
+        }
+
+        # Mapping: campo estratto → campo sister input
+        mapping_fields = {
+            'provincia': 'provincia',
+            'comune': 'comune',
+            'foglio': 'foglio',
+            'particella': 'particella',
+            'subalterno': 'subalterno',
+        }
+        mapping_fields.update(config.get('field_mapping', {}))
+
+        for sister_key, source_key in mapping_fields.items():
+            val = None
+            for k, v in accumulated.items():
+                if k.lower() == source_key.lower() or k.lower().replace(' ', '_') == source_key.lower():
+                    val = v
+                    break
+            if not val:
+                val = config.get(sister_key, '')
+            if val:
+                sister_input[sister_key] = str(val)
+
+        # Credenziali auth
+        if config.get('auth_username'):
+            sister_input['authProvider'] = config.get('auth_provider', 'sister')
+            sister_input['authUsername'] = config['auth_username']
+            sister_input['authPassword'] = config.get('auth_password', '')
+
+        result['input'] = sister_input
+        logger.info(f"Sister visura input: {sister_input}")
+
+        # ── 4. Chiama sister-agent ──
+        try:
+            run_result = ao_service.run_agent(sister_agent_id, sister_input)
+            task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
+            output = task_result.get('output', {})
+
+            # ── 5. Cerca e salva file PDF ──
+            file_data = None
+            file_name = f"visura_{sister_input.get('comune', 'visura')}_{sister_input.get('foglio', '')}_{sister_input.get('particella', '')}.pdf"
+
+            if isinstance(output, dict):
+                for key in ('file', 'pdf', 'data', 'document', 'binary'):
+                    if key in output and output[key]:
+                        file_data = output[key]
+                        break
+                if output.get('fileName'):
+                    file_name = output['fileName']
+
+            if file_data:
+                if isinstance(file_data, str):
+                    content = base64.b64decode(file_data)
+                elif isinstance(file_data, dict) and file_data.get('data'):
+                    content = base64.b64decode(file_data['data'])
+                else:
+                    content = file_data
+
+                existing = db_session.query(PracticeFile).filter_by(
+                    practice_id=practice_result.practice_id, file_name=file_name
+                ).first()
+                if existing:
+                    existing.data = content
+                    existing.mime_type = 'application/pdf'
+                else:
+                    db_session.add(PracticeFile(
+                        practice_id=practice_result.practice_id,
+                        file_name=file_name,
+                        mime_type='application/pdf',
+                        data=content,
+                    ))
+                db_session.flush()
+
+                result['file_saved'] = file_name
+                result['file_size'] = len(content)
+                logger.info(f"Sister visura: saved {file_name} ({len(content)} bytes)")
+            else:
+                result['raw_output'] = str(output)[:500]
+                result['note'] = 'Nessun file trovato nella risposta AO'
+
+            result['status'] = task_result.get('status', 'unknown')
+
+        except Exception as e:
+            result['error'] = f'Errore chiamata sister-agent: {str(e)}'
+            logger.error(f"Sister visura error: {e}")
+
+        return result
+
+    def get_display_data(self, step_config, step_state):
+        exec_result = step_state.get('exec_result', {})
+        fields = []
+
+        # Input usato
+        inp = exec_result.get('input', {})
+        if inp.get('provincia'):
+            fields.append({'label': 'Provincia', 'value': inp['provincia'], 'status': 'ok'})
+        if inp.get('comune'):
+            fields.append({'label': 'Comune', 'value': inp['comune'], 'status': 'ok'})
+        if inp.get('foglio'):
+            fields.append({'label': 'Foglio/Particella/Sub', 'value': f"{inp.get('foglio', '')}/{inp.get('particella', '')}/{inp.get('subalterno', '')}", 'status': 'ok'})
+
+        # Risultato
+        if exec_result.get('file_saved'):
+            size_kb = (exec_result.get('file_size', 0) / 1024)
+            fields.append({'label': 'File', 'value': f"{exec_result['file_saved']} ({size_kb:.0f} KB)", 'status': 'ok'})
+        if exec_result.get('error'):
+            fields.append({'label': 'Errore', 'value': exec_result['error'], 'status': 'error'})
+        if exec_result.get('status'):
+            is_ok = exec_result['status'] == 'COMPLETED'
+            fields.append({'label': 'Stato AO', 'value': exec_result['status'], 'status': 'ok' if is_ok else 'error'})
+
+        return {
+            'buttons': [
+                {'label': 'Salta', 'action': 'skip', 'icon': 'bi-skip-forward', 'variant': 'outline-secondary'},
+                {'label': 'Esegui e avanza', 'action': 'complete', 'icon': 'bi-play-fill', 'variant': 'primary'},
+            ],
+            'auto_execute': True,
+            'summary_fields': fields,
+        }
