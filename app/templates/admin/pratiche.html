@@ -578,6 +578,20 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
           <!-- RIGHT: Data panel with file tabs -->
           <div class="data-panel">
             <div class="file-tabs-bar" id="fileTabsBar"></div>
+            <!-- Drop zone per step con allow_upload -->
+            <div id="stepUploadZone" style="display:none;padding:12px 16px;border-bottom:1px solid var(--md-outline-variant);flex-shrink:0">
+              <div id="stepDropArea" style="border:2px dashed var(--md-outline-variant);border-radius:12px;padding:16px;text-align:center;cursor:pointer;transition:all 0.2s"
+                   onclick="document.getElementById('stepFileInput').click()"
+                   ondragover="event.preventDefault();this.style.borderColor='var(--md-primary)';this.style.background='rgba(139,105,20,0.06)'"
+                   ondragleave="this.style.borderColor='var(--md-outline-variant)';this.style.background=''"
+                   ondrop="event.preventDefault();this.style.borderColor='var(--md-outline-variant)';this.style.background='';_handleStepUpload(event.dataTransfer.files)">
+                <i class="bi bi-cloud-arrow-up" style="font-size:1.4rem;color:var(--md-primary)"></i>
+                <div style="font-size:0.82rem;margin-top:4px">Trascina qui i documenti aggiuntivi o <strong>clicca per caricare</strong></div>
+                <div style="font-size:0.72rem;color:var(--md-on-surface-variant)">PDF, PNG, JPG</div>
+              </div>
+              <input type="file" id="stepFileInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none"
+                     onchange="_handleStepUpload(this.files);this.value=''">
+            </div>
             <div class="data-scroll" id="dataScroll">
               <div class="text-center py-4" style="color:var(--md-on-surface-variant);font-size:0.82rem">
                 Nessun file nella pratica
@@ -1636,6 +1650,50 @@ function processAdditionalFiles(files) {
     .finally(() => hideProcessing());
 }
 
+async function _handleStepUpload(files) {
+  if (!files || files.length === 0) return;
+  const practiceId = window._practiceId || selectedPracticeId;
+  const agentId = getAgentId();
+  if (!practiceId || !agentId) return alert('Nessuna pratica o agente selezionato');
+
+  const dropArea = document.getElementById('stepDropArea');
+  const origHtml = dropArea?.innerHTML;
+  if (dropArea) dropArea.innerHTML = '<div class="prat-spinner" style="width:20px;height:20px;border-width:2px;display:inline-block;vertical-align:middle"></div> Caricamento e elaborazione...';
+
+  try {
+    // 1. Upload file nel DB
+    const fd = new FormData();
+    for (let i = 0; i < files.length; i++) fd.append('file_' + i, files[i]);
+    const upRes = await fetch(`/api/ao/practice-files/${practiceId}/upload`, { method: 'POST', body: fd });
+    const upData = await upRes.json();
+    if (upData.error) throw new Error(upData.error);
+
+    // 2. Salva blob per preview
+    for (const f of files) processedFileBlobs[f.name] = f;
+
+    // 3. Processa con AO (ogni file)
+    for (let i = 0; i < files.length; i++) {
+      const singleFd = new FormData();
+      singleFd.append('file_0', files[i]);
+      if (dropArea) dropArea.innerHTML = `<div class="prat-spinner" style="width:20px;height:20px;border-width:2px;display:inline-block;vertical-align:middle"></div> Elaborazione ${i+1}/${files.length}: ${files[i].name}`;
+
+      const procRes = await fetch(`/api/ao/practice/${agentId}/${practiceId}/process`, { method: 'POST', body: singleFd });
+      const procData = await procRes.json();
+      if (procData.error) throw new Error(procData.error);
+
+      // Salva risultato nel DB
+      await savePracticeToDb(practiceId, agentId, procData.output?.info || procData.output || procData);
+    }
+
+    // 4. Ricarica la pratica dal DB
+    if (dropArea) dropArea.innerHTML = origHtml;
+    await selectPractice(practiceId);
+  } catch (e) {
+    if (dropArea) dropArea.innerHTML = origHtml;
+    alert('Errore upload: ' + e.message);
+  }
+}
+
 async function reprocessFile(contentHash) {
   const agentId = getAgentId();
   const practiceId = getPracticeId();
@@ -1917,6 +1975,18 @@ async function showPracticeResult(result, practiceId) {
       <button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem" onclick="rejectPractice()"><i class="bi bi-x-lg"></i> Rifiuta</button>
       <button class="btn-validate" onclick="validatePractice()"><i class="bi bi-check-lg"></i> Valida pratica</button>
     `;
+  }
+
+  // Mostra drop zone se lo step corrente ha allow_upload
+  const _stepUploadZone = document.getElementById('stepUploadZone');
+  if (_stepUploadZone) {
+    const currentStep = practiceWorkflow?.steps?.find(s => s.order === practiceWorkflow?.current_step_order);
+    if (currentStep?.config?.allow_upload) {
+      _stepUploadZone.style.display = '';
+      _stepUploadZone.dataset.practiceId = practiceId;
+    } else {
+      _stepUploadZone.style.display = 'none';
+    }
   }
 
   // Check if there's ongoing background processing

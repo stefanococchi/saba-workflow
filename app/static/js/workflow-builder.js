@@ -1748,6 +1748,14 @@ function _renderStepEditFormInner(step, index, common) {
                     <input type="number" class="form-control" id="editDocCheckDelay"
                            value="${step.config.delay_hours || 0}" min="0">
                 </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="editDocCheckAllowUpload"
+                           ${step.config.allow_upload ? 'checked' : ''}>
+                    <label class="form-check-label" for="editDocCheckAllowUpload">
+                        <i class="bi bi-cloud-arrow-up"></i> Richiedi documenti aggiuntivi
+                    </label>
+                    <div class="form-text">Se attivo, l'operatore potrà caricare nuovi documenti (drag & drop) in questo step prima di validare.</div>
+                </div>
                 <hr>
                 <h6 class="text-muted"><i class="bi bi-signpost-split"></i> Branching</h6>
                 <div class="row mb-3">
@@ -2939,6 +2947,7 @@ function saveStepEdit() {
             step.config.if_validated_step = parseInt(document.getElementById('editDocCheckValidatedStep')?.value) || 0;
             step.config.if_rejected = document.getElementById('editDocCheckIfRejected')?.value || 'stop';
             step.config.if_rejected_step = parseInt(document.getElementById('editDocCheckRejectedStep')?.value) || 0;
+            step.config.allow_upload = document.getElementById('editDocCheckAllowUpload')?.checked || false;
             // Tipi documento selezionati
             step.config.doc_types = [];
             document.querySelectorAll('.doc-check-type-cb:checked').forEach(function(cb) {
@@ -3429,7 +3438,8 @@ function saveWorkflow() {
                     if_validated_step: step.config.if_validated_step || 0,
                     if_rejected: step.config.if_rejected || 'stop',
                     if_rejected_step: step.config.if_rejected_step || 0,
-                    doc_types: step.config.doc_types || []
+                    doc_types: step.config.doc_types || [],
+                    allow_upload: !!step.config.allow_upload
                 };
             }
 
