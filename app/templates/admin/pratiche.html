@@ -1201,9 +1201,10 @@ function pollProcessingStatus(practiceId, agentId) {
 
       if (job.status === 'running') {
         if (isVisible) {
-          // Aggiorna info bar con progresso
+          // Aggiorna info bar con progresso (file in corso, non solo completati)
+          const fileInProgress = job.progress + 1;
           document.getElementById('infoValidation').innerHTML =
-            `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${job.progress}/${job.total}</span>`;
+            `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${fileInProgress}/${job.total}</span>`;
 
           // Aggiorna activity log
           const logEl = document.getElementById('bgActivityLog');
@@ -1213,11 +1214,12 @@ function pollProcessingStatus(practiceId, agentId) {
             ).join('');
             logEl.scrollTop = logEl.scrollHeight;
           }
-          // Aggiorna messaggio file corrente
+          // Aggiorna messaggio file corrente (mostra file in corso, non solo completati)
           const msgEl = document.getElementById('bgProcessMsg');
           if (msgEl && job.current_file) {
             const shortName = job.current_file.length > 35 ? job.current_file.substring(0, 35) + '...' : job.current_file;
-            msgEl.textContent = `Elaborazione ${job.progress}/${job.total}: ${shortName}`;
+            const fileNum = job.progress + 1; // file in corso (progress = completati)
+            msgEl.textContent = `File ${fileNum} di ${job.total}: ${shortName}`;
           }
 
           // Se c'è progresso nuovo, ricarica split-view con i risultati parziali
