@@ -817,7 +817,7 @@ async function loadAgents() {
     renderElaboraAgents();
 
     // Carica tutte le pratiche all'avvio
-    loadElaboraPractices();
+    try { await loadElaboraPractices(); } catch(e) { console.error('loadElaboraPractices error:', e); }
   } catch (e) {
     console.error('Errore caricamento agenti:', e);
   }
