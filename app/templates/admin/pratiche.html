@@ -912,7 +912,8 @@ async function loadElaboraPractices(agentId) {
 
 async function selectPractice(practiceId) {
   selectedPracticeId = practiceId;
-  document.getElementById('practiceIdInput').value = practiceId;
+  const _pidInput = document.getElementById('practiceIdInput');
+  if (_pidInput) _pidInput.value = practiceId;
 
   // Highlight in list
   document.querySelectorAll('.practice-row').forEach(r => r.classList.remove('active'));
@@ -921,9 +922,9 @@ async function selectPractice(practiceId) {
   });
 
   // Hide other areas
-  document.getElementById('elaboraEmpty').style.display = 'none';
-  document.getElementById('dropZoneContainer').style.display = 'none';
-  document.getElementById('practiceResults').style.display = 'flex';
+  const _ee = document.getElementById('elaboraEmpty'); if (_ee) _ee.style.display = 'none';
+  const _dz = document.getElementById('dropZoneContainer'); if (_dz) _dz.style.display = 'none';
+  const _pr = document.getElementById('practiceResults'); if (_pr) _pr.style.display = 'flex';
 
   // Controlla se c'è un'elaborazione in corso per questa pratica
   const isProcessing = await checkOngoingProcessing(practiceId);
@@ -1173,9 +1174,11 @@ async function processAllFilesBackground() {
     const data = await r.json();
     if (data.error) throw new Error(data.error);
 
-    document.getElementById('bgProcessMsg').textContent = `Elaborazione ${data.total} file in corso...`;
+    const _bgMsg = document.getElementById('bgProcessMsg');
+    if (_bgMsg) _bgMsg.textContent = `Elaborazione ${data.total} file in corso...`;
     if (data.skipped > 0) {
-      document.getElementById('bgProcessDetail').textContent = `${data.skipped} file già elaborati — puoi navigare altrove`;
+      const _bgDet = document.getElementById('bgProcessDetail');
+      if (_bgDet) _bgDet.textContent = `${data.skipped} file già elaborati — puoi navigare altrove`;
     }
 
     // Ricarica lista pratiche (ora la pratica è nel DB)
