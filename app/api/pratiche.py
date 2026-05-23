@@ -1072,6 +1072,11 @@ def complete_practice_step(practice_id):
                 if fdata.get('extraction', {}).get('data'):
                     extracted_data[doc_type] = fdata['extraction']['data']
 
+        logger.info(f"complete-step {current_order}: extracted_data keys={list(extracted_data.keys())}, validated_files={len(validated_files)}")
+        if extracted_data:
+            for dt, fields in extracted_data.items():
+                logger.info(f"  doc_type={dt}: {list(fields.keys()) if isinstance(fields, dict) else type(fields)}")
+
         # ── 2. Salva lo step corrente come completato (atomico) ──
         step_type = current_step.type.name
         step_states[str(current_order)] = {
@@ -1101,6 +1106,10 @@ def complete_practice_step(practice_id):
         if next_step:
             pr.current_step_order = next_step.order
             step_states[str(next_step.order)] = {'status': 'in_progress'}
+
+            # Aggiorna step_states nel model PRIMA dell'auto-execute
+            # così il prossimo handler vede i dati aggiornati (extracted_data dello step appena completato)
+            pr.step_states = step_states
 
             # Auto-esegui il prossimo step se il suo handler lo prevede
             next_handler = get_handler(next_step.type.name)
