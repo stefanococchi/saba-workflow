@@ -1679,37 +1679,30 @@ function _renderStepEditFormInner(step, index, common) {
             return common + `
                 <div class="mb-3">
                     <label class="form-label">Agente AO</label>
-                    <select class="form-select" id="editDocProcAgent">
+                    <select class="form-select" id="editDocProcAgent" onchange="_loadDocProcCatalogFields()">
                         <option value="">Caricamento agenti...</option>
                     </select>
-                    <div class="form-text">L'agente Agent Orchestrator che elaborera i documenti.</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Documenti richiesti</label>
-                    <input type="text" class="form-control" id="editDocProcRequiredDocs"
-                           value="${step.config.required_docs || ''}"
-                           placeholder="es. Atto di provenienza, Visura catastale, Documento identita">
-                    <div class="form-text">Lista documenti richiesti al partecipante (separati da virgola). Visualizzati nella landing page.</div>
+                    <div class="form-text">Seleziona l'agente per caricare i campi disponibili dal catalogo.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Ritardo (ore)</label>
                     <input type="number" class="form-control" id="editDocProcDelay"
                            value="${step.config.delay_hours || 0}" min="0">
                 </div>
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="editDocProcWaitLanding"
-                           ${step.config.wait_for_landing ? 'checked' : ''}>
-                    <label class="form-check-label" for="editDocProcWaitLanding">Attendi upload documenti su landing page</label>
-                    <div class="form-text">Se attivo, il workflow aspetta che il partecipante carichi i documenti prima di procedere.</div>
+                <hr>
+                <h6 style="font-weight:600;font-size:0.85rem"><i class="bi bi-clipboard-check"></i> Regole di controllo</h6>
+                <div id="docProcRulesBuilder" style="margin-bottom:12px">
+                    <span class="text-muted" style="font-size:0.8rem">Seleziona un agente per caricare i campi...</span>
                 </div>
-                <div class="alert alert-info">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="_addDocProcRule()" style="border-radius:8px;font-size:0.78rem">
+                    <i class="bi bi-plus-lg"></i> Aggiungi regola
+                </button>
+                <div class="alert alert-info mt-3">
                     <small><i class="bi bi-info-circle"></i>
-                    <strong>Come funziona:</strong><br>
-                    1. Il partecipante riceve un link (landing page) dove caricare i documenti richiesti<br>
-                    2. Quando carica i file, vengono inviati all'Agent Orchestrator per elaborazione<br>
-                    3. AO identifica i documenti, estrae dati e valida la conformita<br>
-                    4. I risultati (dati estratti, anomalie) vengono salvati nei dati raccolti del partecipante<br>
-                    5. Puoi usare uno step Condition per verificare l'esito della validazione
+                    <strong>Elaborazione dati:</strong><br>
+                    1. Raccoglie i dati estratti dagli step precedenti<br>
+                    2. Esegue le regole di controllo configurate<br>
+                    3. Salva il risultato (OK/errori) per la validazione nello step successivo
                     </small>
                 </div>
             `;
@@ -1904,6 +1897,8 @@ function _loadDocProcAgents(selectedId) {
                 var selected = (a.id === selectedId || name === selectedId) ? 'selected' : '';
                 sel.innerHTML += '<option value="' + a.id + '" data-name="' + name + '" ' + selected + '>' + name + '</option>';
             });
+            // Carica campi catalogo per il builder regole
+            if (selectedId) _loadDocProcCatalogFields();
         })
         .catch(function() {
             var sel = document.getElementById('editDocProcAgent');
@@ -1988,6 +1983,162 @@ function _loadDocCheckCatalogTypes() {
 
 function _dcTypesSelectAll(checked) {
     document.querySelectorAll('.doc-check-type-cb').forEach(function(cb) { cb.checked = checked; });
+}
+
+// ── DOCUMENT_PROCESSING: rule builder con campi dal catalogo ──
+
+var _docProcCatalogFields = []; // [{id, label, docType}] — campi disponibili dal catalogo
+
+function _loadDocProcCatalogFields() {
+    var agentId = document.getElementById('editDocProcAgent')?.value;
+    var container = document.getElementById('docProcRulesBuilder');
+    if (!agentId || !container) {
+        if (container) container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Seleziona un agente per caricare i campi...</span>';
+        return;
+    }
+    container.innerHTML = '<span class="text-muted" style="font-size:0.8rem"><span class="spinner-border spinner-border-sm"></span> Caricamento campi...</span>';
+
+    fetch('/api/ao/catalog/' + agentId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var catalog = data.output?.catalog || data.catalog || {};
+            if (catalog.type === 'getCatalog' || catalog.success === false) catalog = {};
+
+            _docProcCatalogFields = [];
+            Object.entries(catalog).forEach(function(entry) {
+                var typeId = entry[0];
+                var typeDef = entry[1];
+                if (!typeDef || typeof typeDef !== 'object') return;
+                var questions = (typeDef.extraction?.questions || []).filter(function(q) { return !q.disabled; });
+                questions.forEach(function(q) {
+                    _docProcCatalogFields.push({
+                        id: q.id || q.name || '',
+                        label: q.label || q.id || q.name || '',
+                        docType: typeId,
+                    });
+                });
+            });
+
+            // Carica regole esistenti
+            var editingStep = workflowSteps.find(function(s) { return document.getElementById('editStepName')?.value === s.name; });
+            var existingRules = (editingStep?.config?.rules) || [];
+            container.innerHTML = '';
+            if (existingRules.length > 0) {
+                existingRules.forEach(function(rule) { _addDocProcRule(rule); });
+            }
+            if (_docProcCatalogFields.length === 0) {
+                container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Nessun campo nel catalogo</span>';
+            }
+        })
+        .catch(function() {
+            container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Errore caricamento catalogo</span>';
+        });
+}
+
+function _buildFieldOptions(selectedValue) {
+    var html = '<option value="">-- seleziona campo --</option>';
+    var currentDocType = '';
+    _docProcCatalogFields.forEach(function(f) {
+        if (f.docType !== currentDocType) {
+            if (currentDocType) html += '</optgroup>';
+            html += '<optgroup label="' + f.docType + '">';
+            currentDocType = f.docType;
+        }
+        var sel = f.id === selectedValue ? ' selected' : '';
+        html += '<option value="' + f.id + '"' + sel + '>' + f.label + '</option>';
+    });
+    if (currentDocType) html += '</optgroup>';
+    return html;
+}
+
+function _addDocProcRule(rule) {
+    rule = rule || { type: 'required', field: '', label: '' };
+    var container = document.getElementById('docProcRulesBuilder');
+    if (!container) return;
+    // Rimuovi placeholder
+    var placeholder = container.querySelector('.text-muted');
+    if (placeholder) placeholder.remove();
+
+    var idx = container.querySelectorAll('.doc-proc-rule').length;
+    var div = document.createElement('div');
+    div.className = 'doc-proc-rule';
+    div.style.cssText = 'border:1px solid var(--bs-border-color);border-radius:8px;padding:10px;margin-bottom:8px;background:#fff';
+
+    var typeOptions = [
+        { value: 'required', label: 'Campo obbligatorio' },
+        { value: 'compare', label: 'Confronta 2 campi' },
+        { value: 'format', label: 'Verifica formato (regex)' },
+        { value: 'calculate', label: 'Calcolo (somma/media)' },
+    ];
+    var typeSelect = '<select class="form-select form-select-sm dp-rule-type" onchange="_updateRuleFields(this)" style="width:180px">';
+    typeOptions.forEach(function(t) {
+        typeSelect += '<option value="' + t.value + '"' + (rule.type === t.value ? ' selected' : '') + '>' + t.label + '</option>';
+    });
+    typeSelect += '</select>';
+
+    div.innerHTML =
+        '<div class="d-flex gap-2 align-items-center mb-2">' +
+            '<span style="font-weight:600;font-size:0.78rem;color:var(--bs-secondary)">#' + (idx + 1) + '</span>' +
+            typeSelect +
+            '<input type="text" class="form-control form-control-sm dp-rule-label" placeholder="Etichetta (es. Provincia presente)" value="' + (rule.label || '') + '" style="flex:1">' +
+            '<button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest(\'.doc-proc-rule\').remove()" style="border-radius:6px;padding:2px 8px"><i class="bi bi-x"></i></button>' +
+        '</div>' +
+        '<div class="dp-rule-fields">' + _buildRuleFieldsHtml(rule) + '</div>';
+
+    container.appendChild(div);
+}
+
+function _buildRuleFieldsHtml(rule) {
+    var type = rule.type || 'required';
+    if (type === 'required') {
+        return '<div class="d-flex gap-2"><label class="form-label mb-0" style="font-size:0.75rem;width:60px;line-height:30px">Campo:</label><select class="form-select form-select-sm dp-rule-field">' + _buildFieldOptions(rule.field || '') + '</select></div>';
+    }
+    if (type === 'compare') {
+        return '<div class="d-flex gap-2 mb-1"><label class="form-label mb-0" style="font-size:0.75rem;width:60px;line-height:30px">Campo A:</label><select class="form-select form-select-sm dp-rule-field-a">' + _buildFieldOptions(rule.field_a || '') + '</select></div>' +
+               '<div class="d-flex gap-2"><label class="form-label mb-0" style="font-size:0.75rem;width:60px;line-height:30px">Campo B:</label><select class="form-select form-select-sm dp-rule-field-b">' + _buildFieldOptions(rule.field_b || '') + '</select></div>';
+    }
+    if (type === 'format') {
+        return '<div class="d-flex gap-2 mb-1"><label class="form-label mb-0" style="font-size:0.75rem;width:60px;line-height:30px">Campo:</label><select class="form-select form-select-sm dp-rule-field">' + _buildFieldOptions(rule.field || '') + '</select></div>' +
+               '<div class="d-flex gap-2"><label class="form-label mb-0" style="font-size:0.75rem;width:60px;line-height:30px">Regex:</label><input type="text" class="form-control form-control-sm dp-rule-pattern" value="' + (rule.pattern || '') + '" placeholder="es. ^[A-Z]{6}\\d{2}[A-Z]\\d{2}[A-Z]\\d{3}[A-Z]$"></div>';
+    }
+    if (type === 'calculate') {
+        var opOptions = '<select class="form-select form-select-sm dp-rule-operation" style="width:120px"><option value="sum"' + (rule.operation === 'sum' ? ' selected' : '') + '>Somma</option><option value="diff"' + (rule.operation === 'diff' ? ' selected' : '') + '>Differenza</option><option value="avg"' + (rule.operation === 'avg' ? ' selected' : '') + '>Media</option></select>';
+        return '<div class="d-flex gap-2 mb-1"><label class="form-label mb-0" style="font-size:0.75rem;width:60px;line-height:30px">Operaz:</label>' + opOptions + '</div>' +
+               '<div class="d-flex gap-2"><label class="form-label mb-0" style="font-size:0.75rem;width:60px;line-height:30px">Campi:</label><select class="form-select form-select-sm dp-rule-calc-fields" multiple size="3">' + _buildFieldOptions('') + '</select></div>' +
+               '<div class="form-text" style="font-size:0.7rem;margin-left:68px">Tieni premuto Ctrl per selezionare più campi</div>';
+    }
+    return '';
+}
+
+function _updateRuleFields(selectEl) {
+    var ruleDiv = selectEl.closest('.doc-proc-rule');
+    var fieldsDiv = ruleDiv.querySelector('.dp-rule-fields');
+    fieldsDiv.innerHTML = _buildRuleFieldsHtml({ type: selectEl.value });
+}
+
+function _collectDocProcRules() {
+    var rules = [];
+    document.querySelectorAll('.doc-proc-rule').forEach(function(div) {
+        var type = div.querySelector('.dp-rule-type')?.value || 'required';
+        var label = div.querySelector('.dp-rule-label')?.value || '';
+        var rule = { type: type, label: label };
+
+        if (type === 'required') {
+            rule.field = div.querySelector('.dp-rule-field')?.value || '';
+        } else if (type === 'compare') {
+            rule.field_a = div.querySelector('.dp-rule-field-a')?.value || '';
+            rule.field_b = div.querySelector('.dp-rule-field-b')?.value || '';
+        } else if (type === 'format') {
+            rule.field = div.querySelector('.dp-rule-field')?.value || '';
+            rule.pattern = div.querySelector('.dp-rule-pattern')?.value || '';
+        } else if (type === 'calculate') {
+            rule.operation = div.querySelector('.dp-rule-operation')?.value || 'sum';
+            var sel = div.querySelector('.dp-rule-calc-fields');
+            rule.fields = sel ? Array.from(sel.selectedOptions).map(function(o) { return o.value; }) : [];
+        }
+        rules.push(rule);
+    });
+    return rules;
 }
 
 var _excelColCounter = 0;
@@ -2776,7 +2927,8 @@ function saveStepEdit() {
             step.config.ao_agent_name = agentSel?.selectedOptions[0]?.dataset?.name || agentSel?.selectedOptions[0]?.text || '';
             step.config.required_docs = document.getElementById('editDocProcRequiredDocs')?.value || '';
             step.config.delay_hours = parseInt(document.getElementById('editDocProcDelay')?.value) || 0;
-            step.config.wait_for_landing = document.getElementById('editDocProcWaitLanding')?.checked || false;
+            // Regole di controllo dal builder visuale
+            step.config.rules = _collectDocProcRules();
             break;
         case 'document_check':
             var dcAgentSel = document.getElementById('editDocCheckAgent');
