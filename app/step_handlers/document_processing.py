@@ -51,6 +51,8 @@ class DocumentProcessingHandler(StepHandler):
 
         result['checks'] = checks
         result['accumulated_keys'] = list(accumulated.keys())
+        # Salva i dati accumulati per il display (troncati per non appesantire il JSON)
+        result['accumulated_data'] = {k: str(v)[:100] for k, v in accumulated.items()}
 
         errors = [c for c in checks if c['status'] == 'error']
         warnings = [c for c in checks if c['status'] == 'warning']
@@ -199,10 +201,13 @@ class DocumentProcessingHandler(StepHandler):
 
         for check in checks:
             if check.get('rule') == 'data_summary':
-                # Mostra i campi disponibili ordinati
+                # Mostra i campi con il valore estratto
+                accumulated = exec_result.get('accumulated_data', {})
                 field_list = check.get('fields', [])
                 for fname in sorted(field_list):
-                    fields.append({'label': fname, 'value': '✓ presente', 'status': 'ok'})
+                    val = accumulated.get(fname, '')
+                    display_val = str(val)[:80] if val else '-'
+                    fields.append({'label': fname, 'value': display_val, 'status': 'ok'})
             else:
                 fields.append({
                     'label': check.get('label', check.get('rule', '')),
