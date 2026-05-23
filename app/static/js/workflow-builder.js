@@ -3433,6 +3433,16 @@ function saveWorkflow() {
                 };
             }
 
+            // For document_processing steps
+            if (step.type === 'document_processing') {
+                stepData.skip_conditions = {
+                    ao_agent_id: step.config.ao_agent_id || '',
+                    ao_agent_name: step.config.ao_agent_name || '',
+                    delay_hours: step.config.delay_hours || 0,
+                    rules: step.config.rules || []
+                };
+            }
+
             // For sister_visura steps
             if (step.type === 'sister_visura') {
                 stepData.skip_conditions = {
