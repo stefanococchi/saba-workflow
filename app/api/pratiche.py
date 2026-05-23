@@ -272,6 +272,8 @@ def _start_background_processing(agent_id, practice_id, pr=None):
         'skipped': len(files_data) - len(to_process),
         'results': [],
         'error': None,
+        'current_file': '',
+        'activity': [],
         'started_at': datetime.utcnow().isoformat(),
     }
 
@@ -286,15 +288,21 @@ def _start_background_processing(agent_id, practice_id, pr=None):
             from app import db_session as bg_db
             from sqlalchemy.orm.attributes import flag_modified
             job = _processing_jobs[practice_id]
+            _log = lambda msg: job['activity'].append({'at': datetime.utcnow().strftime('%H:%M:%S'), 'msg': msg})
             try:
                 for i, (fn, mt, data) in enumerate(to_process):
+                    short_fn = fn[:40] + ('...' if len(fn) > 40 else '')
+                    job['current_file'] = fn
+                    _log(f"📄 Invio file {i+1}/{len(to_process)}: {short_fn}")
+
                     if stop_event.is_set():
                         job['status'] = 'stopped'
+                        _log("⏹ Elaborazione interrotta dall'utente")
                         logger.info(f"BG process stopped by user at file {i+1}/{len(to_process)}")
                         break
 
                     MAX_RETRIES = 3
-                    RETRY_DELAYS = [5, 15, 30]  # secondi tra i tentativi
+                    RETRY_DELAYS = [5, 15, 30]
                     last_error = None
                     success = False
 
@@ -304,21 +312,24 @@ def _start_background_processing(agent_id, practice_id, pr=None):
                         try:
                             if attempt > 0:
                                 delay = RETRY_DELAYS[min(attempt - 1, len(RETRY_DELAYS) - 1)]
+                                _log(f"🔄 Retry {attempt + 1}/{MAX_RETRIES} tra {delay}s...")
                                 logger.info(f"BG file {fn}: retry {attempt + 1}/{MAX_RETRIES} tra {delay}s...")
                                 import time as _time
                                 _time.sleep(delay)
 
+                            _log(f"⏳ AO processLocal in corso...")
                             files = {f"file_0": (data, mt, fn)}
                             result = ao_service.practice_process(agent_id, practice_id, files=files)
                             output = result.get('output', {})
                             info = output.get('info', output)
                             ao_files = info.get('files', {})
-                            # Log documentId ritornati dall'AO (per debug matching doc_types)
+
                             for _fh, _fd in ao_files.items():
                                 _did = _fd.get('identification', {}).get('documentId', '?')
+                                _log(f"✅ Identificato: {_did}")
                                 logger.info(f"BG file {fn}: AO documentId='{_did}' hash={_fh[:12]}")
 
-                            # Leggi dal DB fresco (refresh forza rilettura dopo commit precedente)
+                            # Leggi dal DB fresco
                             bg_pr = bg_db.query(PracticeResult).filter_by(practice_id=practice_id).first()
                             if bg_pr:
                                 bg_db.refresh(bg_pr)
@@ -330,16 +341,19 @@ def _start_background_processing(agent_id, practice_id, pr=None):
                                 bg_pr.result_data = rd
                                 flag_modified(bg_pr, 'result_data')
                                 bg_db.commit()
+                                _log(f"💾 Salvato nel DB ({len(rd['files'])} file totali)")
                                 logger.info(f"BG file {fn}: AO returned {len(ao_files)}, total in DB={len(rd['files'])}")
                             else:
                                 logger.error(f"BG process: PracticeResult not found for {practice_id}")
 
                             job['results'].append({'file': fn, 'ok': True})
                             success = True
-                            break  # successo, esci dal retry loop
+                            break
 
                         except Exception as e:
                             last_error = str(e)
+                            short_err = str(e)[:80]
+                            _log(f"❌ Errore: {short_err}")
                             logger.warning(f"BG file {fn}: attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
 
                     if not success and not stop_event.is_set():
