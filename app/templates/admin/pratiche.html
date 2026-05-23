@@ -1241,22 +1241,9 @@ function pollProcessingStatus(practiceId, agentId) {
         delete _activePolls[practiceId];
         delete _lastPollProgress[practiceId];
 
-        // Forza la pratica come selezionata (il polling è partito da questa pratica)
-        selectedPracticeId = practiceId;
-        window._practiceId = practiceId;
-
-        document.getElementById('previewPanel').style.display = '';
-        const statusLabel = job.status === 'completed'
-          ? '<span class="badge-ok">Elaborazione completata</span>'
-          : job.status === 'stopped'
-            ? '<span class="badge-ko">Elaborazione interrotta</span>'
-            : '<span class="badge-ko">Errore elaborazione</span>';
-        document.getElementById('infoValidation').innerHTML = statusLabel;
-
-        const cached = await loadPracticeFromDb(practiceId);
-        if (cached?.result_data) {
-          await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
-        }
+        // Ricarica la pratica come se l'utente cliccasse sulla lista
+        // (selectPractice funziona sempre — carica dal DB e renderizza tutto)
+        await selectPractice(practiceId);
         if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
       }
     } catch (e) {
