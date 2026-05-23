@@ -762,7 +762,27 @@ let processedFileBlobs = {}; // filename → File object, kept for PDF viewer
 let _activePolls = {}; // practiceId -> true (polling attivo in background)
 
 // ── Init ───────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => { loadAgents(); });
+document.addEventListener('DOMContentLoaded', () => {
+  loadAgents();
+
+  // Fallback: ogni 5s controlla se lo spinner è bloccato (processing finito ma UI non aggiornata)
+  setInterval(async () => {
+    const spinner = document.getElementById('bgProcessMsg');
+    if (!spinner || !spinner.offsetParent) return; // spinner non visibile
+    const pid = selectedPracticeId || window._practiceId;
+    if (!pid) return;
+    // Se c'è un polling attivo, lascia fare a quello
+    if (_activePolls[pid]) return;
+    try {
+      const r = await fetch(`/api/ao/practice/${pid}/process-status`);
+      const job = await r.json();
+      if (job.status !== 'running') {
+        console.log('FALLBACK: spinner bloccato, ricarico pratica', pid);
+        await selectPractice(pid);
+      }
+    } catch (e) { /* ignore */ }
+  }, 5000);
+});
 
 async function loadAgents() {
   try {
@@ -1242,10 +1262,15 @@ function pollProcessingStatus(practiceId, agentId) {
       } else if (job.status === 'completed' || job.status === 'error' || job.status === 'stopped') {
         delete _activePolls[practiceId];
         delete _lastPollProgress[practiceId];
+        console.log('POLL COMPLETED for', practiceId, 'status:', job.status);
 
         // Ricarica la pratica come se l'utente cliccasse sulla lista
-        // (selectPractice funziona sempre — carica dal DB e renderizza tutto)
-        await selectPractice(practiceId);
+        try {
+          await selectPractice(practiceId);
+          console.log('selectPractice OK for', practiceId);
+        } catch (selErr) {
+          console.error('selectPractice FAILED:', selErr);
+        }
         if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
       }
     } catch (e) {
