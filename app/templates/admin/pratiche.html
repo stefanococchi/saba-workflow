@@ -1129,22 +1129,26 @@ async function processAllFilesBackground() {
   // Salva blob per PDF viewer
   for (const f of stagedFiles) processedFileBlobs[f.name] = f;
 
-  // Prepara UI subito
-  document.getElementById('dropZoneContainer').style.display = 'none';
-  document.getElementById('practiceResults').style.display = 'flex';
-  document.getElementById('previewPanel').style.display = 'none';
-  document.getElementById('infoPracticeId').textContent = practiceId;
-  document.getElementById('infoCreated').textContent = '-';
-  document.getElementById('infoUpdated').textContent = '-';
-  document.getElementById('infoValidation').innerHTML = '<span class="badge-draft">In elaborazione</span>';
-  document.getElementById('fileTabsBar').innerHTML = '';
-  document.getElementById('validateBar').style.display = 'none';
-  document.getElementById('validationContainer').style.display = 'none';
-  document.getElementById('workflowStepperBar').style.display = 'none';
-  document.getElementById('workflowSelector').style.display = 'none';
+  // Prepara UI subito (con null safety per prod)
+  const _s = id => document.getElementById(id);
+  const _hide = id => { const e = _s(id); if (e) e.style.display = 'none'; };
+  const _show = (id, d) => { const e = _s(id); if (e) e.style.display = d || ''; };
+  _hide('dropZoneContainer');
+  _show('practiceResults', 'flex');
+  _hide('previewPanel');
+  if (_s('infoPracticeId')) _s('infoPracticeId').textContent = practiceId;
+  if (_s('infoCreated')) _s('infoCreated').textContent = '-';
+  if (_s('infoUpdated')) _s('infoUpdated').textContent = '-';
+  if (_s('infoValidation')) _s('infoValidation').innerHTML = '<span class="badge-draft">In elaborazione</span>';
+  if (_s('fileTabsBar')) _s('fileTabsBar').innerHTML = '';
+  _hide('validateBar');
+  _hide('validationContainer');
+  _hide('workflowStepperBar');
+  _hide('workflowSelector');
   practiceWorkflow = null;
 
-  const dataScroll = document.getElementById('dataScroll');
+  const dataScroll = _s('dataScroll');
+  if (!dataScroll) return alert('Errore UI: elemento dataScroll non trovato');
   dataScroll.innerHTML = `
     <div class="text-center py-5">
       <div class="prat-spinner" style="width:30px;height:30px;border-width:3px"></div>
