@@ -1178,8 +1178,10 @@ function pollProcessingStatus(practiceId, agentId) {
       const r = await fetch(`/api/ao/practice/${practiceId}/process-status`);
       const job = await r.json();
 
-      // Aggiorna UI solo se stiamo guardando questa pratica
-      const isVisible = selectedPracticeId === practiceId;
+      // Controlla se stiamo guardando questa pratica (check multiplo per robustezza)
+      const isVisible = selectedPracticeId === practiceId
+        || window._practiceId === practiceId
+        || document.getElementById('infoPracticeId')?.textContent === practiceId;
 
       if (job.status === 'none') {
         // Job non più in memoria (server restart?) — ricarica dal DB
@@ -1239,7 +1241,9 @@ function pollProcessingStatus(practiceId, agentId) {
         delete _activePolls[practiceId];
         delete _lastPollProgress[practiceId];
 
-        if (isVisible) {
+        // Aggiorna SEMPRE la UI al completamento — anche se l'utente ha navigato
+        // e poi è tornato, selectedPracticeId potrebbe non matchare
+        if (isVisible || selectedPracticeId === practiceId || window._practiceId === practiceId) {
           document.getElementById('previewPanel').style.display = '';
           const statusLabel = job.status === 'completed'
             ? '<span class="badge-ok">Elaborazione completata</span>'
