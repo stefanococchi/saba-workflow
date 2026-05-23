@@ -1202,7 +1202,6 @@ async function processAllFilesBackground() {
   // UNA SOLA CHIAMATA: crea pratica + salva file + assegna workflow + avvia elaborazione
   const fd = new FormData();
   stagedFiles.forEach((f, i) => fd.append('file_' + i, f));
-  const selectedWfId = document.getElementById('newPracticeWorkflow')?.value;
   if (selectedWfId) fd.append('workflow_id', selectedWfId);
   const agentName = agents.find(a => a.id === agentId)?.name || '';
   fd.append('agent_name', agentName);
