@@ -1653,7 +1653,9 @@ function processAdditionalFiles(files) {
 async function _handleStepUpload(files) {
   if (!files || files.length === 0) return;
   const practiceId = window._practiceId || selectedPracticeId;
-  const agentId = getAgentId();
+  // Usa l'agente configurato nello step corrente, non quello della sidebar
+  const currentStep = practiceWorkflow?.steps?.find(s => s.order === practiceWorkflow?.current_step_order);
+  const agentId = currentStep?.config?.ao_agent_id || getAgentId();
   if (!practiceId || !agentId) return alert('Nessuna pratica o agente selezionato');
 
   const dropArea = document.getElementById('stepDropArea');
