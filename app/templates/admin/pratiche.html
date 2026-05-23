@@ -3397,19 +3397,30 @@ function _renderStepSummaries(wf) {
         const icon = hasErrors ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill';
         const iconColor = hasErrors ? 'var(--md-error)' : 'var(--md-success)';
 
+        // Prima riga (summary): sempre visibile
+        const okCount = fields.filter(f => f.status === 'ok').length;
+        const errCount = fields.filter(f => f.status === 'error').length;
+        const summaryText = fields.length > 0
+          ? `${okCount} OK${errCount > 0 ? `, ${errCount} errori` : ''} — ${fields.length} controlli`
+          : '';
+        const bannerId = 'stepBanner_' + s.order;
+
+        // Dettaglio campi: nascosto, si apre al click
         let fieldsHtml = fields.map(f => {
           const fIcon = f.status === 'ok' ? '<i class="bi bi-check-lg" style="color:var(--md-success)"></i>'
             : f.status === 'error' ? '<i class="bi bi-x-lg" style="color:var(--md-error)"></i>'
             : '<i class="bi bi-hourglass" style="color:var(--md-on-surface-variant)"></i>';
-          return `<div style="display:flex;gap:6px;align-items:center;font-size:0.78rem;padding:2px 0">${fIcon} <span style="color:var(--md-on-surface-variant)">${f.label}:</span> <strong>${f.value}</strong></div>`;
+          return `<div style="display:flex;gap:6px;align-items:center;font-size:0.78rem;padding:3px 0;border-bottom:1px solid rgba(0,0,0,0.04)">${fIcon} <span style="color:var(--md-on-surface-variant);min-width:120px">${f.label}:</span> <strong>${f.value}</strong></div>`;
         }).join('');
 
         bannerHtml += `<div class="step-summary-banner" style="padding:10px 16px;background:${bgColor};border-left:3px solid ${borderColor};margin:4px 16px 8px;border-radius:0 8px 8px 0">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="var d=document.getElementById('${bannerId}');d.style.display=d.style.display==='none'?'':'none';this.querySelector('.chevron').classList.toggle('bi-chevron-down');this.querySelector('.chevron').classList.toggle('bi-chevron-right')">
             <i class="bi ${icon}" style="color:${iconColor};font-size:1rem"></i>
-            <strong style="font-size:0.82rem">Step ${s.order}: ${s.name}</strong>
+            <strong style="font-size:0.82rem;flex:1">Step ${s.order}: ${s.name}</strong>
+            <span style="font-size:0.75rem;color:var(--md-on-surface-variant)">${summaryText}</span>
+            <i class="bi bi-chevron-down chevron" style="font-size:0.7rem;color:var(--md-on-surface-variant)"></i>
           </div>
-          <div style="margin-left:24px">${fieldsHtml}</div>
+          <div id="${bannerId}" style="margin-left:24px;margin-top:6px">${fieldsHtml}</div>
         </div>`;
       }
       stepperBar.insertAdjacentHTML('afterend', bannerHtml);

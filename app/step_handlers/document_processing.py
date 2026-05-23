@@ -197,12 +197,18 @@ class DocumentProcessingHandler(StepHandler):
             status = 'ok' if errors == 0 else 'error'
             fields.append({'label': 'Controlli', 'value': f'{ok}/{total} OK, {errors} errori, {warnings} avvisi', 'status': status})
 
-        for check in checks[:8]:
-            fields.append({
-                'label': check.get('label', check.get('rule', '')),
-                'value': check.get('value', ''),
-                'status': check.get('status', 'pending'),
-            })
+        for check in checks:
+            if check.get('rule') == 'data_summary':
+                # Mostra i campi disponibili ordinati
+                field_list = check.get('fields', [])
+                for fname in sorted(field_list):
+                    fields.append({'label': fname, 'value': '✓ presente', 'status': 'ok'})
+            else:
+                fields.append({
+                    'label': check.get('label', check.get('rule', '')),
+                    'value': check.get('value', ''),
+                    'status': check.get('status', 'pending'),
+                })
 
         if exec_result.get('warning'):
             fields.append({'label': 'Avviso', 'value': exec_result['warning'], 'status': 'warning'})
