@@ -962,6 +962,8 @@ function startNewPractice() {
   const _ee = document.getElementById('elaboraEmpty'); if (_ee) _ee.style.display = 'none';
   const _pr = document.getElementById('practiceResults'); if (_pr) _pr.style.display = 'none';
   const _dz = document.getElementById('dropZoneContainer'); if (_dz) _dz.style.display = '';
+  document.querySelectorAll('.step-summary-banner, .comparison-panel').forEach(el => el.remove());
+  practiceWorkflow = null;
   stagedFiles = [];
   renderStagedFiles();
 
@@ -1135,7 +1137,7 @@ async function saveFilesToDb() {
     btn.classList.add('btn-outline-success');
 
     // Aggiorna sidebar
-    if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+    loadElaboraPractices(selectedElaboraAgentId);
   } catch (e) {
     btn.innerHTML = '<i class="bi bi-x-lg"></i> Errore';
     btn.classList.remove('btn-outline-primary');
@@ -1182,6 +1184,7 @@ async function processAllFilesBackground() {
   _hide('validationContainer');
   _hide('workflowStepperBar');
   _hide('workflowSelector');
+  document.querySelectorAll('.step-summary-banner, .comparison-panel').forEach(el => el.remove());
   practiceWorkflow = null;
 
   const dataScroll = _s('dataScroll');
@@ -1222,7 +1225,7 @@ async function processAllFilesBackground() {
     }
 
     // Ricarica lista pratiche (ora la pratica è nel DB)
-    if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+    loadElaboraPractices(selectedElaboraAgentId);
 
     // Poll per stato
     pollProcessingStatus(practiceId, agentId);
@@ -1260,7 +1263,7 @@ function pollProcessingStatus(practiceId, agentId) {
           }
         }
         // Aggiorna lista pratiche (badge stato)
-        if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+        loadElaboraPractices(selectedElaboraAgentId);
         return;
       }
 
@@ -1313,7 +1316,7 @@ function pollProcessingStatus(practiceId, agentId) {
         } catch (selErr) {
           console.error('Poll completion selectPractice failed:', selErr);
         }
-        if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+        loadElaboraPractices(selectedElaboraAgentId);
       }
     } catch (e) {
       console.error('Poll error:', e);
@@ -1485,7 +1488,7 @@ async function processAllFiles() {
 
   // Salva pratica e file nel DB subito, poi aggiorna sidebar
   await savePracticeToDb(practiceId, agentId, { files: {} });
-  if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+  loadElaboraPractices(selectedElaboraAgentId);
 
   const uploadFd = new FormData();
   filesToProcess.forEach((f, i) => uploadFd.append('file_' + i, f));
@@ -1497,7 +1500,7 @@ async function processAllFiles() {
       valEl.innerHTML = `<span class="badge-ok"><i class="bi bi-check2"></i> ${upData.saved.length} file salvati</span>`;
       valEl.appendChild(timerEl);
       // Aggiorna sidebar con conteggio file corretto
-      if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+      loadElaboraPractices(selectedElaboraAgentId);
     }
   } catch (e) {
     console.error('Upload file nel DB fallito:', e);
@@ -1639,7 +1642,7 @@ async function processAllFiles() {
   }
 
   // Refresh practices list
-  if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+  loadElaboraPractices(selectedElaboraAgentId);
 
   // After processing, re-show the split-view with final results
   document.getElementById('previewPanel').style.display = '';
@@ -1809,6 +1812,8 @@ function resetPractice() {
   document.getElementById('elaboraEmpty').style.display = 'flex';
   const vc = document.getElementById('validationContainer');
   if (vc) vc.style.display = 'none';
+  document.querySelectorAll('.step-summary-banner, .comparison-panel').forEach(el => el.remove());
+  practiceWorkflow = null;
   stagedFiles = [];
   processedFileBlobs = {};
   renderStagedFiles();
@@ -2465,7 +2470,7 @@ async function validatePractice() {
     }
   } catch (e) { console.error('Verdict API error:', e); }
 
-  if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+  loadElaboraPractices(selectedElaboraAgentId);
 }
 
 async function rejectPractice() {
@@ -2493,7 +2498,7 @@ async function rejectPractice() {
     }
   } catch (e) { console.error('Verdict API error:', e); }
 
-  if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+  loadElaboraPractices(selectedElaboraAgentId);
 }
 
 // ── Persistence (DB) ───────────────────────────────────────────────
@@ -2539,7 +2544,7 @@ async function deleteSavedPractice() {
     selectedPracticeId = null;
     document.getElementById('practiceResults').style.display = 'none';
     document.getElementById('elaboraEmpty').style.display = 'flex';
-    if (selectedElaboraAgentId) loadElaboraPractices(selectedElaboraAgentId);
+    loadElaboraPractices(selectedElaboraAgentId);
   } catch (e) {
     alert('Errore eliminazione: ' + e.message);
   }
