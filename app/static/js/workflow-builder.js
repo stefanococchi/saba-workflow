@@ -1682,7 +1682,7 @@ function _renderStepEditFormInner(step, index, common) {
                     <select class="form-select" id="editDocProcAgent" onchange="_loadDocProcCatalogFields()">
                         <option value="">Caricamento agenti...</option>
                     </select>
-                    <div class="form-text">Seleziona l'agente per caricare i campi disponibili dal catalogo.</div>
+                    <div class="form-text">Agente per questo step (opzionale). I campi nelle regole vengono caricati da tutti gli agenti del workflow.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Ritardo (ore)</label>
@@ -1905,8 +1905,8 @@ function _loadDocProcAgents(selectedId) {
                 var selected = (a.id === selectedId || name === selectedId) ? 'selected' : '';
                 sel.innerHTML += '<option value="' + a.id + '" data-name="' + name + '" ' + selected + '>' + name + '</option>';
             });
-            // Carica campi catalogo per il builder regole
-            if (selectedId) _loadDocProcCatalogFields();
+            // Carica campi catalogo da tutti gli agenti del workflow
+            _loadDocProcCatalogFields();
         })
         .catch(function() {
             var sel = document.getElementById('editDocProcAgent');
@@ -1998,49 +1998,79 @@ function _dcTypesSelectAll(checked) {
 var _docProcCatalogFields = []; // [{id, label, docType}] — campi disponibili dal catalogo
 
 function _loadDocProcCatalogFields() {
-    var agentId = document.getElementById('editDocProcAgent')?.value;
     var container = document.getElementById('docProcRulesBuilder');
-    if (!agentId || !container) {
-        if (container) container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Seleziona un agente per caricare i campi...</span>';
+    if (!container) return;
+
+    // Raccogli agent_id da TUTTI gli step del workflow (non solo il corrente)
+    var editingStepName = document.getElementById('editStepName')?.value;
+    var editingStep = workflowSteps.find(function(s) { return s.name === editingStepName; });
+    var editingOrder = editingStep ? workflowSteps.indexOf(editingStep) : workflowSteps.length;
+
+    // Agenti dagli step precedenti + lo step corrente + agente workflow globale
+    var agentIds = new Set();
+    var wfAgentId = document.getElementById('wfAoAgent')?.value;
+    if (wfAgentId) agentIds.add(wfAgentId);
+
+    workflowSteps.forEach(function(s, i) {
+        if (s.config?.ao_agent_id) agentIds.add(s.config.ao_agent_id);
+    });
+
+    // Aggiungi anche l'agente selezionato nel form corrente
+    var currentAgentId = document.getElementById('editDocProcAgent')?.value;
+    if (currentAgentId) agentIds.add(currentAgentId);
+
+    var agentList = Array.from(agentIds);
+    if (agentList.length === 0) {
+        container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Nessun agente configurato nel workflow.</span>';
         return;
     }
-    container.innerHTML = '<span class="text-muted" style="font-size:0.8rem"><span class="spinner-border spinner-border-sm"></span> Caricamento campi...</span>';
 
-    fetch('/api/ao/catalog/' + agentId)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var catalog = data.output?.catalog || data.catalog || {};
-            if (catalog.type === 'getCatalog' || catalog.success === false) catalog = {};
+    container.innerHTML = '<span class="text-muted" style="font-size:0.8rem"><span class="spinner-border spinner-border-sm"></span> Caricamento campi da ' + agentList.length + ' agent' + (agentList.length > 1 ? 'i' : 'e') + '...</span>';
 
-            _docProcCatalogFields = [];
+    // Carica i cataloghi di tutti gli agenti in parallelo
+    Promise.all(agentList.map(function(aid) {
+        return fetch('/api/ao/catalog/' + aid)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var catalog = data.output?.catalog || data.catalog || {};
+                if (catalog.type === 'getCatalog' || catalog.success === false) catalog = {};
+                return catalog;
+            })
+            .catch(function() { return {}; });
+    })).then(function(catalogs) {
+        _docProcCatalogFields = [];
+        var seen = new Set(); // evita duplicati (stesso campo da agenti diversi)
+
+        catalogs.forEach(function(catalog) {
             Object.entries(catalog).forEach(function(entry) {
                 var typeId = entry[0];
                 var typeDef = entry[1];
                 if (!typeDef || typeof typeDef !== 'object') return;
                 var questions = (typeDef.extraction?.questions || []).filter(function(q) { return !q.disabled; });
                 questions.forEach(function(q) {
+                    var fieldId = q.id || q.name || '';
+                    var key = typeId + '/' + fieldId;
+                    if (seen.has(key)) return;
+                    seen.add(key);
                     _docProcCatalogFields.push({
-                        id: q.id || q.name || '',
-                        label: q.label || q.id || q.name || '',
+                        id: fieldId,
+                        label: q.label || fieldId,
                         docType: typeId,
                     });
                 });
             });
-
-            // Carica regole esistenti
-            var editingStep = workflowSteps.find(function(s) { return document.getElementById('editStepName')?.value === s.name; });
-            var existingRules = (editingStep?.config?.rules) || [];
-            container.innerHTML = '';
-            if (existingRules.length > 0) {
-                existingRules.forEach(function(rule) { _addDocProcRule(rule); });
-            }
-            if (_docProcCatalogFields.length === 0) {
-                container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Nessun campo nel catalogo</span>';
-            }
-        })
-        .catch(function() {
-            container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Errore caricamento catalogo</span>';
         });
+
+        // Carica regole esistenti
+        var existingRules = (editingStep?.config?.rules) || [];
+        container.innerHTML = '';
+        if (existingRules.length > 0) {
+            existingRules.forEach(function(rule) { _addDocProcRule(rule); });
+        }
+        if (_docProcCatalogFields.length === 0) {
+            container.innerHTML = '<span class="text-muted" style="font-size:0.8rem">Nessun campo nei cataloghi degli agenti</span>';
+        }
+    });
 }
 
 function _buildFieldOptions(selectedValue) {

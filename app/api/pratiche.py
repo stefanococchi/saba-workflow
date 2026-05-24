@@ -326,10 +326,14 @@ def _start_background_processing(agent_id, practice_id, pr=None):
                     short_fn = fn[:40] + ('...' if len(fn) > 40 else '')
                     _log(f"📄 Invio file {i+1}/{len(to_process)}: {short_fn}")
 
-                    # Aggiorna progresso nel DB
+                    # Aggiorna progresso in memoria E nel DB
+                    job = _processing_jobs.get(practice_id, {})
+                    job['current_file'] = fn
+                    job['progress'] = i
+
                     _update_proc_db(bg_db, practice_id, {
                         'current_file': fn, 'progress': i,
-                        'activity': _processing_jobs.get(practice_id, {}).get('activity', []),
+                        'activity': job.get('activity', []),
                     })
                     bg_db.commit()
 
@@ -359,6 +363,12 @@ def _start_background_processing(agent_id, practice_id, pr=None):
                             _log(f"⏳ AO processLocal in corso...")
                             files = {f"file_0": (data, mt, fn)}
                             result = ao_service.practice_process(agent_id, practice_id, files=files)
+
+                            # Controlla se il task AO è fallito o in timeout
+                            ao_status = result.get('status', '')
+                            if ao_status in ('TIMEOUT', 'FAILED'):
+                                raise Exception(f"AO task {ao_status}: {result.get('error', 'unknown')}")
+
                             output = result.get('output', {})
                             info = output.get('info', output)
                             ao_files = info.get('files', {})
@@ -1036,10 +1046,29 @@ def get_practice_workflow_status(practice_id):
 
         # Accumula contesto da tutti gli step completati
         accumulated_data = {}
+        # Confronto campi: per ogni campo, raccogli tutti i valori trovati
+        comparison_fields = {}  # field_name -> [{ value, doc_type }]
         for s in steps:
             ss = step_states.get(str(s.order), {})
             if ss.get('status') == 'completed' and ss.get('extracted_data'):
                 accumulated_data.update(ss['extracted_data'])
+                for doc_type, fields in ss['extracted_data'].items():
+                    if not isinstance(fields, dict):
+                        continue
+                    for field_name, field_value in fields.items():
+                        if field_value is None or str(field_value).strip() == '':
+                            continue
+                        if field_name not in comparison_fields:
+                            comparison_fields[field_name] = []
+                        comparison_fields[field_name].append({
+                            'value': field_value,
+                            'doc_type': doc_type,
+                        })
+        # Marca i campi con valori discordanti
+        for field_name, entries in comparison_fields.items():
+            values = set(str(e['value']).strip().lower() for e in entries)
+            for e in entries:
+                e['match'] = len(values) <= 1
 
         # Genera display_data per ogni step tramite il suo handler
         from app.step_handlers import get_handler
@@ -1065,6 +1094,7 @@ def get_practice_workflow_status(practice_id):
             "total_steps": len(steps),
             "steps": steps_data,
             "accumulated_data": accumulated_data,
+            "comparison_fields": comparison_fields,
         })
     except Exception as e:
         logger.error(f"Get practice workflow status error: {e}")
@@ -1202,6 +1232,59 @@ def complete_practice_step(practice_id):
     except Exception as e:
         db.rollback()
         logger.error(f"Complete practice step error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@pratiche_bp.route('/practice/<practice_id>/go-back-step', methods=['POST'])
+def go_back_practice_step(practice_id):
+    """Torna allo step precedente del workflow, resettandone lo stato."""
+    try:
+        pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if not pr or not pr.workflow_id:
+            return jsonify({"error": "Nessun workflow associato"}), 400
+
+        from app.models import Workflow
+        workflow = db.get(Workflow, pr.workflow_id)
+        if not workflow:
+            return jsonify({"error": "Workflow non trovato"}), 404
+
+        steps = sorted(workflow.steps, key=lambda s: s.order)
+        current_order = pr.current_step_order
+
+        # Se il workflow è completato (current_step_order=None), torna all'ultimo step
+        if current_order is None:
+            prev_step = steps[-1] if steps else None
+        else:
+            prev_step = None
+            for s in steps:
+                if s.order >= current_order:
+                    break
+                prev_step = s
+
+        if not prev_step:
+            return jsonify({"error": "Sei già al primo step"}), 400
+
+        # Resetta lo step precedente a in_progress e rimuovi lo stato corrente
+        step_states = dict(pr.step_states or {})
+        step_states[str(prev_step.order)] = {'status': 'in_progress'}
+        if current_order is not None:
+            step_states.pop(str(current_order), None)
+
+        pr.current_step_order = prev_step.order
+        pr.step_states = step_states
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(pr, 'step_states')
+        db.commit()
+        db.refresh(pr)
+
+        logger.info(f"go-back-step {practice_id}: {current_order} -> {prev_step.order}")
+        return jsonify({
+            "ok": True,
+            "current_step_order": pr.current_step_order,
+        })
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Go back practice step error: {e}")
         return jsonify({"error": str(e)}), 500
 
 

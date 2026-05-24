@@ -3427,7 +3427,8 @@ function updateValidateBarForWorkflow(wf) {
   if (!wf || !wf.current_step_order) {
     // Workflow completato — mostra riepilogo step completati
     document.getElementById('validateInfo').innerHTML = '<i class="bi bi-check-circle-fill" style="color:var(--md-success)"></i> Workflow completato';
-    document.querySelector('.validate-bar .vb-right').innerHTML = '';
+    document.querySelector('.validate-bar .vb-right').innerHTML =
+      `<button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem" onclick="goBackWorkflowStep()" title="Torna allo step precedente"><i class="bi bi-arrow-left"></i> Indietro</button>`;
     infoVal.innerHTML = '<span class="badge-ok"><i class="bi bi-check-circle-fill"></i> Completato</span>';
     _renderStepSummaries(wf);
     return;
@@ -3465,11 +3466,94 @@ function updateValidateBarForWorkflow(wf) {
       <button class="btn-validate" onclick="executeAndAdvance()"><i class="bi bi-play-fill"></i> Esegui e avanza</button>
     `;
   }
-  document.querySelector('.validate-bar .vb-right').innerHTML = buttonsHtml;
+  // Bottone "Indietro" se non siamo al primo step
+  const isFirstStep = currentStep.order === (wf.steps[0]?.order || 1);
+  const backBtn = isFirstStep ? '' :
+    `<button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem;margin-right:6px" onclick="goBackWorkflowStep()" title="Torna allo step precedente"><i class="bi bi-arrow-left"></i> Indietro</button>`;
+
+  document.querySelector('.validate-bar .vb-right').innerHTML = backBtn + buttonsHtml;
 
   // Mostra riepilogo step completati
   _renderStepSummaries(wf);
+
+  // Mostra pannello confronto dati estratti
+  _renderComparisonPanel(wf);
 }
+
+function _renderComparisonPanel(wf) {
+  // Rimuovi pannello precedente
+  document.querySelectorAll('.comparison-panel').forEach(el => el.remove());
+
+  const fields = wf.comparison_fields;
+  if (!fields || Object.keys(fields).length === 0) return;
+  // Mostra solo se c'è uno step corrente (non workflow completato)
+  if (!wf.current_step_order) return;
+
+  const stepperBar = document.getElementById('workflowStepperBar');
+  if (!stepperBar) return;
+
+  // Ordina: prima i campi con mismatch, poi alfabetico
+  const sorted = Object.entries(fields).sort((a, b) => {
+    const aMismatch = a[1].some(e => !e.match);
+    const bMismatch = b[1].some(e => !e.match);
+    if (aMismatch !== bMismatch) return aMismatch ? -1 : 1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  const hasMismatch = sorted.some(([, entries]) => entries.some(e => !e.match));
+  const borderColor = hasMismatch ? 'var(--md-error, #B3261E)' : 'var(--md-outline-variant, #c4c7c5)';
+  const totalFields = sorted.length;
+  const mismatchCount = sorted.filter(([, entries]) => entries.some(e => !e.match)).length;
+
+  let rowsHtml = '';
+  for (const [fieldName, entries] of sorted) {
+    const isMismatch = entries.some(e => !e.match);
+    const icon = isMismatch
+      ? '<i class="bi bi-exclamation-triangle-fill" style="color:var(--md-error);font-size:0.75rem"></i>'
+      : '<i class="bi bi-check-lg" style="color:var(--md-success);font-size:0.75rem"></i>';
+    const label = humanLabel(fieldName);
+
+    if (entries.length === 1) {
+      // Campo presente una sola volta
+      const val = String(entries[0].value);
+      const displayVal = val.length > 80 ? val.substring(0, 80) + '...' : val;
+      rowsHtml += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04)">
+        ${icon} <span style="min-width:140px;color:var(--md-on-surface-variant);font-size:0.78rem">${label}</span>
+        <span style="font-size:0.8rem;font-weight:500">${_escHtml(displayVal)}</span>
+      </div>`;
+    } else {
+      // Campo con valori multipli — mostra tutti
+      const valuesHtml = entries.map(e => {
+        const val = String(e.value);
+        const displayVal = val.length > 60 ? val.substring(0, 60) + '...' : val;
+        const style = isMismatch ? 'color:var(--md-error);font-weight:600' : 'font-weight:500';
+        return `<span style="${style};font-size:0.8rem">${_escHtml(displayVal)}</span>`;
+      }).join('<span style="color:var(--md-on-surface-variant);font-size:0.7rem;margin:0 4px">vs</span>');
+      rowsHtml += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);flex-wrap:wrap">
+        ${icon} <span style="min-width:140px;color:var(--md-on-surface-variant);font-size:0.78rem">${label}</span>
+        <div style="display:flex;gap:4px;align-items:baseline;flex-wrap:wrap">${valuesHtml}</div>
+      </div>`;
+    }
+  }
+
+  const summaryText = mismatchCount > 0
+    ? `${totalFields} campi estratti — <strong style="color:var(--md-error)">${mismatchCount} discordanz${mismatchCount === 1 ? 'a' : 'e'}</strong>`
+    : `${totalFields} campi estratti — tutti concordi`;
+
+  const panelHtml = `<div class="comparison-panel" style="margin:4px 16px 8px;border:1px solid ${borderColor};border-radius:10px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;background:var(--md-surface-container-low, #f8f5f0)"
+         onclick="var d=document.getElementById('comparisonBody');d.style.display=d.style.display==='none'?'':'none';this.querySelector('.chevron').classList.toggle('bi-chevron-down');this.querySelector('.chevron').classList.toggle('bi-chevron-right')">
+      <i class="bi bi-table" style="color:var(--md-primary);font-size:1rem"></i>
+      <span style="flex:1;font-size:0.82rem">${summaryText}</span>
+      <i class="bi bi-chevron-right chevron" style="font-size:0.7rem;color:var(--md-on-surface-variant)"></i>
+    </div>
+    <div id="comparisonBody" style="display:none;padding:8px 14px;max-height:300px;overflow-y:auto">${rowsHtml}</div>
+  </div>`;
+
+  stepperBar.insertAdjacentHTML('afterend', panelHtml);
+}
+
+function _escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function _renderStepSummaries(wf) {
   const completedSteps = (wf.steps || []).filter(s => s.state?.status === 'completed' && s.display_data?.summary_fields?.length > 0);
@@ -3549,6 +3633,25 @@ async function executeAndAdvance() {
 
 async function skipWorkflowStep() {
   await completeCurrentStep('skip');
+}
+
+async function goBackWorkflowStep() {
+  const practiceId = window._practiceId;
+  if (!practiceId) return;
+  try {
+    const r = await fetch(`/api/ao/practice/${practiceId}/go-back-step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await r.json();
+    if (data.error) { alert('Errore: ' + data.error); return; }
+    const cached = await loadPracticeFromDb(practiceId);
+    if (cached?.result_data) {
+      await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+    }
+  } catch (e) {
+    alert('Errore: ' + e.message);
+  }
 }
 
 async function completeCurrentStep(action) {

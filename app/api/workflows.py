@@ -117,21 +117,30 @@ def list_workflows():
         
         workflows = query.order_by(Workflow.created_at.desc()).all()
         
+        def _wf_dict(w):
+            d = {
+                'id': w.id,
+                'name': w.name,
+                'description': w.description,
+                'status': w.status.value,
+                'steps_count': len(w.steps),
+                'participants_count': len(w.participants),
+                'ao_agent_id': w.ao_agent_id,
+                'ao_agent_name': w.ao_agent_name,
+                'created_at': w.created_at.isoformat(),
+            }
+            # Includi ao_agent_id dal primo step se non a livello workflow
+            if not d['ao_agent_id']:
+                for s in sorted(w.steps, key=lambda s: s.order):
+                    cfg = s.skip_conditions or {}
+                    if cfg.get('ao_agent_id'):
+                        d['ao_agent_id'] = cfg['ao_agent_id']
+                        d['ao_agent_name'] = cfg.get('ao_agent_name', '')
+                        break
+            return d
+
         return jsonify({
-            'workflows': [
-                {
-                    'id': w.id,
-                    'name': w.name,
-                    'description': w.description,
-                    'status': w.status.value,
-                    'steps_count': len(w.steps),
-                    'participants_count': len(w.participants),
-                    'ao_agent_id': w.ao_agent_id,
-                    'ao_agent_name': w.ao_agent_name,
-                    'created_at': w.created_at.isoformat()
-                }
-                for w in workflows
-            ]
+            'workflows': [_wf_dict(w) for w in workflows]
         }), 200
         
     except Exception as e:
