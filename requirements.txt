@@ -32,5 +32,9 @@ openpyxl==3.1.2
 # Stripe payments
 stripe>=11.0.0
 
+# Google Document AI OCR
+google-cloud-documentai>=2.20.0
+pypdf>=4.0.0
+
 # Production server
 gunicorn==21.2.0
