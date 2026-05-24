@@ -114,11 +114,24 @@ def ao_practice_list_files(practice_id):
     try:
         files = db.query(PracticeFile).filter_by(practice_id=practice_id).all()
         return jsonify({"files": [
-            {"file_name": f.file_name, "mime_type": f.mime_type}
+            {"file_name": f.file_name, "mime_type": f.mime_type, "has_ocr": bool(f.ocr_text)}
             for f in files
         ]})
     except Exception as e:
         logger.error(f"List practice files: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@pratiche_bp.route('/practice-files/<practice_id>/<file_name>/ocr-text', methods=['GET'])
+def ao_practice_file_ocr_text(practice_id, file_name):
+    """Restituisce il testo OCR estratto da un file."""
+    try:
+        pf = db.query(PracticeFile).filter_by(practice_id=practice_id, file_name=file_name).first()
+        if not pf:
+            return jsonify({"error": "File non trovato"}), 404
+        return jsonify({"text": pf.ocr_text or "", "has_ocr": bool(pf.ocr_text)})
+    except Exception as e:
+        logger.error(f"OCR text read: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -359,6 +372,22 @@ def _start_background_processing(agent_id, practice_id, pr=None):
                                 logger.info(f"BG file {fn}: retry {attempt + 1}/{MAX_RETRIES} tra {delay}s...")
                                 import time as _time
                                 _time.sleep(delay)
+
+                            # OCR: estrai testo se non già fatto
+                            from app.services import ocr_service
+                            if ocr_service.is_configured():
+                                pf_ocr = bg_db.query(PracticeFile).filter_by(
+                                    practice_id=practice_id, file_name=fn
+                                ).first()
+                                if pf_ocr and not pf_ocr.ocr_text:
+                                    _log(f"🔍 OCR Document AI in corso...")
+                                    ocr_result = ocr_service.extract_text(data, mt)
+                                    if ocr_result["text"]:
+                                        pf_ocr.ocr_text = ocr_result["text"]
+                                        bg_db.commit()
+                                        _log(f"📝 OCR: {len(ocr_result['text'])} chars, {ocr_result['pages']} pag, conf={ocr_result['confidence']}")
+                                    elif ocr_result["error"]:
+                                        _log(f"⚠️ OCR fallito: {ocr_result['error'][:60]}")
 
                             _log(f"⏳ AO processLocal in corso...")
                             files = {f"file_0": (data, mt, fn)}

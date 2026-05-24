@@ -452,6 +452,7 @@ class PracticeFile(Base):
     file_name = Column(String(255), nullable=False)
     mime_type = Column(String(100), nullable=False)
     data = Column(LargeBinary, nullable=False)
+    ocr_text = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self):
