@@ -375,6 +375,8 @@ def _start_background_processing(agent_id, practice_id, pr=None):
 
                             # OCR: estrai testo se non già fatto
                             from app.services import ocr_service
+                            if not ocr_service.is_configured():
+                                _log(f"⚠️ OCR non configurato (PROJECT={bool(os.getenv('GOOGLE_CLOUD_PROJECT'))}, PROC={bool(os.getenv('DOCUMENTAI_PROCESSOR_ID'))}, CREDS={bool(os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or os.getenv('GOOGLE_CREDENTIALS_JSON'))})")
                             if ocr_service.is_configured():
                                 pf_ocr = bg_db.query(PracticeFile).filter_by(
                                     practice_id=practice_id, file_name=fn
