@@ -1,4 +1,4 @@
-"""Google Document AI OCR service — estrae testo da PDF/immagini."""
+"""Google Document AI OCR service — estrae testo e coordinate da PDF/immagini."""
 
 import json
 import logging
@@ -56,7 +56,6 @@ def _count_pdf_pages(file_bytes: bytes) -> int:
         reader = pypdf.PdfReader(BytesIO(file_bytes))
         return len(reader.pages)
     except ImportError:
-        # Fallback: conta i marker /Type /Page nel PDF raw
         import re
         return len(re.findall(rb'/Type\s*/Page(?!s)', file_bytes))
     except Exception:
@@ -97,8 +96,59 @@ def _make_client():
     return client, resource_name, documentai
 
 
+def _extract_word_boxes(doc, page_offset=0):
+    """Estrae bounding box per ogni parola (token) dal documento.
+
+    Returns lista di {page, text, bbox: {x, y, w, h}} con coordinate normalizzate (0-1).
+    """
+    words = []
+    for page_idx, page in enumerate(doc.pages):
+        for token in page.tokens:
+            if not token.layout or not token.layout.bounding_poly:
+                continue
+
+            # Testo del token
+            text = ""
+            if token.layout.text_anchor and token.layout.text_anchor.text_segments:
+                for seg in token.layout.text_anchor.text_segments:
+                    start = seg.start_index
+                    end = seg.end_index
+                    text += doc.text[start:end]
+            text = text.strip()
+            if not text:
+                continue
+
+            # Coordinate normalizzate (0-1)
+            nv = token.layout.bounding_poly.normalized_vertices
+            if nv and len(nv) >= 4:
+                x_min = min(v.x for v in nv)
+                y_min = min(v.y for v in nv)
+                x_max = max(v.x for v in nv)
+                y_max = max(v.y for v in nv)
+            elif token.layout.bounding_poly.vertices and page.dimension:
+                verts = token.layout.bounding_poly.vertices
+                pw = page.dimension.width or 1
+                ph = page.dimension.height or 1
+                x_min = min(v.x / pw for v in verts)
+                y_min = min(v.y / ph for v in verts)
+                x_max = max(v.x / pw for v in verts)
+                y_max = max(v.y / ph for v in verts)
+            else:
+                continue
+
+            words.append({
+                "p": page_offset + page_idx,
+                "t": text,
+                "x": round(x_min, 4),
+                "y": round(y_min, 4),
+                "w": round(x_max - x_min, 4),
+                "h": round(y_max - y_min, 4),
+            })
+    return words
+
+
 def _process_single(client, resource_name, documentai, file_bytes, mime_type):
-    """Processa un singolo documento e restituisce (text, pages, confidences)."""
+    """Processa un singolo documento e restituisce (text, pages, confidences, words)."""
     raw_document = documentai.RawDocument(content=file_bytes, mime_type=mime_type)
     request = documentai.ProcessRequest(name=resource_name, raw_document=raw_document)
     result = client.process_document(request=request)
@@ -110,11 +160,13 @@ def _process_single(client, resource_name, documentai, file_bytes, mime_type):
             if block.layout and block.layout.confidence:
                 confidences.append(block.layout.confidence)
 
-    return doc.text, len(doc.pages), confidences
+    words = _extract_word_boxes(doc)
+
+    return doc.text, len(doc.pages), confidences, words
 
 
 def extract_text(file_bytes: bytes, mime_type: str = "application/pdf") -> dict:
-    """Estrae testo da un file usando Google Document AI.
+    """Estrae testo e coordinate parole da un file usando Google Document AI.
 
     Per PDF con più di 15 pagine, divide automaticamente in chunk
     e unisce i risultati.
@@ -124,16 +176,17 @@ def extract_text(file_bytes: bytes, mime_type: str = "application/pdf") -> dict:
             "text": str,           # testo completo
             "pages": int,          # numero pagine
             "confidence": float,   # confidenza media (0-1)
+            "words": list,         # [{p, t, x, y, w, h}, ...] coordinate normalizzate
             "error": str | None,
         }
     """
     if not is_configured():
-        return {"text": "", "pages": 0, "confidence": 0, "error": "Document AI non configurato"}
+        return {"text": "", "pages": 0, "confidence": 0, "words": [], "error": "Document AI non configurato"}
 
     try:
         from google.cloud import documentai_v1 as documentai
     except ImportError:
-        return {"text": "", "pages": 0, "confidence": 0, "error": "google-cloud-documentai non installato"}
+        return {"text": "", "pages": 0, "confidence": 0, "words": [], "error": "google-cloud-documentai non installato"}
 
     try:
         client, resource_name, documentai = _make_client()
@@ -145,38 +198,43 @@ def extract_text(file_bytes: bytes, mime_type: str = "application/pdf") -> dict:
             needs_split = page_count > _MAX_PAGES_PER_REQUEST
 
         if not needs_split:
-            text, pages, confidences = _process_single(
+            text, pages, confidences, words = _process_single(
                 client, resource_name, documentai, file_bytes, mime_type
             )
         else:
-            # Split PDF in chunk da 15 pagine
             logger.info(f"PDF con {page_count} pagine — split in chunk da {_MAX_PAGES_PER_REQUEST}")
             chunks = _split_pdf(file_bytes, _MAX_PAGES_PER_REQUEST)
             all_text = []
             pages = 0
             confidences = []
+            words = []
 
             for i, chunk_bytes in enumerate(chunks):
                 logger.info(f"OCR chunk {i + 1}/{len(chunks)}...")
-                chunk_text, chunk_pages, chunk_confs = _process_single(
+                chunk_text, chunk_pages, chunk_confs, chunk_words = _process_single(
                     client, resource_name, documentai, chunk_bytes, mime_type
                 )
+                # Offset page numbers per chunk
+                for w in chunk_words:
+                    w["p"] += pages
                 all_text.append(chunk_text)
                 pages += chunk_pages
                 confidences.extend(chunk_confs)
+                words.extend(chunk_words)
 
             text = "\n".join(all_text)
 
         avg_confidence = sum(confidences) / len(confidences) if confidences else 0
-        logger.info(f"OCR completato: {pages} pagine, {len(text)} chars, confidence={avg_confidence:.2f}")
+        logger.info(f"OCR completato: {pages} pagine, {len(text)} chars, {len(words)} parole, confidence={avg_confidence:.2f}")
 
         return {
             "text": text,
             "pages": pages,
             "confidence": round(avg_confidence, 3),
+            "words": words,
             "error": None,
         }
 
     except Exception as e:
         logger.error(f"OCR error: {e}")
-        return {"text": "", "pages": 0, "confidence": 0, "error": str(e)}
+        return {"text": "", "pages": 0, "confidence": 0, "words": [], "error": str(e)}

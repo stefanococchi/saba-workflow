@@ -723,6 +723,23 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 <!-- ============================================ -->
 <!-- MODAL: SINTESI DOCUMENTO                     -->
 <!-- ============================================ -->
+<div class="prat-modal-overlay" id="modalOcr">
+  <div class="prat-modal-box" style="max-width:700px">
+    <div class="prat-modal-header">
+      <h3><i class="bi bi-body-text"></i> Testo OCR</h3>
+      <button class="prat-modal-close" onclick="document.getElementById('modalOcr').classList.remove('active')">&times;</button>
+    </div>
+    <div class="prat-modal-body">
+      <div style="font-size:0.75rem;color:var(--md-on-surface-variant);margin-bottom:8px" id="ocrTitle"></div>
+      <div id="ocrBody" style="background:var(--md-surface-container);border-radius:10px;min-height:100px"></div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn btn-sm btn-outline-secondary" style="border-radius:10px" onclick="navigator.clipboard.writeText(document.querySelector('#ocrBody pre')?.textContent||'')"><i class="bi bi-clipboard"></i> Copia</button>
+        <button class="btn btn-sm btn-outline-secondary" style="border-radius:10px" onclick="document.getElementById('modalOcr').classList.remove('active')">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="prat-modal-overlay" id="modalSintesi">
   <div class="prat-modal-box">
     <div class="prat-modal-header">
@@ -2114,6 +2131,9 @@ function switchFileTab(hash) {
 
   const files = window._practiceFiles || {};
   const file = files[hash];
+
+  // Carica coordinate OCR per highlight nel PDF
+  if (file?.fileName) _loadOcrWords(file.fileName);
   if (!file) return;
 
   const dataScroll = document.getElementById('dataScroll');
@@ -2198,6 +2218,7 @@ function switchFileTab(hash) {
     </div>
     <div class="doc-type-actions">
       <button onclick="reprocessFile('${hash}')" title="Rielabora"><i class="bi bi-arrow-repeat"></i></button>
+      <button onclick="showOcrText('${_escAttr(fn)}')" title="Testo OCR"><i class="bi bi-body-text"></i> OCR</button>
       <button onclick="openSintesiForFile('${hash}')" title="Genera sintesi"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
       <button onclick="deleteFile('${hash}')" title="Elimina file" style="color:var(--md-error)"><i class="bi bi-trash3"></i></button>
     </div>
@@ -2394,11 +2415,93 @@ async function renderPreviewPages() {
   }
 }
 
+let _ocrWords = null; // OCR word boxes per il file corrente: [{p, t, x, y, w, h}]
+
+async function _loadOcrWords(fileName) {
+  const practiceId = window._practiceId;
+  if (!practiceId || !fileName) { _ocrWords = null; return; }
+  try {
+    const r = await fetch(`/api/ao/practice-files/${practiceId}/${encodeURIComponent(fileName)}/ocr-text`);
+    const data = await r.json();
+    _ocrWords = (data.words && data.words.length > 0) ? data.words : null;
+  } catch (e) { _ocrWords = null; }
+}
+
 function highlightPreviewText(searchText) {
   if (!searchText || !previewPages.length) return;
-  // Remove old highlights
   document.querySelectorAll('.preview-page .hl-marker').forEach(e => e.remove());
 
+  // Se abbiamo le coordinate OCR, usale (funziona anche su PDF scansionati)
+  if (_ocrWords && _ocrWords.length > 0) {
+    _highlightWithOcr(searchText);
+    return;
+  }
+  // Fallback: text layer PDF.js
+  _highlightWithPdfJs(searchText);
+}
+
+function _highlightWithOcr(searchText) {
+  const lower = searchText.toLowerCase().trim();
+  const searchWords = lower.split(/\s+/).filter(w => w.length > 0);
+  if (searchWords.length === 0) return;
+
+  // Trova parole OCR che matchano (cerchiamo tutte le parole della query)
+  let matchedBoxes = [];
+
+  // Strategia 1: cerca la frase intera concatenando parole OCR consecutive
+  for (let i = 0; i < _ocrWords.length; i++) {
+    let combined = '';
+    let boxes = [];
+    for (let j = i; j < Math.min(i + searchWords.length + 5, _ocrWords.length); j++) {
+      const w = _ocrWords[j];
+      if (w.p !== _ocrWords[i].p) break; // stessa pagina
+      combined += (combined ? ' ' : '') + w.t.toLowerCase();
+      boxes.push(w);
+      if (combined.includes(lower)) {
+        matchedBoxes = boxes;
+        break;
+      }
+    }
+    if (matchedBoxes.length > 0) break;
+  }
+
+  // Strategia 2: fallback su singole parole
+  if (matchedBoxes.length === 0) {
+    for (const sw of searchWords) {
+      if (sw.length < 2) continue;
+      for (const w of _ocrWords) {
+        if (w.t.toLowerCase().includes(sw)) {
+          matchedBoxes.push(w);
+          break;
+        }
+      }
+    }
+  }
+
+  if (matchedBoxes.length === 0) return;
+
+  let firstHl = null;
+  for (const box of matchedBoxes) {
+    const pageDiv = previewPages[box.p]?.div;
+    if (!pageDiv) continue;
+    const pageW = pageDiv.offsetWidth;
+    const pageH = pageDiv.offsetHeight;
+
+    const hl = document.createElement('div');
+    hl.className = 'hl-marker';
+    hl.style.left = (box.x * pageW) + 'px';
+    hl.style.top = (box.y * pageH) + 'px';
+    hl.style.width = (box.w * pageW + 4) + 'px';
+    hl.style.height = (box.h * pageH + 2) + 'px';
+    pageDiv.appendChild(hl);
+    if (!firstHl) firstHl = hl;
+  }
+  if (firstHl) {
+    setTimeout(() => firstHl.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+  }
+}
+
+function _highlightWithPdfJs(searchText) {
   const lower = searchText.toLowerCase().trim();
   const terms = [lower];
   const words = lower.split(/\s+/);
@@ -2430,7 +2533,6 @@ function highlightPreviewText(searchText) {
             hl.style.height = (h + 3) + 'px';
             previewPages[p].div.appendChild(hl);
             if (!found) {
-              // Scroll first highlight into view
               setTimeout(() => hl.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
             }
             found = true;
@@ -3068,6 +3170,33 @@ function closeCatalogEdit() {
 }
 
 // ── Sintesi ────────────────────────────────────────────────────────
+async function showOcrText(fileName) {
+  const practiceId = window._practiceId;
+  if (!practiceId) return;
+
+  // Mostra modal con spinner
+  const modal = document.getElementById('modalOcr');
+  const body = document.getElementById('ocrBody');
+  const title = document.getElementById('ocrTitle');
+  title.textContent = fileName;
+  body.innerHTML = '<div class="text-center py-4"><div class="prat-spinner" style="width:24px;height:24px;border-width:3px"></div></div>';
+  modal.classList.add('active');
+
+  try {
+    const r = await fetch(`/api/ao/practice-files/${practiceId}/${encodeURIComponent(fileName)}/ocr-text`);
+    const data = await r.json();
+    if (data.error) {
+      body.innerHTML = `<div style="color:var(--md-error);padding:16px"><i class="bi bi-exclamation-triangle"></i> ${data.error}</div>`;
+    } else if (!data.has_ocr) {
+      body.innerHTML = '<div style="color:var(--md-on-surface-variant);padding:16px;text-align:center"><i class="bi bi-info-circle"></i> Nessun testo OCR disponibile per questo file</div>';
+    } else {
+      body.innerHTML = `<pre style="white-space:pre-wrap;word-break:break-word;font-size:0.82rem;line-height:1.5;padding:16px;margin:0;max-height:70vh;overflow-y:auto;font-family:inherit">${_escHtml(data.text)}</pre>`;
+    }
+  } catch (e) {
+    body.innerHTML = `<div style="color:var(--md-error);padding:16px">Errore: ${e.message}</div>`;
+  }
+}
+
 function openSintesiForFile(hash) {
   sintesiFileHash = hash;
   document.getElementById('sintesiResult').style.display = 'none';

@@ -129,7 +129,7 @@ def ao_practice_file_ocr_text(practice_id, file_name):
         pf = db.query(PracticeFile).filter_by(practice_id=practice_id, file_name=file_name).first()
         if not pf:
             return jsonify({"error": "File non trovato"}), 404
-        return jsonify({"text": pf.ocr_text or "", "has_ocr": bool(pf.ocr_text)})
+        return jsonify({"text": pf.ocr_text or "", "has_ocr": bool(pf.ocr_text), "words": pf.ocr_words or []})
     except Exception as e:
         logger.error(f"OCR text read: {e}")
         return jsonify({"error": str(e)}), 500
@@ -384,8 +384,11 @@ def _start_background_processing(agent_id, practice_id, pr=None):
                                     ocr_result = ocr_service.extract_text(data, mt)
                                     if ocr_result["text"]:
                                         pf_ocr.ocr_text = ocr_result["text"]
+                                        pf_ocr.ocr_words = ocr_result.get("words", [])
+                                        from sqlalchemy.orm.attributes import flag_modified as _fm_ocr
+                                        _fm_ocr(pf_ocr, 'ocr_words')
                                         bg_db.commit()
-                                        _log(f"📝 OCR: {len(ocr_result['text'])} chars, {ocr_result['pages']} pag, conf={ocr_result['confidence']}")
+                                        _log(f"📝 OCR: {len(ocr_result['text'])} chars, {len(ocr_result.get('words',[]))} parole, conf={ocr_result['confidence']}")
                                     elif ocr_result["error"]:
                                         _log(f"⚠️ OCR fallito: {ocr_result['error'][:60]}")
 

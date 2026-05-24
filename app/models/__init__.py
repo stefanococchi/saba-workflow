@@ -453,6 +453,7 @@ class PracticeFile(Base):
     mime_type = Column(String(100), nullable=False)
     data = Column(LargeBinary, nullable=False)
     ocr_text = Column(Text, nullable=True)
+    ocr_words = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self):
