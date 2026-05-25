@@ -1018,6 +1018,8 @@ async function loadNewPracticeWorkflows() {
     const r = await fetch('/api/workflows');
     const data = await r.json();
     _availableWorkflows = data.workflows || [];
+    // Opzione hardcoded "Solo OCR"
+    sel.innerHTML += '<option value="__ocr_only__">🔍 Solo OCR (test)</option>';
     _availableWorkflows.forEach(wf => {
       sel.innerHTML += `<option value="${wf.id}">${wf.name} — ${wf.steps_count || '?'} step</option>`;
     });
@@ -1188,13 +1190,139 @@ async function saveFilesToDb() {
   }
 }
 
+async function processOcrOnly() {
+  const practiceId = getPracticeId();
+  const _s = id => document.getElementById(id);
+  const _hide = id => { const e = _s(id); if (e) e.style.display = 'none'; };
+  const _show = (id, d) => { const e = _s(id); if (e) e.style.display = d || ''; };
+
+  // Salva blob per preview
+  for (const f of stagedFiles) processedFileBlobs[f.name] = f;
+
+  selectedPracticeId = practiceId;
+  window._practiceId = practiceId;
+
+  _hide('dropZoneContainer');
+  _show('practiceResults', 'flex');
+  _hide('previewPanel');
+  if (_s('infoPracticeId')) _s('infoPracticeId').textContent = practiceId;
+  if (_s('infoValidation')) _s('infoValidation').innerHTML = '<span class="badge-draft">OCR in corso</span>';
+  if (_s('fileTabsBar')) _s('fileTabsBar').innerHTML = '';
+  _hide('validateBar');
+  _hide('validationContainer');
+  _hide('workflowStepperBar');
+  _hide('workflowSelector');
+  practiceWorkflow = null;
+
+  const dataScroll = _s('dataScroll');
+  if (!dataScroll) return;
+  dataScroll.innerHTML = `
+    <div class="text-center py-5">
+      <div class="prat-spinner" style="width:30px;height:30px;border-width:3px"></div>
+      <div style="margin-top:12px;font-weight:500;font-size:0.85rem" id="ocrProgressMsg">OCR in corso: 0/${stagedFiles.length} file...</div>
+    </div>`;
+
+  const fd = new FormData();
+  stagedFiles.forEach((f, i) => fd.append('file_' + i, f));
+  const filesToProcess = [...stagedFiles];
+  stagedFiles = [];
+  renderStagedFiles();
+
+  try {
+    const r = await fetch(`/api/ao/practice/ocr-only/${practiceId}`, { method: 'POST', body: fd });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    // Mostra risultati OCR
+    if (_s('infoValidation')) _s('infoValidation').innerHTML = '<span class="badge-success">OCR completato</span>';
+
+    // Tab file
+    const tabsBar = _s('fileTabsBar');
+    if (tabsBar) {
+      tabsBar.innerHTML = data.results.map((res, i) =>
+        `<button class="file-tab${i === 0 ? ' active' : ''}" onclick="showOcrResult(${i})" id="ocrTab${i}">${res.file_name.length > 25 ? res.file_name.slice(0,22)+'...' : res.file_name}</button>`
+      ).join('');
+    }
+
+    // Salva risultati e mostra il primo
+    window._ocrResults = data.results;
+    window._ocrFiles = filesToProcess;
+    showOcrResult(0);
+
+  } catch (e) {
+    dataScroll.innerHTML = `<div class="text-center py-4" style="color:var(--md-error)"><i class="bi bi-exclamation-triangle"></i> Errore OCR: ${e.message}</div>`;
+  }
+}
+
+function showOcrResult(idx) {
+  const res = window._ocrResults?.[idx];
+  if (!res) return;
+
+  // Aggiorna tab attivo
+  document.querySelectorAll('.file-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+
+  const dataScroll = document.getElementById('dataScroll');
+  if (!dataScroll) return;
+
+  const confPct = res.confidence != null ? (res.confidence * 100).toFixed(1) + '%' : 'N/A';
+  const confColor = res.confidence > 0.9 ? 'var(--md-success-color,green)' : res.confidence > 0.7 ? 'orange' : 'var(--md-error,red)';
+  const wordsCount = res.words_count || 0;
+  const pagesCount = res.pages || '?';
+  const textPreview = (res.text || '').trim();
+
+  dataScroll.innerHTML = `
+    <div style="padding:16px">
+      <div class="d-flex gap-3 flex-wrap mb-3">
+        <div class="card" style="padding:12px 16px;border-radius:12px;min-width:120px">
+          <div style="font-size:0.72rem;color:var(--md-on-surface-variant)">Confidence</div>
+          <div style="font-size:1.3rem;font-weight:700;color:${confColor}">${confPct}</div>
+        </div>
+        <div class="card" style="padding:12px 16px;border-radius:12px;min-width:120px">
+          <div style="font-size:0.72rem;color:var(--md-on-surface-variant)">Pagine</div>
+          <div style="font-size:1.3rem;font-weight:700">${pagesCount}</div>
+        </div>
+        <div class="card" style="padding:12px 16px;border-radius:12px;min-width:120px">
+          <div style="font-size:0.72rem;color:var(--md-on-surface-variant)">Parole</div>
+          <div style="font-size:1.3rem;font-weight:700">${wordsCount}</div>
+        </div>
+        <div class="card" style="padding:12px 16px;border-radius:12px;min-width:120px">
+          <div style="font-size:0.72rem;color:var(--md-on-surface-variant)">Caratteri</div>
+          <div style="font-size:1.3rem;font-weight:700">${textPreview.length.toLocaleString()}</div>
+        </div>
+      </div>
+      ${res.error ? `<div class="alert" style="background:var(--md-error-container);color:var(--md-on-error-container);border-radius:12px;padding:12px;margin-bottom:12px"><i class="bi bi-exclamation-triangle"></i> ${res.error}</div>` : ''}
+      <div style="font-size:0.78rem;font-weight:600;margin-bottom:8px">Testo estratto</div>
+      <pre style="background:var(--md-surface-container);border-radius:12px;padding:16px;font-size:0.8rem;max-height:500px;overflow:auto;white-space:pre-wrap;word-break:break-word;border:1px solid var(--md-outline-variant)">${textPreview || '<em style="opacity:0.5">Nessun testo estratto</em>'}</pre>
+    </div>`;
+
+  // Mostra preview PDF se disponibile
+  const file = window._ocrFiles?.[idx];
+  if (file) {
+    const previewPanel = document.getElementById('previewPanel');
+    if (previewPanel) {
+      previewPanel.style.display = '';
+      const url = URL.createObjectURL(file);
+      const viewer = previewPanel.querySelector('.pdf-viewer, iframe') || previewPanel;
+      if (viewer.tagName === 'IFRAME') {
+        viewer.src = url;
+      } else {
+        previewPanel.innerHTML = '<iframe src="' + url + '" style="width:100%;height:100%;border:none;border-radius:12px"></iframe>';
+      }
+    }
+  }
+}
+
 async function processAllFilesBackground() {
   const selectedWfId = document.getElementById('newPracticeWorkflow')?.value;
   if (!selectedWfId) return alert('Seleziona un workflow');
+  if (stagedFiles.length === 0) return alert('Nessun file da elaborare');
+
+  // ── Modalità Solo OCR ──
+  if (selectedWfId === '__ocr_only__') return processOcrOnly();
+
   const agentId = getAgentId();
   const practiceId = getPracticeId();
   if (!agentId) return alert('Nessun agente configurato nel workflow. Configura un agente negli step.');
-  if (stagedFiles.length === 0) return alert('Nessun file da elaborare');
 
   // Traccia la pratica come selezionata
   selectedPracticeId = practiceId;

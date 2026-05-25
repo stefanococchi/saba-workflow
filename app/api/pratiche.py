@@ -489,6 +489,49 @@ def _start_background_processing(agent_id, practice_id, pr=None):
     })
 
 
+@pratiche_bp.route('/practice/ocr-only/<practice_id>', methods=['POST'])
+def ao_practice_ocr_only(practice_id):
+    """Esegue solo OCR (Document AI) sui file caricati, senza AO."""
+    from app.services import ocr_service
+    if not ocr_service.is_configured():
+        return jsonify({"error": "OCR (Document AI) non configurato sul server"}), 400
+
+    files = []
+    for key in request.files:
+        upload = request.files[key]
+        content = upload.read()
+        if content:
+            files.append((upload.filename, upload.content_type or 'application/octet-stream', content))
+
+    if not files:
+        return jsonify({"error": "Nessun file caricato"}), 400
+
+    results = []
+    for fn, mt, data in files:
+        try:
+            ocr_result = ocr_service.extract_text(data, mt)
+            results.append({
+                "file_name": fn,
+                "text": ocr_result.get("text", ""),
+                "pages": ocr_result.get("pages", 0),
+                "confidence": ocr_result.get("confidence"),
+                "words_count": len(ocr_result.get("words", [])),
+                "error": ocr_result.get("error"),
+            })
+        except Exception as e:
+            logger.error(f"OCR-only error on {fn}: {e}")
+            results.append({
+                "file_name": fn,
+                "text": "",
+                "pages": 0,
+                "confidence": None,
+                "words_count": 0,
+                "error": str(e),
+            })
+
+    return jsonify({"ok": True, "results": results})
+
+
 @pratiche_bp.route('/practice/<agent_id>/<practice_id>/process-all', methods=['POST'])
 def ao_practice_process_all(agent_id, practice_id):
     """Avvia elaborazione di tutti i file pendenti in background (legacy — usa init-and-process per flusso completo)."""
