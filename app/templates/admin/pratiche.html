@@ -1453,6 +1453,14 @@ function pollProcessingStatus(practiceId, agentId) {
             msgEl.textContent = `File ${fileNum} di ${job.total}: ${shortName}`;
           }
 
+          // Mostra anteprima del file in corso di elaborazione
+          if (job.current_file && job.current_file !== window._processingPreviewFile) {
+            window._processingPreviewFile = job.current_file;
+            document.getElementById('previewPanel').style.display = '';
+            window._practiceId = practiceId;
+            loadPreview(job.current_file, null);
+          }
+
           // Se c'è progresso nuovo, ricarica split-view con i risultati parziali
           if (job.progress > 0 && job.progress !== (_lastPollProgress[practiceId] ?? -1)) {
             _lastPollProgress[practiceId] = job.progress;
@@ -1473,6 +1481,7 @@ function pollProcessingStatus(practiceId, agentId) {
       } else if (job.status === 'completed' || job.status === 'error' || job.status === 'stopped') {
         delete _activePolls[practiceId];
         delete _lastPollProgress[practiceId];
+        delete window._processingPreviewFile;
         // Ricarica la pratica come se l'utente cliccasse sulla lista
         try {
           await selectPractice(practiceId);
@@ -1564,17 +1573,22 @@ async function checkOngoingProcessing(practiceId) {
         </div>`;
       document.getElementById('infoValidation').innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${job.progress}/${job.total}</span>`;
 
+      // Mostra anteprima del file in corso di elaborazione
+      window._practiceId = practiceId;
+      if (job.current_file) {
+        document.getElementById('previewPanel').style.display = '';
+        window._processingPreviewFile = job.current_file;
+        loadPreview(job.current_file, null);
+      }
+
       // Mostra risultati parziali se ci sono
       if (job.progress > 0) {
         document.getElementById('previewPanel').style.display = '';
         const cached = await loadPracticeFromDb(practiceId);
         if (cached?.result_data?.files && Object.keys(cached.result_data.files).length > 0) {
           window._practiceFiles = cached.result_data.files;
-          window._practiceId = practiceId;
           _renderFileTabs(cached.result_data.files, practiceId, job.progress, job.total);
         }
-      } else {
-        document.getElementById('previewPanel').style.display = 'none';
       }
 
       pollProcessingStatus(practiceId, getAgentId());
@@ -2301,13 +2315,15 @@ function switchFileTab(hash) {
     const isProcessing = hasActivePolling || hasProcessingBadge;
 
     if (isProcessing) {
-      // Elaborazione background attiva — spinner, nessun bottone
+      // Elaborazione background attiva — spinner + anteprima del file
       dataScroll.innerHTML = `
         <div class="text-center py-5" style="color:var(--md-on-surface-variant)">
           <div class="prat-spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto 12px"></div>
           <div style="font-weight:500;font-size:0.85rem">Elaborazione in corso...</div>
           <div style="margin-top:6px;font-size:0.78rem">Il file verrà elaborato automaticamente</div>
         </div>`;
+      // Mostra anteprima PDF/immagine anche durante l'elaborazione
+      loadPreview(fn, hash);
     } else if (hasWorkflowStep) {
       // Workflow step attivo ma nessun processing — usa "Esegui e avanza" in basso
       dataScroll.innerHTML = `
