@@ -656,6 +656,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
           <h6 class="mb-0" id="catalogTypesTitle" style="font-weight:600"></h6>
           <div class="d-flex gap-1">
             <button class="btn btn-sm btn-outline-secondary" onclick="allCatalogTypesOn()" style="border-radius:8px;font-size:0.72rem"><i class="bi bi-check-all"></i> Tutti on</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="pasteCatalogType()" style="border-radius:8px;font-size:0.72rem"><i class="bi bi-clipboard-plus"></i> Incolla tipo</button>
             <button class="btn btn-sm btn-primary" onclick="newCatalogType()" style="border-radius:8px">
               <i class="bi bi-plus-lg"></i> Aggiungi tipo
             </button>
@@ -672,6 +673,8 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
             <span id="editTypeName"></span>
           </h6>
           <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="renameCatalogType()" style="border-radius:8px"><i class="bi bi-pencil-square"></i> Rinomina</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyCatalogType(editingTypeId)" style="border-radius:8px"><i class="bi bi-copy"></i> Copia</button>
             <button class="btn btn-sm btn-outline-secondary" onclick="closeCatalogEdit()" style="border-radius:8px">Annulla</button>
             <button class="btn btn-sm btn-primary" onclick="saveCatalogEdit()" style="border-radius:8px"><i class="bi bi-check-lg"></i> Salva</button>
           </div>
@@ -776,6 +779,21 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── Toast ──────────────────────────────────────────────────────────
+function showToast(msg) {
+  let el = document.getElementById('pratToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pratToast';
+    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--md-inverse-surface,#333);color:var(--md-inverse-on-surface,#fff);padding:10px 24px;border-radius:12px;font-size:0.85rem;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._tm);
+  el._tm = setTimeout(() => el.style.opacity = '0', 2500);
+}
 
 // ── State ──────────────────────────────────────────────────────────
 let agents = [];
@@ -2779,6 +2797,7 @@ function renderCatalogTypes() {
         </div>
         <div class="type-fields">${qNames}${questions.length > 5 ? ', ...' : ''}</div>
         <div class="type-actions" onclick="event.stopPropagation()">
+          <button class="btn btn-sm btn-outline-secondary" onclick="copyCatalogType('${esc(typeId)}')" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-copy"></i> Copia</button>
           <button class="btn btn-sm btn-outline-primary" onclick="openCatalogEdit('${esc(typeId)}')" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-pencil"></i> Modifica</button>
           <button class="btn btn-sm btn-outline-danger" onclick="deleteCatalogType('${esc(typeId)}')" style="border-radius:6px;font-size:0.75rem"><i class="bi bi-trash3"></i> Elimina</button>
         </div>
@@ -2940,6 +2959,85 @@ async function deleteCatalogType(typeId) {
     alert('Errore eliminazione: ' + e.message);
     loadCatalog(); // Ricarica per ripristinare
   }
+}
+
+function renameCatalogType() {
+  const oldId = editingTypeId;
+  if (!oldId) return;
+  const newId = prompt('Nuovo nome per il tipo documento:', oldId);
+  if (!newId || !newId.trim()) return;
+  const cleaned = newId.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  if (cleaned === oldId) return;
+  if (catalogData[cleaned]) return alert('Il tipo "' + cleaned + '" esiste già');
+  catalogData[cleaned] = catalogData[oldId];
+  delete catalogData[oldId];
+  editingTypeId = cleaned;
+  document.getElementById('editTypeName').textContent = cleaned;
+  showToast('Rinominato: ' + oldId + ' → ' + cleaned);
+}
+
+async function copyCatalogType(typeId) {
+  const def = catalogData[typeId];
+  if (!def) return alert('Tipo non trovato');
+  const clean = JSON.parse(JSON.stringify(def));
+  delete clean._disabled;
+  delete clean._originalQuestions;
+  const payload = {};
+  payload[typeId] = clean;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    showToast('Tipo documento "' + typeId + '" copiato negli appunti');
+  } catch (e) {
+    // Fallback: mostra in un prompt copiabile
+    const ta = document.createElement('textarea');
+    ta.value = JSON.stringify(payload, null, 2);
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Tipo documento "' + typeId + '" copiato negli appunti');
+  }
+}
+
+async function pasteCatalogType() {
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    text = prompt('Incolla qui il JSON del tipo documento:');
+  }
+  if (!text || !text.trim()) return;
+  let parsed;
+  try {
+    parsed = JSON.parse(text.trim());
+  } catch {
+    return alert('Il contenuto degli appunti non è un JSON valido');
+  }
+  // Supporta sia {typeId: {def}} sia {identification: ..., extraction: ...}
+  let types = {};
+  if (parsed.extraction || parsed.identification) {
+    const id = prompt('ID per il tipo documento importato:');
+    if (!id || !id.trim()) return;
+    types[id.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')] = parsed;
+  } else {
+    types = parsed;
+  }
+  let added = 0;
+  for (let [id, def] of Object.entries(types)) {
+    if (!def || typeof def !== 'object') continue;
+    const newId = prompt('Nome del tipo documento:', id);
+    if (!newId || !newId.trim()) continue;
+    id = newId.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    if (catalogData[id]) {
+      if (!confirm('Il tipo "' + id + '" esiste già. Sovrascriverlo?')) continue;
+    }
+    catalogData[id] = def;
+    added++;
+  }
+  if (added === 0) return alert('Nessun tipo documento importato');
+  renderCatalogTypes();
+  syncCatalogToAO();
+  showToast(added + ' tipo/i documento importato/i');
 }
 
 function openCatalogEdit(typeId) {
