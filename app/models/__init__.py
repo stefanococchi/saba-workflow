@@ -454,6 +454,7 @@ class PracticeFile(Base):
     data = Column(LargeBinary, nullable=False)
     ocr_text = Column(Text, nullable=True)
     ocr_words = Column(JSON, nullable=True)
+    ocr_page_dims = Column(JSON, nullable=True)  # {page_idx: {w, h}} dimensioni pagina da Document AI
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self):

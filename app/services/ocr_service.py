@@ -100,6 +100,7 @@ def _extract_word_boxes(doc, page_offset=0):
     """Estrae bounding box per ogni parola (token) dal documento.
 
     Returns lista di {page, text, bbox: {x, y, w, h}} con coordinate normalizzate (0-1).
+    Le coordinate sono nello spazio di Document AI (eventualmente raddrizzato).
     """
     words = []
     for page_idx, page in enumerate(doc.pages):
@@ -147,8 +148,23 @@ def _extract_word_boxes(doc, page_offset=0):
     return words
 
 
+def _extract_page_dims(doc, page_offset=0):
+    """Estrae dimensioni pagina come viste da Document AI (post-rotazione).
+
+    Returns dict {page_index: {w, h}} con dimensioni in punti.
+    """
+    dims = {}
+    for page_idx, page in enumerate(doc.pages):
+        if page.dimension:
+            dims[page_offset + page_idx] = {
+                "w": round(page.dimension.width or 0, 1),
+                "h": round(page.dimension.height or 0, 1),
+            }
+    return dims
+
+
 def _process_single(client, resource_name, documentai, file_bytes, mime_type):
-    """Processa un singolo documento e restituisce (text, pages, confidences, words)."""
+    """Processa un singolo documento e restituisce (text, pages, confidences, words, page_dims)."""
     raw_document = documentai.RawDocument(content=file_bytes, mime_type=mime_type)
     request = documentai.ProcessRequest(name=resource_name, raw_document=raw_document)
     result = client.process_document(request=request)
@@ -161,8 +177,9 @@ def _process_single(client, resource_name, documentai, file_bytes, mime_type):
                 confidences.append(block.layout.confidence)
 
     words = _extract_word_boxes(doc)
+    page_dims = _extract_page_dims(doc)
 
-    return doc.text, len(doc.pages), confidences, words
+    return doc.text, len(doc.pages), confidences, words, page_dims
 
 
 def extract_text(file_bytes: bytes, mime_type: str = "application/pdf") -> dict:
@@ -198,7 +215,7 @@ def extract_text(file_bytes: bytes, mime_type: str = "application/pdf") -> dict:
             needs_split = page_count > _MAX_PAGES_PER_REQUEST
 
         if not needs_split:
-            text, pages, confidences, words = _process_single(
+            text, pages, confidences, words, page_dims = _process_single(
                 client, resource_name, documentai, file_bytes, mime_type
             )
         else:
@@ -208,19 +225,22 @@ def extract_text(file_bytes: bytes, mime_type: str = "application/pdf") -> dict:
             pages = 0
             confidences = []
             words = []
+            page_dims = {}
 
             for i, chunk_bytes in enumerate(chunks):
                 logger.info(f"OCR chunk {i + 1}/{len(chunks)}...")
-                chunk_text, chunk_pages, chunk_confs, chunk_words = _process_single(
+                chunk_text, chunk_pages, chunk_confs, chunk_words, chunk_dims = _process_single(
                     client, resource_name, documentai, chunk_bytes, mime_type
                 )
                 # Offset page numbers per chunk
                 for w in chunk_words:
                     w["p"] += pages
+                offset_dims = {pages + k: v for k, v in chunk_dims.items()}
                 all_text.append(chunk_text)
                 pages += chunk_pages
                 confidences.extend(chunk_confs)
                 words.extend(chunk_words)
+                page_dims.update(offset_dims)
 
             text = "\n".join(all_text)
 
@@ -232,6 +252,7 @@ def extract_text(file_bytes: bytes, mime_type: str = "application/pdf") -> dict:
             "pages": pages,
             "confidence": round(avg_confidence, 3),
             "words": words,
+            "page_dims": page_dims,
             "error": None,
         }
 

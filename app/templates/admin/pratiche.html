@@ -2,8 +2,13 @@
 
 {% block title %}{{ t.get('pratiche', 'Pratiche') }} - Saba Workflow{% endblock %}
 
+{% block page_title %}{{ t.get('pratiche', 'Pratiche') }}{% endblock %}
+
 {% block extra_css %}
 <style>
+/* Hide the page header bar — tabs already serve as the page title */
+#adminMain > .d-flex:first-child { display: none !important; }
+
 /* === PRATICHE-SPECIFIC STYLES === */
 
 /* Stat cards */
@@ -2283,7 +2288,7 @@ function toggleExtraction(id) {
 // ── Split-view: file tabs & grouped extraction ─────────────────────
 let currentPreviewZoom = 1;
 
-function switchFileTab(hash) {
+async function switchFileTab(hash) {
   // Highlight active tab
   document.querySelectorAll('.file-tab-item').forEach(t => t.classList.remove('active'));
   const activeTab = document.querySelector(`.file-tab-item[data-hash="${hash}"]`);
@@ -2292,8 +2297,8 @@ function switchFileTab(hash) {
   const files = window._practiceFiles || {};
   const file = files[hash];
 
-  // Carica coordinate OCR per highlight nel PDF
-  if (file?.fileName) _loadOcrWords(file.fileName);
+  // Carica coordinate OCR (con page_dims per rotazione) PRIMA del preview
+  if (file?.fileName) await _loadOcrWords(file.fileName);
   if (!file) return;
 
   const dataScroll = document.getElementById('dataScroll');
@@ -2303,7 +2308,7 @@ function switchFileTab(hash) {
   const exState = file.state?.extraction || 'pending';
   const idState = file.state?.identification || 'pending';
 
-  // Update preview panel
+  // Update preview panel (dopo OCR per avere page_dims per rotazione)
   loadPreview(fn, hash);
 
   // If not yet processed
@@ -2532,6 +2537,20 @@ async function loadPreview(fileName, hash) {
   }
 }
 
+function _detectPageRotation(pageIdx, pdfVp) {
+  // Confronta aspect ratio PDF.js vs Document AI per rilevare rotazione
+  if (!_ocrPageDims) return 0;
+  const dims = _ocrPageDims[String(pageIdx)] || _ocrPageDims[pageIdx];
+  if (!dims || !dims.w || !dims.h) return 0;
+
+  const pdfLandscape = pdfVp.width > pdfVp.height;
+  const ocrLandscape = dims.w > dims.h;
+
+  // Se uno è landscape e l'altro portrait, serve rotazione 90°
+  if (pdfLandscape !== ocrLandscape) return 90;
+  return 0;
+}
+
 async function renderPreviewPages() {
   if (!previewPdf) return;
   const previewBody = document.getElementById('previewBody');
@@ -2544,10 +2563,15 @@ async function renderPreviewPages() {
   for (let i = 1; i <= previewPdf.numPages; i++) {
     const page = await previewPdf.getPage(i);
     const vp1 = page.getViewport({ scale: 1 });
+
+    // Rileva se serve raddrizzare la pagina per allinearla alle coordinate OCR
+    const rotation = _detectPageRotation(i - 1, vp1);
+    const vpBase = page.getViewport({ scale: 1, rotation });
+
     // Fit to container width, then apply zoom
-    const fitScale = containerWidth / vp1.width;
+    const fitScale = containerWidth / vpBase.width;
     const scale = fitScale * currentPreviewZoom;
-    const vp = page.getViewport({ scale });
+    const vp = page.getViewport({ scale, rotation });
 
     const div = document.createElement('div');
     div.className = 'preview-page';
@@ -2578,15 +2602,17 @@ async function renderPreviewPages() {
 }
 
 let _ocrWords = null; // OCR word boxes per il file corrente: [{p, t, x, y, w, h}]
+let _ocrPageDims = null; // Dimensioni pagina da Document AI: {page_idx: {w, h}}
 
 async function _loadOcrWords(fileName) {
   const practiceId = window._practiceId;
-  if (!practiceId || !fileName) { _ocrWords = null; return; }
+  if (!practiceId || !fileName) { _ocrWords = null; _ocrPageDims = null; return; }
   try {
     const r = await fetch(`/api/ao/practice-files/${practiceId}/${encodeURIComponent(fileName)}/ocr-text`);
     const data = await r.json();
     _ocrWords = (data.words && data.words.length > 0) ? data.words : null;
-  } catch (e) { _ocrWords = null; }
+    _ocrPageDims = data.page_dims || null;
+  } catch (e) { _ocrWords = null; _ocrPageDims = null; }
 }
 
 function highlightPreviewText(searchText) {
