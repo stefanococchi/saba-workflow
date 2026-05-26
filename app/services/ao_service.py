@@ -285,24 +285,34 @@ def practice_reprocess_file(agent_id, practice_id, content_hash, team_id=None):
 
 # ── Post-Stipula Sintesi ──────────────────────────────────────────
 
-def sintesi_generate(agent_id, prompt, file_content, file_mime, file_name,
+def sintesi_generate(agent_id, prompt, file_content=None, file_mime=None, file_name=None,
                      document_type_id=None, document_type_label=None,
-                     model="gemini-2.5-flash", team_id=None):
-    """Genera una sintesi di un documento notarile."""
+                     ocr_text=None, model="gemini-2.5-flash", team_id=None):
+    """Genera una sintesi di un documento notarile.
+    Se ocr_text è fornito, lo invia come testo (più veloce).
+    Altrimenti invia il file binario.
+    """
     input_json = {"mode": "generate", "prompt": prompt, "model": model}
     if document_type_id:
         input_json["documentTypeId"] = document_type_id
     if document_type_label:
         input_json["documentTypeLabel"] = document_type_label
-    ext = Path(file_name).suffix.lstrip(".")
-    binary = {
-        "file_1": {
-            "data": base64.b64encode(file_content).decode(),
-            "mimeType": file_mime,
-            "fileName": file_name,
-            "fileExtension": ext,
+
+    binary = None
+    if ocr_text:
+        # Passa il testo OCR direttamente — molto più veloce
+        input_json["ocrText"] = ocr_text
+    elif file_content:
+        ext = Path(file_name).suffix.lstrip(".")
+        binary = {
+            "file_1": {
+                "data": base64.b64encode(file_content).decode(),
+                "mimeType": file_mime,
+                "fileName": file_name,
+                "fileExtension": ext,
+            }
         }
-    }
+
     result = run_agent(agent_id, input_json, binary=binary, team_id=team_id)
     return poll_task(result["taskId"], max_wait=180.0)
 

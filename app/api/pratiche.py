@@ -711,28 +711,58 @@ def ao_task_status(task_id):
 
 @pratiche_bp.route('/sintesi/generate', methods=['POST'])
 def ao_sintesi_generate():
-    """Genera sintesi di un documento notarile."""
+    """Genera sintesi di un documento notarile.
+    Accetta OCR text (veloce) oppure file binario come fallback.
+    """
     try:
         prompt = request.form.get("prompt", "")
         agent_id = request.form.get("agent_id", "")
         document_type_id = request.form.get("documentTypeId")
         document_type_label = request.form.get("documentTypeLabel")
         model = request.form.get("model", "gemini-2.5-flash")
+        ocr_text = request.form.get("ocr_text", "")
 
         upload = request.files.get("file")
-        if not upload:
-            return jsonify({"error": "File mancante"}), 400
+        if not ocr_text and not upload:
+            return jsonify({"error": "Testo OCR o file mancante"}), 400
 
-        content = upload.read()
+        content = upload.read() if upload else None
         result = ao_service.sintesi_generate(
-            agent_id, prompt, content, upload.content_type, upload.filename,
+            agent_id, prompt,
+            file_content=content,
+            file_mime=upload.content_type if upload else None,
+            file_name=upload.filename if upload else None,
             document_type_id=document_type_id,
             document_type_label=document_type_label,
+            ocr_text=ocr_text or None,
             model=model,
         )
         return jsonify(result)
     except Exception as e:
         logger.error(f"AO sintesi generate: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@pratiche_bp.route('/sintesi/pdf', methods=['POST'])
+def ao_sintesi_pdf():
+    """Genera un PDF elegante dalla sintesi."""
+    try:
+        body = request.get_json()
+        text = body.get("text", "")
+        title = body.get("title", "Sintesi documento")
+        if not text:
+            return jsonify({"error": "Testo mancante"}), 400
+
+        from app.services.pdf_service import generate_sintesi_pdf
+        pdf_bytes = generate_sintesi_pdf(title, text)
+
+        return Response(
+            pdf_bytes,
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="sintesi.pdf"'}
+        )
+    except Exception as e:
+        logger.error(f"Sintesi PDF: {e}")
         return jsonify({"error": str(e)}), 500
 
 

@@ -36,5 +36,9 @@ stripe>=11.0.0
 google-cloud-documentai>=2.20.0
 pypdf>=4.0.0
 
+# PDF generation
+fpdf2>=2.7.0
+markdown>=3.5.0
+
 # Production server
 gunicorn==21.2.0

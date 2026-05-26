@@ -765,7 +765,10 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
         </select>
       </div>
       <div class="sintesi-panel" id="sintesiResult" style="display:none">
-        <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--md-on-surface-variant);font-weight:600;margin-bottom:12px">Risultato sintesi</div>
+        <div class="d-flex justify-content-between align-items-center" style="margin-bottom:12px">
+          <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--md-on-surface-variant);font-weight:600">Risultato sintesi</div>
+          <button class="btn btn-sm btn-outline-primary" onclick="downloadSintesiPdf()" style="border-radius:10px"><i class="bi bi-file-earmark-pdf"></i> Scarica PDF</button>
+        </div>
         <div class="sintesi-text" id="sintesiText"></div>
       </div>
       <div class="d-flex justify-content-end gap-2 mt-3">
@@ -3475,8 +3478,14 @@ function closeSintesi() {
   document.getElementById('modalSintesi').classList.remove('active');
 }
 
+let _lastSintesiMarkdown = ''; // Testo raw per PDF
+
 async function generateSintesi() {
-  const agentId = getAgentId();
+  // Trova l'agente post-stipula-sintesi
+  const sintesiAgent = agents.find(a => (a.name || '').toLowerCase().includes('sintesi'));
+  if (!sintesiAgent) return alert('Agente post-stipula-sintesi non trovato');
+  const agentId = sintesiAgent.id;
+
   const prompt = document.getElementById('sintesiPrompt').value;
   const model = document.getElementById('sintesiModel').value;
   if (!prompt.trim()) return alert('Inserisci un prompt');
@@ -3486,17 +3495,50 @@ async function generateSintesi() {
   btn.innerHTML = '<span class="prat-spinner"></span> Generazione...';
 
   try {
-    // For now, use the practice file data - in production this would need actual file content
+    const fileData = window._practiceFiles?.[sintesiFileHash];
+    const fileName = fileData?.fileName || sintesiFileHash.replace(/^db_/, '');
+    const practiceId = getPracticeId();
+
+    // Prova a recuperare il testo OCR (molto più veloce)
+    let ocrText = '';
+    try {
+      const ocrR = await fetch(`/api/ao/practice-files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}/ocr-text`);
+      if (ocrR.ok) {
+        const ocrData = await ocrR.json();
+        if (ocrData.text) ocrText = ocrData.text;
+      }
+    } catch (_) { /* fallback a file */ }
+
     const fd = new FormData();
     fd.append('agent_id', agentId);
     fd.append('prompt', prompt);
     fd.append('model', model);
-    // File would need to be attached - for now show the endpoint is wired
+    if (fileData?.documentTypeId) fd.append('documentTypeId', fileData.documentTypeId);
+    if (fileData?.documentTypeLabel) fd.append('documentTypeLabel', fileData.documentTypeLabel);
+
+    if (ocrText) {
+      // Fast path: invia testo OCR
+      fd.append('ocr_text', ocrText);
+    } else {
+      // Fallback: invia file binario
+      let file = processedFileBlobs[fileName];
+      if (!file) {
+        const dlR = await fetch(`/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`);
+        if (!dlR.ok) throw new Error(`File "${fileName}" non trovato`);
+        const blob = await dlR.blob();
+        file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
+      }
+      fd.append('file', file);
+    }
+
     const r = await fetch('/api/ao/sintesi/generate', { method: 'POST', body: fd });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     const summary = data.output?.summary || data.output?.text || JSON.stringify(data.output, null, 2);
-    document.getElementById('sintesiText').textContent = summary;
+
+    // Salva raw per PDF e renderizza come HTML formattato
+    _lastSintesiMarkdown = summary;
+    document.getElementById('sintesiText').innerHTML = _renderMarkdown(summary);
     document.getElementById('sintesiResult').style.display = '';
   } catch (e) {
     alert('Errore sintesi: ' + e.message);
@@ -3506,8 +3548,51 @@ async function generateSintesi() {
   }
 }
 
+function _renderMarkdown(md) {
+  // Markdown semplice → HTML
+  let html = md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h4 style="color:var(--md-primary);margin:12px 0 6px;font-size:0.95rem">$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3 style="color:var(--md-primary);margin:14px 0 8px;font-size:1.05rem">$1</h3>')
+    .replace(/^# (.+)$/gm, '<h2 style="color:var(--md-primary);margin:16px 0 8px;font-size:1.15rem">$1</h2>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/^[-*] (.+)$/gm, '<li style="margin:3px 0;margin-left:16px;list-style:disc">$1</li>')
+    .replace(/^\d+[.)]\s?(.+)$/gm, '<li style="margin:3px 0;margin-left:16px;list-style:decimal">$1</li>')
+    .replace(/^---+$/gm, '<hr style="border:none;border-top:1px solid var(--md-outline-variant);margin:12px 0">')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+  return html;
+}
+
+async function downloadSintesiPdf() {
+  if (!_lastSintesiMarkdown) return;
+  const fileData = window._practiceFiles?.[sintesiFileHash];
+  const fileName = fileData?.fileName || 'documento';
+  const title = `Sintesi: ${fileName}`;
+  try {
+    const r = await fetch('/api/ao/sintesi/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: _lastSintesiMarkdown, title }),
+    });
+    if (!r.ok) throw new Error('Errore generazione PDF');
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sintesi_${fileName.replace(/\.[^.]+$/, '')}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Errore PDF: ' + e.message);
+  }
+}
+
 async function assistPrompt() {
-  const agentId = getAgentId();
+  const sintesiAgent = agents.find(a => (a.name || '').toLowerCase().includes('sintesi'));
+  if (!sintesiAgent) return alert('Agente post-stipula-sintesi non trovato');
+  const agentId = sintesiAgent.id;
   const draft = document.getElementById('sintesiPrompt').value;
   const model = document.getElementById('sintesiModel').value;
   if (!draft.trim()) return;
