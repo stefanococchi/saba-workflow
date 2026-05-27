@@ -2204,7 +2204,7 @@ function humanLabel(key) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-// Field grouping rules
+// Field grouping rules (fallback when catalog is not available)
 const FIELD_GROUPS = {
   anagrafica: { icon: 'bi-person', label: 'Dati Anagrafici', keys: ['cognome','nome','codice_fiscale','data_nascita','luogo_nascita','nazionalita','sesso','stato_civile','residenza'] },
   documento: { icon: 'bi-card-heading', label: 'Dati Documento', keys: ['tipo_documento','numero_documento','lato_documento','ente_rilascio','data_rilascio','data_scadenza'] },
@@ -2212,7 +2212,47 @@ const FIELD_GROUPS = {
   pagamento: { icon: 'bi-credit-card', label: 'Dati Pagamento', keys: ['importo','iban','banca'] },
 };
 
-function groupFields(data) {
+// Carica catalogo silenziosamente per l'agente corrente (senza toccare UI catalogo)
+async function ensureCatalogLoaded() {
+  const agentId = getAgentId();
+  if (!agentId || Object.keys(catalogData).length > 0) return;
+  try {
+    const r = await fetch(`/api/ao/catalog/${agentId}`);
+    const data = await r.json();
+    if (data.error) return;
+    let fresh = data.output?.catalog || data.catalog || {};
+    if (fresh.info?.catalog) fresh = fresh.info.catalog;
+    if (fresh.catalog && typeof fresh.catalog === 'object' && !fresh.identification) fresh = fresh.catalog;
+    const filtered = {};
+    for (const [k, v] of Object.entries(fresh)) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && (v.identification || v.extraction)) {
+        filtered[k] = v;
+      }
+    }
+    if (Object.keys(filtered).length > 0) catalogData = filtered;
+  } catch (e) { /* silenzioso */ }
+}
+
+function groupFields(data, docType) {
+  // Se il catalogo ha le questions per questo tipo documento, usa il loro ordine
+  const questions = catalogData[docType]?.extraction?.questions;
+  if (questions && questions.length > 0) {
+    const ordered = [];
+    const assigned = new Set();
+    for (const q of questions) {
+      if (q.disabled) continue;
+      const qId = q.id;
+      const match = Object.keys(data).find(k => k.toLowerCase() === qId.toLowerCase());
+      if (match) { ordered.push([match, data[match]]); assigned.add(match); }
+    }
+    // Campi rimanenti non nel catalogo
+    for (const [key, val] of Object.entries(data)) {
+      if (!assigned.has(key)) ordered.push([key, val]);
+    }
+    return { catalogo: { icon: 'bi-journal-bookmark', label: humanLabel(docType || 'Dati Estratti'), fields: ordered } };
+  }
+
+  // Fallback: raggruppamento hardcoded
   const groups = {};
   const assigned = new Set();
 
@@ -2350,6 +2390,9 @@ async function switchFileTab(hash) {
     return;
   }
 
+  // Assicura catalogo caricato per ordine campi
+  await ensureCatalogLoaded();
+
   // Render grouped fields
   let html = '';
 
@@ -2369,8 +2412,8 @@ async function switchFileTab(hash) {
     </div>
   </div>`;
 
-  // Group and render fields
-  const groups = groupFields(data);
+  // Group and render fields (usa ordine catalogo se disponibile)
+  const groups = groupFields(data, docType);
   for (const [groupId, group] of Object.entries(groups)) {
     html += `<div class="field-group">
       <div class="field-group-title"><i class="bi ${group.icon}"></i> ${group.label}</div>
