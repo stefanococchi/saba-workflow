@@ -168,9 +168,8 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 
 /* Elabora 3-column layout */
 .elabora-layout { display: flex; gap: 0; height: calc(100vh - 160px); min-height: 500px; border: 1px solid var(--md-outline-variant); border-radius: 16px; }
-.elabora-col-agents { width: 56px; flex-shrink: 0; background: var(--md-surface-container-lowest); border-right: 1px solid var(--md-outline-variant); overflow: visible; position: relative; z-index: 10; border-radius: 16px 0 0 16px; }
-.elabora-col-practices { width: 250px; flex-shrink: 0; background: var(--md-surface-container-lowest); border-right: 1px solid var(--md-outline-variant); overflow-y: auto; }
-.elabora-col-agents .card, .elabora-col-practices .card { border-radius: 0; height: 100%; border: none; }
+.elabora-col-practices { width: 250px; flex-shrink: 0; background: var(--md-surface-container-lowest); border-right: 1px solid var(--md-outline-variant); overflow-y: auto; border-radius: 16px 0 0 16px; }
+.elabora-col-practices .card { border-radius: 0; height: 100%; border: none; }
 .elabora-col-detail { flex: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 
 .practice-row {
@@ -184,30 +183,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 .practice-row .pr-meta { font-size: 0.72rem; color: var(--md-on-surface-variant); display: flex; gap: 8px; margin-top: 2px; }
 
 @media (max-width: 1024px) { .elabora-col-practices { display: none; } }
-@media (max-width: 768px) { .elabora-col-agents, .elabora-col-practices { display: none; } }
-
-/* Agent icon rail */
-.agent-rail-item {
-  padding: 12px 0; cursor: pointer; border-bottom: 1px solid var(--md-outline-variant);
-  display: flex; align-items: center; justify-content: center; transition: background 0.1s;
-  position: relative;
-}
-.agent-rail-item:hover { background: var(--md-surface-container-low); }
-.agent-rail-item.active { background: rgba(139,105,20,0.12); }
-.agent-rail-item.active::before {
-  content: ''; position: absolute; left: 0; top: 25%; bottom: 25%; width: 3px;
-  background: var(--md-primary); border-radius: 0 3px 3px 0;
-}
-.agent-rail-item .agent-icon { background: var(--md-surface-container); }
-.agent-rail-item.active .agent-icon { background: var(--md-primary-container); color: var(--md-on-primary-container); }
-/* Agent tooltip (rendered via JS to escape overflow clipping) */
-.agent-rail-tooltip {
-  position: fixed; padding: 5px 12px; border-radius: 8px; font-size: 0.78rem;
-  white-space: nowrap; z-index: 9999; pointer-events: none;
-  background: var(--md-on-surface, #1D1B16); color: var(--md-surface-container-lowest, #fff);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.12s;
-}
-.agent-rail-tooltip.visible { opacity: 1; }
+@media (max-width: 768px) { .elabora-col-practices { display: none; } }
 
 /* Split view */
 .split-view { display: flex; flex: 1; overflow: hidden; }
@@ -408,17 +384,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
   <select id="agentSelect" style="display:none"></select>
   <div class="elabora-layout">
 
-    <!-- COL 1: Agents (icon rail) -->
-    <div class="elabora-col-agents">
-      <div class="card" style="height:100%">
-        <div class="card-header text-center" style="font-size:1rem;padding:12px 0;color:var(--md-primary)">
-          <i class="bi bi-cpu"></i>
-        </div>
-        <div id="elaboraAgentsList" style="overflow-y:auto"></div>
-      </div>
-    </div>
-
-    <!-- COL 2: Saved practices for selected agent -->
+    <!-- COL 1: Saved practices for selected agent -->
     <div class="elabora-col-practices">
       <div class="card" style="height:100%">
         <div class="card-header d-flex justify-content-between align-items-center" style="font-size:0.85rem;font-weight:600">
@@ -756,7 +722,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
     </div>
     <div class="prat-modal-body">
       <label class="form-label" style="font-size:0.8rem">Prompt di sintesi</label>
-      <textarea class="prat-textarea" id="sintesiPrompt" rows="3" placeholder="Descrivi cosa vuoi estrarre o sintetizzare dal documento..."></textarea>
+      <textarea class="prat-textarea" id="sintesiPrompt" rows="3" placeholder="Descrivi cosa vuoi estrarre o sintetizzare dal documento...">Prepara una sintesi del documento evidenziando le informazioni principali</textarea>
       <div class="d-flex gap-2 mt-2 mb-3">
         <button class="btn btn-sm btn-outline-secondary" onclick="assistPrompt()" style="border-radius:12px"><i class="bi bi-magic"></i> Migliora prompt</button>
         <select id="sintesiModel" class="form-select form-select-sm" style="border-radius:12px;width:180px">
@@ -898,21 +864,7 @@ function getAgentIcon(name) {
 }
 
 function renderElaboraAgents() {
-  const list = document.getElementById('elaboraAgentsList');
-  if (!agents.length) {
-    list.innerHTML = '<div class="text-center py-3" style="color:var(--md-on-surface-variant);font-size:0.75rem"><i class="bi bi-dash" style="opacity:0.4"></i></div>';
-    return;
-  }
-  list.innerHTML = '';
-  agents.forEach(a => {
-    const name = a.name || a.agentName || a.id;
-    const isActive = a.id === selectedElaboraAgentId;
-    const icon = getAgentIcon(name);
-    list.innerHTML += `
-      <div class="agent-rail-item ${isActive ? 'active' : ''}" onclick="selectElaboraAgent('${a.id}')" data-tooltip="${name}">
-        <div class="agent-icon"><i class="bi ${icon}"></i></div>
-      </div>`;
-  });
+  // Agent rail rimossa — no-op (la selezione agent avviene in automatico)
 }
 
 async function selectElaboraAgent(agentId) {
@@ -920,7 +872,6 @@ async function selectElaboraAgent(agentId) {
   selectedPracticeId = null;
   // Also set the hidden agentSelect for processAllFiles compatibility
   document.getElementById('agentSelect').value = agentId;
-  renderElaboraAgents();
   document.getElementById('btnNewPractice').disabled = false;
 
   // Show practices for this agent
@@ -1064,9 +1015,33 @@ function getAgentId() {
   // Fallback: sidebar o select
   return selectedElaboraAgentId || document.getElementById('agentSelect')?.value || '';
 }
+const _MESI_IT = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+const _USERNAME = '{{ session.get("username", "USR") }}'.substring(0, 3).toUpperCase();
+
+function _generatePracticeId() {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mmm = _MESI_IT[now.getMonth()];
+  const yy = String(now.getFullYear()).slice(-2);
+  const prefix = `${_USERNAME}-${dd}${mmm}${yy}`;
+
+  // Conta pratiche esistenti con stesso prefisso per il progressivo
+  const existing = document.querySelectorAll('#elaboraPracticesList .pr-id');
+  let maxN = 0;
+  existing.forEach(el => {
+    const txt = (el.title || el.textContent || '').trim();
+    if (txt.startsWith(prefix)) {
+      const tail = txt.slice(prefix.length);
+      if (!tail) maxN = Math.max(maxN, 1);
+      else if (tail.match(/^-(\d+)$/)) maxN = Math.max(maxN, parseInt(tail.slice(1)));
+    }
+  });
+  return maxN === 0 ? `${prefix}-1` : `${prefix}-${maxN + 1}`;
+}
+
 function getPracticeId() {
   let id = document.getElementById('practiceIdInput').value.trim();
-  if (!id) { id = 'PRAT-' + Date.now(); document.getElementById('practiceIdInput').value = id; }
+  if (!id) { id = _generatePracticeId(); document.getElementById('practiceIdInput').value = id; }
   return id;
 }
 
@@ -4224,30 +4199,5 @@ async function startWorkflowForPractice() {
   }
 }
 
-// ── Agent rail tooltip (appended to body to avoid overflow clip) ────
-(function() {
-  const tip = document.createElement('div');
-  tip.className = 'agent-rail-tooltip';
-  document.body.appendChild(tip);
-
-  document.addEventListener('mouseenter', e => {
-    if (!e.target || !e.target.closest) return;
-    const item = e.target.closest('.agent-rail-item[data-tooltip]');
-    if (!item) return;
-    tip.textContent = item.dataset.tooltip;
-    const rect = item.getBoundingClientRect();
-    tip.style.left = (rect.right + 8) + 'px';
-    tip.style.top = (rect.top + rect.height / 2) + 'px';
-    tip.style.transform = 'translateY(-50%)';
-    tip.classList.add('visible');
-  }, true);
-
-  document.addEventListener('mouseleave', e => {
-    if (!e.target || !e.target.closest) return;
-    const item = e.target.closest('.agent-rail-item[data-tooltip]');
-    if (!item) return;
-    tip.classList.remove('visible');
-  }, true);
-})();
 </script>
 {% endblock %}
