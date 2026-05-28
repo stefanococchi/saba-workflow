@@ -92,6 +92,10 @@ def ao_practice_upload_files(practice_id):
             if existing:
                 existing.data = content
                 existing.mime_type = mime
+                # Resetta OCR: il contenuto è cambiato, il vecchio OCR non è più valido
+                existing.ocr_text = None
+                existing.ocr_words = None
+                existing.ocr_page_dims = None
             else:
                 db.add(PracticeFile(
                     practice_id=practice_id,
@@ -162,6 +166,9 @@ def ao_practice_process(agent_id, practice_id):
                 if existing:
                     existing.data = content
                     existing.mime_type = mime
+                    existing.ocr_text = None
+                    existing.ocr_words = None
+                    existing.ocr_page_dims = None
                 else:
                     db.add(PracticeFile(
                         practice_id=practice_id,
@@ -208,11 +215,14 @@ def ao_practice_init_and_process(agent_id, practice_id):
             if not content:
                 continue
             if upload.filename in existing_names:
-                # Aggiorna file esistente
+                # Aggiorna file esistente — resetta OCR perché il contenuto potrebbe essere cambiato
                 pf = db.query(PracticeFile).filter_by(practice_id=practice_id, file_name=upload.filename).first()
                 if pf:
                     pf.data = content
                     pf.mime_type = upload.content_type or 'application/octet-stream'
+                    pf.ocr_text = None
+                    pf.ocr_words = None
+                    pf.ocr_page_dims = None
             else:
                 pf = PracticeFile(
                     practice_id=practice_id,
@@ -411,8 +421,9 @@ def _start_background_processing(agent_id, practice_id, pr=None):
 
                             for _fh, _fd in ao_files.items():
                                 _did = _fd.get('identification', {}).get('documentId', '?')
+                                _ao_fn = _fd.get('fileName', '?')
                                 _log(f"✅ Identificato: {_did}")
-                                logger.info(f"BG file {fn}: AO documentId='{_did}' hash={_fh[:12]}")
+                                logger.info(f"BG file {fn}: AO documentId='{_did}' hash={_fh[:12]} aoFileName='{_ao_fn}'")
 
                             # Salva file + aggiorna progresso nel DB
                             bg_pr = bg_db.query(PracticeResult).filter_by(practice_id=practice_id).first()
@@ -422,6 +433,12 @@ def _start_background_processing(agent_id, practice_id, pr=None):
                                 if 'files' not in rd:
                                     rd['files'] = {}
                                 for fh, fd in ao_files.items():
+                                    if fh in rd['files']:
+                                        # Hash già presente: preserva il fileName originale
+                                        fd['fileName'] = rd['files'][fh].get('fileName', fd.get('fileName', fn))
+                                    else:
+                                        # Nuovo hash: imposta il fileName del file appena processato
+                                        fd['fileName'] = fn
                                     rd['files'][fh] = fd
                                 bg_pr.result_data = rd
                                 flag_modified(bg_pr, 'result_data')
@@ -857,6 +874,18 @@ def get_practice_result(practice_id):
         pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
         if not pr:
             return jsonify({"found": False})
+
+        # Verifica fileName: log se ci sono mismatch con i file nel DB
+        result_data = pr.result_data or {}
+        files = result_data.get('files', {})
+        if files:
+            db_files = db.query(PracticeFile).filter_by(practice_id=practice_id).all()
+            db_file_names = {pf.file_name for pf in db_files}
+            for fh, fd in files.items():
+                ao_fn = fd.get('fileName', '')
+                if ao_fn and ao_fn not in db_file_names:
+                    logger.warning(f"Practice {practice_id}: fileName '{ao_fn}' (hash={fh[:12]}) not found in DB. DB files: {db_file_names}")
+
         return jsonify({"found": True, "data": pr.to_dict()})
     except Exception as e:
         logger.error(f"Get practice result: {e}")

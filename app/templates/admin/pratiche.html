@@ -777,6 +777,7 @@ let selectedCatalogAgentId = null;
 let selectedElaboraAgentId = null;
 let selectedPracticeId = null;
 let sintesiFileHash = null;
+let sintesiFileName = null;
 let stagedFiles = []; // Files waiting to be processed
 let processedFileBlobs = {}; // filename → File object, kept for PDF viewer
 // Tracking elaborazioni in corso (polling continua anche navigando tra pratiche)
@@ -2085,6 +2086,24 @@ async function showPracticeResult(result, practiceId) {
   const dataScroll = document.getElementById('dataScroll');
   const validateBar = document.getElementById('validateBar');
 
+  // Correggi fileName: cross-reference con i file effettivi nel DB
+  // L'agente AO potrebbe restituire fileName diversi da quelli nel DB locale
+  try {
+    const dbFilesR = await fetch(`/api/ao/practice-files/${encodeURIComponent(practiceId)}/list`);
+    if (dbFilesR.ok) {
+      const dbFilesData = await dbFilesR.json();
+      const dbFileNames = new Set((dbFilesData.files || []).map(f => f.file_name));
+      // Per ogni file nella pratica, verifica che il fileName esista nel DB
+      for (const [hash, file] of fileEntries) {
+        if (file.fileName && !dbFileNames.has(file.fileName)) {
+          // fileName non trovato nel DB — cerca il file corretto
+          // (non possiamo sapere quale sia, ma loggiamo il problema)
+          console.warn(`[Pratiche] fileName "${file.fileName}" (hash=${hash.substring(0,12)}) non trovato nel DB. File nel DB:`, [...dbFileNames]);
+        }
+      }
+    }
+  } catch (_) { /* non bloccare il rendering se il check fallisce */ }
+
   // Store current practice files globally for tab switching
   window._practiceFiles = files;
   window._practiceId = practiceId;
@@ -2384,7 +2403,7 @@ async function switchFileTab(hash) {
         <div class="mt-2 d-flex gap-2 justify-content-center">
           <button class="btn btn-sm btn-outline-secondary" onclick="reprocessFile('${hash}')" style="border-radius:8px"><i class="bi bi-arrow-repeat"></i> Rielabora</button>
           <button class="btn btn-sm btn-outline-primary" onclick="showManualDataEntry('${hash}', '${_escAttr(fn)}')" style="border-radius:8px"><i class="bi bi-pencil-square"></i> Inserisci dati</button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="openSintesiForFile('${hash}')" style="border-radius:8px"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="openSintesiForFile('${hash}', '${_escAttr(fn)}')" style="border-radius:8px"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
         </div>
       </div>`;
     return;
@@ -2407,7 +2426,7 @@ async function switchFileTab(hash) {
     <div class="doc-type-actions">
       <button onclick="reprocessFile('${hash}')" title="Rielabora"><i class="bi bi-arrow-repeat"></i></button>
       <button onclick="showOcrText('${_escAttr(fn)}')" title="Testo OCR"><i class="bi bi-body-text"></i> OCR</button>
-      <button onclick="openSintesiForFile('${hash}')" title="Genera sintesi"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
+      <button onclick="openSintesiForFile('${hash}', '${_escAttr(fn)}')" title="Genera sintesi"><i class="bi bi-file-earmark-text"></i> Sintesi</button>
       <button onclick="deleteFile('${hash}')" title="Elimina file" style="color:var(--md-error)"><i class="bi bi-trash3"></i></button>
     </div>
   </div>`;
@@ -3486,8 +3505,12 @@ async function showOcrText(fileName) {
   }
 }
 
-function openSintesiForFile(hash) {
+function openSintesiForFile(hash, fileName) {
   sintesiFileHash = hash;
+  // Salva il fileName esatto (quello usato dal preview e OCR nel DB)
+  // per evitare mismatch con il fileName restituito dall'agente AO
+  sintesiFileName = fileName || window._practiceFiles?.[hash]?.fileName || hash;
+  console.log('[Sintesi] openSintesiForFile hash=', hash, 'fileName=', sintesiFileName);
   document.getElementById('sintesiResult').style.display = 'none';
   document.getElementById('modalSintesi').classList.add('active');
 }
@@ -3514,40 +3537,33 @@ async function generateSintesi() {
 
   try {
     const fileData = window._practiceFiles?.[sintesiFileHash];
-    const fileName = fileData?.fileName || sintesiFileHash.replace(/^db_/, '');
-    const practiceId = getPracticeId();
+    // Usa il fileName salvato all'apertura del modal (corrisponde al file nel DB),
+    // NON fileData.fileName che potrebbe essere diverso se l'agente AO lo ha rinominato
+    const fileName = sintesiFileName || fileData?.fileName || sintesiFileHash.replace(/^db_/, '');
+    const practiceId = window._practiceId || getPracticeId();
 
-    // Prova a recuperare il testo OCR (molto più veloce)
-    let ocrText = '';
-    try {
-      const ocrR = await fetch(`/api/ao/practice-files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}/ocr-text`);
-      if (ocrR.ok) {
-        const ocrData = await ocrR.json();
-        if (ocrData.text) ocrText = ocrData.text;
-      }
-    } catch (_) { /* fallback a file */ }
+    console.log('[Sintesi] generateSintesi hash=', sintesiFileHash, 'fileName=', fileName, 'practiceId=', practiceId);
 
     const fd = new FormData();
     fd.append('agent_id', agentId);
     fd.append('prompt', prompt);
     fd.append('model', model);
-    if (fileData?.documentTypeId) fd.append('documentTypeId', fileData.documentTypeId);
-    if (fileData?.documentTypeLabel) fd.append('documentTypeLabel', fileData.documentTypeLabel);
+    const docTypeId = fileData?.identification?.documentTypeId || fileData?.identification?.documentId || fileData?.documentTypeId;
+    const docTypeLabel = fileData?.identification?.documentTypeLabel || fileData?.documentTypeLabel;
+    if (docTypeId) fd.append('documentTypeId', docTypeId);
+    if (docTypeLabel) fd.append('documentTypeLabel', docTypeLabel);
 
-    if (ocrText) {
-      // Fast path: invia testo OCR
-      fd.append('ocr_text', ocrText);
-    } else {
-      // Fallback: invia file binario
-      let file = processedFileBlobs[fileName];
-      if (!file) {
-        const dlR = await fetch(`/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`);
-        if (!dlR.ok) throw new Error(`File "${fileName}" non trovato`);
-        const blob = await dlR.blob();
-        file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
-      }
-      fd.append('file', file);
+    // Invia sempre il file binario dal DB (affidabile — è lo stesso del preview)
+    // NON usare il testo OCR cached che potrebbe essere da un file diverso
+    let file = processedFileBlobs[fileName];
+    if (!file) {
+      const dlR = await fetch(`/api/ao/files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}`);
+      if (!dlR.ok) throw new Error(`File "${fileName}" non trovato`);
+      const blob = await dlR.blob();
+      file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
     }
+    fd.append('file', file);
+    console.log('[Sintesi] Invio file binario:', fileName, file.size, 'bytes');
 
     const r = await fetch('/api/ao/sintesi/generate', { method: 'POST', body: fd });
     const data = await r.json();
