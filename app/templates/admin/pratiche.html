@@ -2308,7 +2308,22 @@ function renderExtraction(data, fileName) {
       }
       html += '</div></div>';
     } else if (Array.isArray(val)) {
-      html += `<div class="extraction-field clickable" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(val[0]||'').substring(0,100))}" style="grid-column:1/-1"><div class="field-label">${key}</div><div class="field-value">${val.join(', ')}</div></div>`;
+      if (val.length > 0 && typeof val[0] === 'object' && val[0] !== null) {
+        // Array di oggetti — render ciascun elemento
+        html += `<div class="extraction-field" style="grid-column:1/-1"><div class="field-label">${key} (${val.length})</div>`;
+        val.forEach((item, idx) => {
+          html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:6px;padding:8px;background:rgba(0,0,0,0.02);border-radius:8px">';
+          for (const [k2, v2] of Object.entries(item)) {
+            const sv2 = (v2 && typeof v2 === 'object') ? JSON.stringify(v2) : (v2 ?? '-');
+            html += `<div class="extraction-field clickable" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(sv2).substring(0,100))}" style="padding:6px 8px;margin:0">
+              <span style="font-size:0.7rem;color:var(--md-on-surface-variant)">${k2}:</span> <span style="font-size:0.85rem;font-weight:500">${sv2}</span></div>`;
+          }
+          html += '</div>';
+        });
+        html += '</div>';
+      } else {
+        html += `<div class="extraction-field clickable" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(val[0]||'').substring(0,100))}" style="grid-column:1/-1"><div class="field-label">${key}</div><div class="field-value">${val.join(', ')}</div></div>`;
+      }
     } else {
       const hasPdf = fn && val;
       html += `<div class="extraction-field${hasPdf ? ' clickable' : ''}" ${hasPdf ? `data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(val).substring(0,100))}"` : ''}><div class="field-label">${key}</div><div class="field-value">${val ?? '-'}</div></div>`;
@@ -2357,12 +2372,13 @@ async function switchFileTab(hash) {
     const isProcessing = hasActivePolling || hasProcessingBadge;
 
     if (isProcessing) {
-      // Elaborazione background attiva — spinner + anteprima del file
+      // Elaborazione background attiva — spinner + log attività + anteprima del file
       dataScroll.innerHTML = `
         <div class="text-center py-5" style="color:var(--md-on-surface-variant)">
           <div class="prat-spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto 12px"></div>
-          <div style="font-weight:500;font-size:0.85rem">Elaborazione in corso...</div>
+          <div style="font-weight:500;font-size:0.85rem" id="bgProcessMsg">Elaborazione in corso...</div>
           <div style="margin-top:6px;font-size:0.78rem">Il file verrà elaborato automaticamente</div>
+          <div id="bgActivityLog" style="margin-top:14px;text-align:left;max-width:100%;font-size:0.75rem;color:var(--md-on-surface-variant);max-height:220px;overflow-y:auto"></div>
         </div>`;
       // Mostra anteprima PDF/immagine anche durante l'elaborazione
       loadPreview(fn, hash);
@@ -2439,15 +2455,32 @@ async function switchFileTab(hash) {
       <div class="fields-grid">`;
 
     for (const [key, val] of group.fields) {
-      if (val && typeof val === 'object' && !Array.isArray(val)) {
+      if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object' && val[0] !== null) {
+        // Array di oggetti (es. acquirenti, immobili) — render ciascun elemento come sub-card
+        html += `<div class="field-card" style="grid-column:1/-1;cursor:default">
+          <div class="fc-label">${humanLabel(key)} <span style="font-weight:400;opacity:0.6">(${val.length})</span></div>`;
+        val.forEach((item, idx) => {
+          html += `<div class="fields-grid" style="margin-top:6px;padding:8px;background:rgba(0,0,0,0.02);border-radius:8px;${idx > 0 ? 'margin-top:8px' : ''}">`;
+          for (const [k2, v2] of Object.entries(item)) {
+            const sv2 = (v2 && typeof v2 === 'object') ? JSON.stringify(v2) : (v2 ?? '-');
+            html += `<div class="field-card" data-file-hash="${hash}" data-field-key="${_escAttr(key + '[' + idx + '].' + k2)}" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(sv2).substring(0,100))}">
+              <div class="fc-label">${humanLabel(k2)} <span class="fc-edit-icon"><i class="bi bi-pencil"></i></span></div>
+              <div class="fc-value">${sv2}</div>
+            </div>`;
+          }
+          html += `</div>`;
+        });
+        html += `</div>`;
+      } else if (val && typeof val === 'object' && !Array.isArray(val)) {
         // Nested object — render as sub-grid spanning full width
         html += `<div class="field-card" style="grid-column:1/-1;cursor:default">
           <div class="fc-label">${humanLabel(key)}</div>
           <div class="fields-grid" style="margin-top:6px">`;
         for (const [k2, v2] of Object.entries(val)) {
-          html += `<div class="field-card" data-file-hash="${hash}" data-field-key="${_escAttr(key + '.' + k2)}" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(v2).substring(0,100))}">
+          const sv2 = (v2 && typeof v2 === 'object') ? JSON.stringify(v2) : (v2 ?? '-');
+          html += `<div class="field-card" data-file-hash="${hash}" data-field-key="${_escAttr(key + '.' + k2)}" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(String(sv2).substring(0,100))}">
             <div class="fc-label">${humanLabel(k2)} <span class="fc-edit-icon"><i class="bi bi-pencil"></i></span></div>
-            <div class="fc-value">${v2 ?? '-'}</div>
+            <div class="fc-value">${sv2}</div>
           </div>`;
         }
         html += `</div></div>`;
@@ -4150,7 +4183,8 @@ function _renderStepSummaries(wf) {
           const fIcon = f.status === 'ok' ? '<i class="bi bi-check-lg" style="color:var(--md-success)"></i>'
             : f.status === 'error' ? '<i class="bi bi-x-lg" style="color:var(--md-error)"></i>'
             : '<i class="bi bi-hourglass" style="color:var(--md-on-surface-variant)"></i>';
-          return `<div style="display:flex;gap:6px;align-items:center;font-size:0.78rem;padding:3px 0;border-bottom:1px solid rgba(0,0,0,0.04)">${fIcon} <span style="color:var(--md-on-surface-variant);min-width:120px">${f.label}:</span> <strong>${f.value}</strong></div>`;
+          const fVal = (f.value && typeof f.value === 'object') ? JSON.stringify(f.value) : (f.value ?? '-');
+          return `<div style="display:flex;gap:6px;align-items:center;font-size:0.78rem;padding:3px 0;border-bottom:1px solid rgba(0,0,0,0.04)">${fIcon} <span style="color:var(--md-on-surface-variant);min-width:120px">${f.label}:</span> <strong>${fVal}</strong></div>`;
         }).join('');
 
         bannerHtml += `<div class="step-summary-banner" style="padding:10px 16px;background:${bgColor};border-left:3px solid ${borderColor};margin:4px 16px 8px;border-radius:0 8px 8px 0">
