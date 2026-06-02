@@ -297,11 +297,11 @@ class SisterVisuraHandler(StepHandler):
                     logger.info(f"Sister visura [{label}]: saved {file_name} ({len(content)} bytes)")
                 else:
                     visura_info['note'] = 'Nessun file nella risposta'
-                    if status != 'COMPLETED':
-                        all_ok = False
+                    all_ok = False
 
                 if status != 'COMPLETED':
                     all_ok = False
+                    visura_info['error'] = task_result.get('error', f'AO status: {status}')
 
             except Exception as e:
                 visura_info['error'] = str(e)
@@ -334,6 +334,8 @@ class SisterVisuraHandler(StepHandler):
             if v.get('file_saved'):
                 size_kb = (v.get('file_size', 0) / 1024)
                 fields.append({'label': f'File {prefix}', 'value': f"{v['file_saved']} ({size_kb:.0f} KB)", 'status': 'ok'})
+            elif v.get('status') == 'COMPLETED':
+                fields.append({'label': f'File {prefix}', 'value': v.get('note', 'nessun PDF'), 'status': 'error'})
             if v.get('error'):
                 fields.append({'label': f'Errore {prefix}', 'value': v['error'], 'status': 'error'})
 
