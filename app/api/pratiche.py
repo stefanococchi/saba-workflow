@@ -1352,20 +1352,45 @@ def complete_practice_step(practice_id):
             next_should_auto = next_handler.should_auto_execute(next_config) if next_handler else False
             if next_handler and next_should_auto:
                 try:
+                    logger.info(f"Auto-execute step {next_step.order} ({next_step.type.name})...")
                     next_exec_result = _execute_backoffice_step(next_step, pr, body)
                     step_states[str(next_step.order)]['status'] = 'completed'
                     step_states[str(next_step.order)]['completed_at'] = datetime.utcnow().isoformat()
                     step_states[str(next_step.order)]['exec_result'] = next_exec_result
+                    logger.info(f"Auto-execute step {next_step.order} completed, exec_result status={next_exec_result.get('status', '?')}")
 
-                    # Avanza ancora dopo l'auto-esecuzione
+                    # Avanza ancora — catena di auto-execute per step consecutivi
                     after_next = next((s for s in steps if s.order > next_step.order), None)
                     if after_next:
                         pr.current_step_order = after_next.order
                         step_states[str(after_next.order)] = {'status': 'in_progress'}
+                        # Se anche il prossimo è auto-execute, eseguilo
+                        after_handler = get_handler(after_next.type.name)
+                        after_config = after_next.skip_conditions or {}
+                        if after_handler and after_handler.should_auto_execute(after_config):
+                            try:
+                                logger.info(f"Auto-execute chained step {after_next.order} ({after_next.type.name})...")
+                                pr.step_states = step_states  # aggiorna prima dell'exec
+                                after_exec = _execute_backoffice_step(after_next, pr, body)
+                                step_states[str(after_next.order)]['status'] = 'completed'
+                                step_states[str(after_next.order)]['completed_at'] = datetime.utcnow().isoformat()
+                                step_states[str(after_next.order)]['exec_result'] = after_exec
+                                logger.info(f"Auto-execute chained step {after_next.order} completed")
+                                # Continua catena
+                                final_next = next((s for s in steps if s.order > after_next.order), None)
+                                if final_next:
+                                    pr.current_step_order = final_next.order
+                                    step_states[str(final_next.order)] = {'status': 'in_progress'}
+                                else:
+                                    pr.current_step_order = None
+                            except Exception as e2:
+                                logger.error(f"Auto-execute chained step {after_next.order} failed: {e2}")
+                                step_states[str(after_next.order)]['status'] = 'error'
+                                step_states[str(after_next.order)]['error'] = str(e2)
                     else:
                         pr.current_step_order = None
                 except Exception as e:
-                    logger.error(f"Auto-execute next step {next_step.order} failed: {e}")
+                    logger.error(f"Auto-execute step {next_step.order} failed: {e}", exc_info=True)
                     step_states[str(next_step.order)]['status'] = 'error'
                     step_states[str(next_step.order)]['error'] = str(e)
         else:

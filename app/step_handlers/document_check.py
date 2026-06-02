@@ -55,35 +55,41 @@ class DocumentCheckHandler(StepHandler):
         # Filtra: file che non hanno ancora extraction completata
         # (inclusi file aggiunti da step precedenti come sister_visura)
         to_process = []
+        processed_names = set()
+        for fh, fd in existing_files.items():
+            if fd.get('state', {}).get('extraction') == 'completed':
+                processed_names.add(fd.get('fileName', ''))
+
         for pf in db_files:
-            already_done = False
-            for fh, fd in existing_files.items():
-                if fd.get('fileName') == pf.file_name:
-                    if fd.get('state', {}).get('extraction') == 'completed':
-                        already_done = True
-                    break
-            if not already_done:
+            if pf.file_name not in processed_names and pf.data:
                 to_process.append(pf)
 
-        # Filtra per doc_types se configurato
-        step_doc_types = config.get('doc_types', [])
+        logger.info(f"Document_check auto_process: {len(db_files)} file in DB, {len(processed_names)} già elaborati, {len(to_process)} da elaborare")
+        for pf in to_process:
+            logger.info(f"  -> da elaborare: {pf.file_name} ({len(pf.data)} bytes, {pf.mime_type})")
 
         processed = []
         errors = []
         for pf in to_process:
             try:
                 logger.info(f"Document_check auto_process: elaboro {pf.file_name} con agente {agent_id}")
-                import base64
-                from pathlib import Path
-                ext = Path(pf.file_name).suffix.lstrip(".")
                 files = {
                     "file_0": (pf.data, pf.mime_type or 'application/pdf', pf.file_name)
                 }
                 ao_result = ao_service.practice_process(agent_id, practice_id, files=files)
 
+                ao_status = ao_result.get('status', '')
+                if ao_status in ('TIMEOUT', 'FAILED'):
+                    raise Exception(f"AO {ao_status}: {ao_result.get('error', 'unknown')}")
+
                 output = ao_result.get('output', {})
                 info = output.get('info', output)
                 ao_files = info.get('files', {})
+
+                if not ao_files:
+                    logger.warning(f"Document_check auto_process: {pf.file_name} -> nessun file nella risposta AO")
+                    errors.append({'file': pf.file_name, 'error': 'Nessun risultato da AO'})
+                    continue
 
                 for fh, fd in ao_files.items():
                     fd['fileName'] = pf.file_name
