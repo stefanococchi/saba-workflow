@@ -416,107 +416,78 @@ class SisterVisuraHandler(StepHandler):
         result['extracted_data'] = extracted
 
         # ── 7. Inietta dati SISTER corretti nei file visura in result_data ──
-        # Il pannello estrazione legge da result_data.files[hash].extraction.data
-        # che viene da Document AI (inaffidabile per le visure). Sovrascriviamo
-        # con i dati strutturati SISTER che sono certi.
+        # Ogni visura conosce il proprio file_name (salvato in file_saved).
+        # I dati catastali (foglio, particella, subalterno) sono quelli dell'INPUT
+        # alla richiesta SISTER — certi by design, non serve matching.
         try:
             rd = practice_result.result_data
             if rd and isinstance(rd, dict) and rd.get('files'):
                 rd = dict(rd)
-                files = rd['files']
+                ao_files = rd['files']
 
-                # Trova file identificati come visura in result_data
-                visura_hashes = [
-                    fh for fh, fd in files.items()
-                    if 'visura' in (fd.get('identification', {}).get('documentId', '') or '').lower()
-                ]
+                # Indice fileName → hash per lookup rapido
+                name_to_hash = {}
+                for fh, fd in ao_files.items():
+                    fn = fd.get('fileName', '')
+                    if fn:
+                        name_to_hash[fn] = fh
 
-                # Match visura file ↔ sister result per foglio+particella,
-                # poi fallback per posizione
-                sister_results = [v for v in result.get('visure', []) if not v.get('error')]
-                used = set()
+                CATASTALI_PATTERNS = ['foglio', 'mappale', 'particella', 'subalterno',
+                                      'csub', 'categoria', 'classe', 'consistenza',
+                                      'rendita', 'indirizzo', 'superficie']
 
-                for fh in visura_hashes:
-                    fd = files[fh]
-                    ext = fd.get('extraction', {}).get('data', {})
+                for v in result.get('visure', []):
+                    saved_name = v.get('file_saved', '')
+                    if not saved_name:
+                        continue
 
-                    # Leggi foglio/particella dall'estrazione Document AI
-                    file_foglio = file_part = None
-                    for k, val in ext.items():
-                        kl = k.lower().replace(' ', '')
-                        if 'foglio' in kl and not file_foglio:
-                            file_foglio = str(val).strip()
-                        if ('mappale' in kl or 'particella' in kl) and not file_part:
-                            file_part = str(val).strip()
+                    fh = name_to_hash.get(saved_name)
+                    if not fh:
+                        continue
+                    fd = ao_files[fh]
 
-                    # Cerca match univoco per foglio+particella
-                    matched = None
-                    candidates = [
-                        (i, sr) for i, sr in enumerate(sister_results)
-                        if i not in used
-                        and str(sr.get('foglio', '')).strip() == file_foglio
-                        and str(sr.get('particella', '')).strip() == file_part
-                    ]
-                    if len(candidates) == 1:
-                        matched = candidates[0]
-                    elif candidates:
-                        matched = candidates[0]  # primo non usato
-                    else:
-                        # Fallback: primo sister result non usato
-                        for i, sr in enumerate(sister_results):
-                            if i not in used:
-                                matched = (i, sr)
-                                break
-
-                    if matched:
-                        idx, sr = matched
-                        used.add(idx)
-
-                        # Costruisci dati SISTER puliti
-                        sister_fields = {
-                            'FOGLIO': sr.get('foglio', ''),
-                            'PARTICELLA': sr.get('particella', ''),
-                            'SUBALTERNO': sr.get('subalterno', ''),
-                        }
-                        if sr.get('categoria'):
-                            sister_fields['CATEGORIA'] = sr['categoria']
-                        if sr.get('classe'):
-                            sister_fields['CLASSE'] = sr['classe']
-                        if sr.get('consistenza'):
-                            sister_fields['CONSISTENZA'] = sr['consistenza']
-                        if sr.get('rendita'):
-                            sister_fields['RENDITA'] = sr['rendita']
-                        if sr.get('indirizzo'):
-                            sister_fields['INDIRIZZO'] = sr['indirizzo']
-                        if sr.get('superficie_mq'):
-                            sister_fields['SUPERFICIE'] = sr['superficie_mq']
-                        if sr.get('intestati'):
-                            sister_fields['INTESTATI'] = [
-                                {'nominativo': i['nominativo'], 'codiceFiscale': i.get('cf', ''),
-                                 'diritto': i['diritto'], 'quota': i['quota']}
-                                for i in sr['intestati']
-                            ]
-
-                        # Aggiorna estrazione: rimuovi campi Document AI catastali
-                        # (spesso garbled/errati), poi inietta quelli SISTER certi
-                        if 'extraction' not in fd:
-                            fd['extraction'] = {'data': {}}
-                        elif 'data' not in fd['extraction']:
-                            fd['extraction']['data'] = {}
-                        ext_data = fd['extraction']['data']
-                        # Rimuovi campi Document AI catastali che SISTER sovrascrive
-                        CATASTALI_PATTERNS = ['foglio', 'mappale', 'particella', 'subalterno',
-                                              'csub', 'categoria', 'classe', 'consistenza',
-                                              'rendita', 'indirizzo', 'superficie']
-                        keys_to_remove = [
-                            k for k in ext_data
-                            if any(p in k.lower().replace(' ', '') for p in CATASTALI_PATTERNS)
+                    # Dati certi dall'input SISTER (non dalla risposta)
+                    sister_fields = {
+                        'FOGLIO': v.get('foglio', ''),
+                        'PARTICELLA': v.get('particella', ''),
+                        'SUBALTERNO': v.get('subalterno', ''),
+                    }
+                    # Dati dalla risposta SISTER (xmlJson)
+                    if v.get('categoria'):
+                        sister_fields['CATEGORIA'] = v['categoria']
+                    if v.get('classe'):
+                        sister_fields['CLASSE'] = v['classe']
+                    if v.get('consistenza'):
+                        sister_fields['CONSISTENZA'] = v['consistenza']
+                    if v.get('rendita'):
+                        sister_fields['RENDITA'] = v['rendita']
+                    if v.get('indirizzo'):
+                        sister_fields['INDIRIZZO'] = v['indirizzo']
+                    if v.get('superficie_mq'):
+                        sister_fields['SUPERFICIE'] = v['superficie_mq']
+                    if v.get('intestati'):
+                        sister_fields['INTESTATI'] = [
+                            {'nominativo': i['nominativo'], 'codiceFiscale': i.get('cf', ''),
+                             'diritto': i['diritto'], 'quota': i['quota']}
+                            for i in v['intestati']
                         ]
-                        for k in keys_to_remove:
-                            del ext_data[k]
-                        ext_data.update(sister_fields)
-                        ext_data['_source'] = 'SISTER'
-                        logger.info(f"Sister visura: iniettato dati SISTER in file {fh[:12]} (sub={sr.get('subalterno')})")
+
+                    # Rimuovi campi Document AI catastali (garbled/errati),
+                    # poi inietta quelli SISTER certi
+                    if 'extraction' not in fd:
+                        fd['extraction'] = {'data': {}}
+                    elif 'data' not in fd['extraction']:
+                        fd['extraction']['data'] = {}
+                    ext_data = fd['extraction']['data']
+                    keys_to_remove = [
+                        k for k in ext_data
+                        if any(p in k.lower().replace(' ', '') for p in CATASTALI_PATTERNS)
+                    ]
+                    for k in keys_to_remove:
+                        del ext_data[k]
+                    ext_data.update(sister_fields)
+                    ext_data['_source'] = 'SISTER'
+                    logger.info(f"Sister visura: iniettato dati in {saved_name} (F={v.get('foglio')}/P={v.get('particella')}/S={v.get('subalterno')})")
 
                 practice_result.result_data = rd
                 db_session.flush()
