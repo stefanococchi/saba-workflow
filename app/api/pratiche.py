@@ -1497,24 +1497,11 @@ def _execute_backoffice_step(step, practice_result, body):
 
 @pratiche_bp.route('/test/sister-visura', methods=['POST'])
 def test_sister_visura():
-    """Test diretto Sister Visura — bypassa workflow e estrazione, usa dati manuali."""
+    """Test diretto Sister — bypassa workflow, passa tutti i campi al sister-agent."""
     try:
         body = request.get_json() or {}
-        # Dati catastali obbligatori
-        sister_input = {
-            'operation': body.get('operation', 'visuraStorica'),
-            'tipoCatasto': body.get('tipoCatasto', 'F'),
-            'tipoVisura': body.get('tipoVisura', 'sintetica'),
-            'provincia': body.get('provincia', ''),
-            'comune': body.get('comune', ''),
-            'foglio': body.get('foglio', ''),
-            'particella': body.get('particella', ''),
-            'subalterno': body.get('subalterno', ''),
-        }
-        if body.get('authUsername'):
-            sister_input['authProvider'] = body.get('authProvider', 'sister')
-            sister_input['authUsername'] = body['authUsername']
-            sister_input['authPassword'] = body.get('authPassword', '')
+        # Passa tutti i campi direttamente al sister-agent (non filtrare)
+        sister_input = {k: v for k, v in body.items() if v}
 
         # Trova sister-agent
         agents_list = ao_service.list_agents()
