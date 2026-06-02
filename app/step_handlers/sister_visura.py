@@ -284,6 +284,45 @@ class SisterVisuraHandler(StepHandler):
                 if isinstance(output, dict):
                     visura_info['output_keys'] = list(output.keys())
 
+                    # Estrai dati strutturati da sister.result
+                    sister = output.get('sister', {})
+                    if isinstance(sister, dict):
+                        sr = sister.get('result', sister)
+                        immobili = sr.get('immobili', [])
+                        xml_json = sr.get('xmlJson', sister.get('xmlJson', {}))
+                        sit_attuale = xml_json.get('situazioneAttuale', {})
+
+                        if immobili:
+                            imm = immobili[0]
+                            visura_info['categoria'] = imm.get('categoria', '')
+                            visura_info['classe'] = imm.get('classe', '')
+                            visura_info['consistenza'] = imm.get('consistenza', '')
+                            visura_info['rendita'] = imm.get('rendita', '')
+                            visura_info['indirizzo'] = imm.get('indirizzo', '')
+
+                        if sit_attuale:
+                            visura_info['indirizzo'] = visura_info.get('indirizzo') or sit_attuale.get('indirizzo', '')
+                            classamento = sit_attuale.get('classamento', {})
+                            if classamento:
+                                visura_info['categoria'] = visura_info.get('categoria') or classamento.get('categoria', '')
+                                rendita = classamento.get('renditaEuro', '')
+                                if rendita:
+                                    visura_info['rendita'] = f'€ {rendita}'
+                            superficie = sit_attuale.get('superficie', {})
+                            if superficie:
+                                visura_info['superficie_mq'] = superficie.get('totale', '')
+                            intestati = sit_attuale.get('intestati', [])
+                            if intestati:
+                                visura_info['intestati'] = [
+                                    {'nominativo': i.get('nominativo', ''), 'cf': i.get('codiceFiscale', ''),
+                                     'diritto': i.get('diritto', {}).get('descrizione', ''),
+                                     'quota': i.get('diritto', {}).get('quota', '')}
+                                    for i in intestati
+                                ]
+
+                        visura_info['total_results'] = sr.get('totalResults', len(immobili))
+                        logger.info(f"Sister visura [{label}]: {len(immobili)} immobili, categoria={visura_info.get('categoria')}")
+
                 default_name = f"visura_{comune}_{foglio}_{particella}_{subalterno}.pdf"
                 content, ao_file_name, found_in = _extract_pdf(output)
                 file_name = ao_file_name or default_name
@@ -323,6 +362,36 @@ class SisterVisuraHandler(StepHandler):
             result['visure'].append(visura_info)
 
         result['status'] = 'COMPLETED' if all_ok else 'FAILED'
+
+        # ── 6. Salva dati strutturati in extracted_data per confronto campi ──
+        extracted = {}
+        for v in result['visure']:
+            fms = f"{v.get('foglio', '')}/{v.get('particella', '')}/{v.get('subalterno', '')}"
+            key = f"visura_{fms}"
+            data = {
+                'foglio': v.get('foglio', ''),
+                'particella': v.get('particella', ''),
+                'subalterno': v.get('subalterno', ''),
+            }
+            if v.get('categoria'):
+                data['categoria'] = v['categoria']
+            if v.get('classe'):
+                data['classe'] = v['classe']
+            if v.get('consistenza'):
+                data['consistenza'] = v['consistenza']
+            if v.get('rendita'):
+                data['rendita'] = v['rendita']
+            if v.get('indirizzo'):
+                data['indirizzo'] = v['indirizzo']
+            if v.get('superficie_mq'):
+                data['superficie_mq'] = v['superficie_mq']
+            if v.get('intestati'):
+                data['intestati'] = '; '.join(
+                    f"{i['nominativo']} ({i['diritto']} {i['quota']})" for i in v['intestati']
+                )
+            extracted[key] = data
+        result['extracted_data'] = extracted
+
         return result
 
     def get_display_data(self, step_config, step_state):
@@ -341,12 +410,34 @@ class SisterVisuraHandler(StepHandler):
         for i, v in enumerate(visure):
             fms = f"{v.get('foglio', '')}/{v.get('particella', '')}/{v.get('subalterno', '')}"
             prefix = f"Unità {i+1}" if len(visure) > 1 else "F/M/S"
-            is_ok = v.get('status') == 'COMPLETED' and v.get('file_saved')
-            fields.append({'label': prefix, 'value': fms, 'status': 'ok' if v.get('status') == 'COMPLETED' else 'error'})
+            is_ok = v.get('status') == 'COMPLETED'
+            fields.append({'label': prefix, 'value': fms, 'status': 'ok' if is_ok else 'error'})
+
+            # Dati catastali strutturati
+            if v.get('indirizzo'):
+                fields.append({'label': f'Indirizzo', 'value': v['indirizzo'], 'status': 'ok'})
+            cat_parts = []
+            if v.get('categoria'):
+                cat_parts.append(v['categoria'])
+            if v.get('consistenza'):
+                cat_parts.append(v['consistenza'])
+            if v.get('rendita'):
+                cat_parts.append(v['rendita'])
+            if v.get('superficie_mq'):
+                cat_parts.append(f"{v['superficie_mq']} mq")
+            if cat_parts:
+                fields.append({'label': f'Classamento', 'value': ' · '.join(cat_parts), 'status': 'ok'})
+
+            # Intestati
+            if v.get('intestati'):
+                for j, intest in enumerate(v['intestati']):
+                    fields.append({'label': f'Intestatario {j+1}', 'value': f"{intest['nominativo']} — {intest['diritto']} {intest['quota']}", 'status': 'ok'})
+
+            # File
             if v.get('file_saved'):
                 size_kb = (v.get('file_size', 0) / 1024)
                 fields.append({'label': f'File {prefix}', 'value': f"{v['file_saved']} ({size_kb:.0f} KB)", 'status': 'ok'})
-            elif v.get('status') == 'COMPLETED':
+            elif is_ok:
                 fields.append({'label': f'File {prefix}', 'value': v.get('note', 'nessun PDF'), 'status': 'error'})
             if v.get('error'):
                 fields.append({'label': f'Errore {prefix}', 'value': v['error'], 'status': 'error'})
