@@ -3478,7 +3478,8 @@ function saveWorkflow() {
                     if_rejected: step.config.if_rejected || 'stop',
                     if_rejected_step: step.config.if_rejected_step || 0,
                     doc_types: step.config.doc_types || [],
-                    allow_upload: !!step.config.allow_upload
+                    allow_upload: !!step.config.allow_upload,
+                    auto_process: !!step.config.auto_process
                 };
             }
 
