@@ -18,7 +18,7 @@ def _split_cf(val):
     """Splitta codici fiscali multipli separati da ; , o spazio."""
     if not val:
         return []
-    parts = [p.strip().upper() for p in re.split(r'[;,|]+', str(val)) if p.strip()]
+    parts = [p.replace(' ', '').strip().upper() for p in re.split(r'[;,|]+', str(val)) if p.strip()]
     return [p for p in parts if re.match(r'^[A-Z0-9]{16}$', p)]
 
 

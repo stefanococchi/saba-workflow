@@ -1185,7 +1185,19 @@ def get_practice_workflow_status(practice_id):
         # Accumula contesto da tutti gli step completati
         accumulated_data = {}
         # Confronto campi: per ogni campo, raccogli tutti i valori trovati
-        comparison_fields = {}  # field_name -> [{ value, doc_type }]
+        # I nomi campo vengono normalizzati (lowercase) per unire FOGLIO/foglio
+        import re, unicodedata
+        def _norm_compare(v):
+            """Normalizza un valore per confronto: lowercase, no accenti, no spazi extra."""
+            if isinstance(v, (list, dict)):
+                v = json.dumps(v, sort_keys=True, ensure_ascii=False)
+            s = str(v).strip().lower()
+            s = unicodedata.normalize('NFD', s)
+            s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+            s = re.sub(r'\s+', ' ', s)
+            return s
+
+        comparison_fields = {}  # field_key -> [{ value, doc_type }]
         for s in steps:
             ss = step_states.get(str(s.order), {})
             if ss.get('status') == 'completed' and ss.get('extracted_data'):
@@ -1196,30 +1208,49 @@ def get_practice_workflow_status(practice_id):
                     for field_name, field_value in fields.items():
                         if field_value is None or str(field_value).strip() == '':
                             continue
-                        if field_name not in comparison_fields:
-                            comparison_fields[field_name] = []
-                        comparison_fields[field_name].append({
+                        field_key = field_name.lower().replace(' ', '_')
+                        if field_key not in comparison_fields:
+                            comparison_fields[field_key] = []
+                        comparison_fields[field_key].append({
                             'value': field_value,
                             'doc_type': doc_type,
                         })
-        # Marca i campi con valori discordanti (normalizzato)
-        import re, unicodedata
-        def _norm_compare(v):
-            """Normalizza un valore per confronto: lowercase, no accenti, no spazi extra."""
-            if isinstance(v, (list, dict)):
-                v = json.dumps(v, sort_keys=True, ensure_ascii=False)
-            s = str(v).strip().lower()
-            # Rimuovi accenti (è→e, à→a)
-            s = unicodedata.normalize('NFD', s)
-            s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
-            # Normalizza spazi/punteggiatura multipli
-            s = re.sub(r'\s+', ' ', s)
-            return s
 
-        for field_name, entries in comparison_fields.items():
-            values = set(_norm_compare(e['value']) for e in entries)
-            for e in entries:
-                e['match'] = len(values) <= 1
+        # Confronto: il titolo di provenienza è il riferimento.
+        # I valori delle visure/altri documenti vengono confrontati contro il titolo.
+        # Se il titolo ha valori multipli separati da ";" (es. subalterno "13; 61"),
+        # ciascun valore individuale è valido per il match.
+        # Se il titolo non ha un valore per un campo, niente discordanza.
+        def _is_titolo(doc_type):
+            """Identifica doc_type del titolo di provenienza (non visura/ipotecaria)."""
+            dt = doc_type.lower()
+            return not dt.startswith('visura_') and not dt.startswith('ipotecaria_')
+
+        for field_key, entries in comparison_fields.items():
+            titolo_entries = [e for e in entries if _is_titolo(e['doc_type'])]
+            other_entries = [e for e in entries if not _is_titolo(e['doc_type'])]
+
+            if not titolo_entries or not other_entries:
+                # Nessun confronto possibile (campo solo nel titolo o solo nelle visure)
+                for e in entries:
+                    e['match'] = True
+                continue
+
+            # Raccogli tutti i valori di riferimento dal titolo, splittando per ";"
+            ref_values = set()
+            for te in titolo_entries:
+                for part in str(te['value']).split(';'):
+                    normed = _norm_compare(part.strip())
+                    if normed:
+                        ref_values.add(normed)
+
+            # Il titolo è sempre "corretto"
+            for te in titolo_entries:
+                te['match'] = True
+
+            # Confronta ciascun altro documento contro i valori del titolo
+            for e in other_entries:
+                e['match'] = _norm_compare(e['value']) in ref_values
 
         # Genera display_data per ogni step tramite il suo handler
         from app.step_handlers import get_handler
