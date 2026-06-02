@@ -3132,17 +3132,43 @@ async function exportCatalogOverview() {
   // Mostra in un modal con textarea copiabile
   const modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center';
-  modal.innerHTML = `
-    <div style="background:var(--md-surface);border-radius:16px;padding:24px;width:90%;max-width:700px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <h6 style="margin:0;font-weight:600"><i class="bi bi-card-text"></i> Vista d'insieme cataloghi</h6>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm btn-outline-primary" onclick="navigator.clipboard.writeText(this.closest('div').parentElement.querySelector('textarea').value);this.innerHTML='<i class=\\'bi bi-check\\'></i> Copiato'" style="border-radius:8px;font-size:0.75rem"><i class="bi bi-clipboard"></i> Copia</button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="this.closest('[style*=fixed]').remove()" style="border-radius:8px;font-size:0.75rem"><i class="bi bi-x-lg"></i></button>
-        </div>
-      </div>
-      <textarea readonly style="flex:1;min-height:400px;font-family:monospace;font-size:0.78rem;border:1px solid var(--md-outline-variant);border-radius:10px;padding:12px;resize:none;background:var(--md-surface-container-lowest);color:var(--md-on-surface)">${text.replace(/</g,'&lt;')}</textarea>
-    </div>`;
+  const inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--md-surface);border-radius:16px;padding:24px;width:90%;max-width:700px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px';
+  header.innerHTML = '<h6 style="margin:0;font-weight:600"><i class="bi bi-card-text"></i> Vista d\'insieme cataloghi</h6>';
+
+  const btnGroup = document.createElement('div');
+  btnGroup.style.cssText = 'display:flex;gap:6px';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'btn btn-sm btn-outline-primary';
+  copyBtn.style.cssText = 'border-radius:8px;font-size:0.75rem';
+  copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copia';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn btn-sm btn-outline-secondary';
+  closeBtn.style.cssText = 'border-radius:8px;font-size:0.75rem';
+  closeBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+  closeBtn.addEventListener('click', () => modal.remove());
+
+  const ta = document.createElement('textarea');
+  ta.readOnly = true;
+  ta.value = text;
+  ta.style.cssText = 'flex:1;min-height:400px;font-family:monospace;font-size:0.78rem;border:1px solid var(--md-outline-variant);border-radius:10px;padding:12px;resize:none;background:var(--md-surface-container-lowest);color:var(--md-on-surface)';
+
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(ta.value).then(() => {
+      copyBtn.innerHTML = '<i class="bi bi-check"></i> Copiato';
+      setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copia'; }, 2000);
+    });
+  });
+
+  btnGroup.append(copyBtn, closeBtn);
+  header.appendChild(btnGroup);
+  inner.append(header, ta);
+  modal.appendChild(inner);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
 }
