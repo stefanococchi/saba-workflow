@@ -87,7 +87,11 @@ class SisterVisuraHandler(StepHandler):
             if not val:
                 val = config.get(sister_key, '')
             if val:
-                sister_input[sister_key] = str(val)
+                val = str(val)
+                # SISTER vuole il comune in maiuscolo
+                if sister_key == 'comune':
+                    val = val.upper()
+                sister_input[sister_key] = val
 
         # Credenziali auth
         if config.get('auth_username'):
