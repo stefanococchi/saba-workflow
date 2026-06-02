@@ -1202,9 +1202,22 @@ def get_practice_workflow_status(practice_id):
                             'value': field_value,
                             'doc_type': doc_type,
                         })
-        # Marca i campi con valori discordanti
+        # Marca i campi con valori discordanti (normalizzato)
+        import re, unicodedata
+        def _norm_compare(v):
+            """Normalizza un valore per confronto: lowercase, no accenti, no spazi extra."""
+            if isinstance(v, (list, dict)):
+                v = json.dumps(v, sort_keys=True, ensure_ascii=False)
+            s = str(v).strip().lower()
+            # Rimuovi accenti (è→e, à→a)
+            s = unicodedata.normalize('NFD', s)
+            s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+            # Normalizza spazi/punteggiatura multipli
+            s = re.sub(r'\s+', ' ', s)
+            return s
+
         for field_name, entries in comparison_fields.items():
-            values = set(str(e['value']).strip().lower() for e in entries)
+            values = set(_norm_compare(e['value']) for e in entries)
             for e in entries:
                 e['match'] = len(values) <= 1
 
