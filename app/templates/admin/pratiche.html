@@ -2366,10 +2366,29 @@ async function switchFileTab(hash) {
   // If not yet processed
   if (isDbOnly || (exState !== 'completed' && idState !== 'completed')) {
     const practiceId = window._practiceId;
-    const hasActivePolling = practiceId && !!_activePolls[practiceId];
+    let hasActivePolling = practiceId && !!_activePolls[practiceId];
     const hasProcessingBadge = !!document.querySelector('#infoValidation .badge-processing');
     const hasWorkflowStep = practiceWorkflow && practiceWorkflow.current_step_order;
-    const isProcessing = hasActivePolling || hasProcessingBadge;
+    let isProcessing = hasActivePolling || hasProcessingBadge;
+
+    // Fallback: check diretto a process-status per catturare race condition
+    // (badge può essere sovrascritto da updateValidateBarForWorkflow prima che arriviamo qui)
+    if (!isProcessing && practiceId) {
+      try {
+        const psR = await fetch(`/api/ao/practice/${practiceId}/process-status`);
+        const psJob = await psR.json();
+        if (psJob.status === 'running') {
+          isProcessing = true;
+          // Riavvia polling se non attivo
+          if (!hasActivePolling) {
+            pollProcessingStatus(practiceId, getAgentId());
+          }
+          // Ripristina badge processing
+          document.getElementById('infoValidation').innerHTML =
+            `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${psJob.progress + 1}/${psJob.total}</span>`;
+        }
+      } catch (_) { /* ignora */ }
+    }
 
     if (isProcessing) {
       // Elaborazione background attiva — spinner + log attività + anteprima del file
