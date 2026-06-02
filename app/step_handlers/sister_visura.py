@@ -48,6 +48,18 @@ class SisterVisuraHandler(StepHandler):
                         flat[nested_key.lower()] = nested_val
             elif v:
                 flat[k.lower()] = v
+        # Parsa tripletta (foglio/particella/subalterno) se presente
+        tripletta = flat.get('tripletta', '')
+        if tripletta and isinstance(tripletta, str) and '/' in tripletta:
+            parts = [p.strip() for p in tripletta.split('/')]
+            if len(parts) >= 1 and parts[0] and 'foglio' not in flat:
+                flat['foglio'] = parts[0]
+            if len(parts) >= 2 and parts[1] and 'particella' not in flat and 'mappale' not in flat:
+                flat['particella'] = parts[1]
+            if len(parts) >= 3 and parts[2] and 'subalterno' not in flat:
+                flat['subalterno'] = parts[2]
+            logger.info(f"Sister visura parsed tripletta '{tripletta}' -> F={parts[0] if parts else ''}/P={parts[1] if len(parts)>1 else ''}/S={parts[2] if len(parts)>2 else ''}")
+
         logger.info(f"Sister visura flat keys: {list(flat.keys())}")
 
         # ── 3. Costruisci input per sister-agent ──
