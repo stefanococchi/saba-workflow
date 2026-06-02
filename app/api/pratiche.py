@@ -1346,53 +1346,65 @@ def complete_practice_step(practice_id):
             # così il prossimo handler vede i dati aggiornati (extracted_data dello step appena completato)
             pr.step_states = step_states
 
-            # Auto-esegui il prossimo step se il suo handler lo prevede
-            next_handler = get_handler(next_step.type.name)
-            next_config = next_step.skip_conditions or {}
-            next_should_auto = next_handler.should_auto_execute(next_config) if next_handler else False
-            if next_handler and next_should_auto:
-                try:
-                    logger.info(f"Auto-execute step {next_step.order} ({next_step.type.name})...")
-                    next_exec_result = _execute_backoffice_step(next_step, pr, body)
-                    step_states[str(next_step.order)]['status'] = 'completed'
-                    step_states[str(next_step.order)]['completed_at'] = datetime.utcnow().isoformat()
-                    step_states[str(next_step.order)]['exec_result'] = next_exec_result
-                    logger.info(f"Auto-execute step {next_step.order} completed, exec_result status={next_exec_result.get('status', '?')}")
+            # Helper: raccogli extracted_data e validated_files per uno step auto-eseguito
+            def _collect_step_data(step_obj, step_config):
+                """Dopo auto-execute, raccogli extracted_data dai file in result_data."""
+                step_doc_types = step_config.get('doc_types', [])
+                ext_data = {}
+                val_files = []
+                # Rileggi result_data (potrebbe essere stato aggiornato dall'handler)
+                db.refresh(pr)
+                rd = pr.result_data if isinstance(pr.result_data, dict) else {}
+                for fhash, fdata in rd.get('files', {}).items():
+                    doc_type = fdata.get('identification', {}).get('documentId', '') or \
+                               fdata.get('identification', {}).get('documentTypeId', fhash)
+                    if step_doc_types:
+                        _norm = lambda s: s.lower().replace('_', '').replace(' ', '')
+                        if not any(_norm(t) in _norm(doc_type) or _norm(doc_type) in _norm(t) for t in step_doc_types):
+                            continue
+                    val_files.append({'hash': fhash, 'fileName': fdata.get('fileName', ''), 'documentId': doc_type})
+                    if fdata.get('extraction', {}).get('data'):
+                        ext_data[doc_type] = fdata['extraction']['data']
+                return ext_data, val_files
 
-                    # Avanza ancora — catena di auto-execute per step consecutivi
-                    after_next = next((s for s in steps if s.order > next_step.order), None)
-                    if after_next:
-                        pr.current_step_order = after_next.order
-                        step_states[str(after_next.order)] = {'status': 'in_progress'}
-                        # Se anche il prossimo è auto-execute, eseguilo
-                        after_handler = get_handler(after_next.type.name)
-                        after_config = after_next.skip_conditions or {}
-                        if after_handler and after_handler.should_auto_execute(after_config):
-                            try:
-                                logger.info(f"Auto-execute chained step {after_next.order} ({after_next.type.name})...")
-                                pr.step_states = step_states  # aggiorna prima dell'exec
-                                after_exec = _execute_backoffice_step(after_next, pr, body)
-                                step_states[str(after_next.order)]['status'] = 'completed'
-                                step_states[str(after_next.order)]['completed_at'] = datetime.utcnow().isoformat()
-                                step_states[str(after_next.order)]['exec_result'] = after_exec
-                                logger.info(f"Auto-execute chained step {after_next.order} completed")
-                                # Continua catena
-                                final_next = next((s for s in steps if s.order > after_next.order), None)
-                                if final_next:
-                                    pr.current_step_order = final_next.order
-                                    step_states[str(final_next.order)] = {'status': 'in_progress'}
-                                else:
-                                    pr.current_step_order = None
-                            except Exception as e2:
-                                logger.error(f"Auto-execute chained step {after_next.order} failed: {e2}")
-                                step_states[str(after_next.order)]['status'] = 'error'
-                                step_states[str(after_next.order)]['error'] = str(e2)
+            # Auto-esegui step successivi in catena
+            remaining = [s for s in steps if s.order > next_step.order]
+            auto_chain = [next_step]  # parti dal prossimo
+
+            for chain_step in auto_chain:
+                chain_handler = get_handler(chain_step.type.name)
+                chain_config = chain_step.skip_conditions or {}
+                chain_should_auto = chain_handler.should_auto_execute(chain_config) if chain_handler else False
+
+                if not chain_handler or not chain_should_auto:
+                    break
+
+                try:
+                    logger.info(f"Auto-execute step {chain_step.order} ({chain_step.type.name})...")
+                    pr.step_states = step_states  # aggiorna prima dell'exec
+                    chain_exec = _execute_backoffice_step(chain_step, pr, body)
+                    # Raccogli extracted_data per il confronto campi
+                    ext_data, val_files = _collect_step_data(chain_step, chain_config)
+                    step_states[str(chain_step.order)]['status'] = 'completed'
+                    step_states[str(chain_step.order)]['completed_at'] = datetime.utcnow().isoformat()
+                    step_states[str(chain_step.order)]['exec_result'] = chain_exec
+                    step_states[str(chain_step.order)]['extracted_data'] = ext_data
+                    step_states[str(chain_step.order)]['validated_files'] = val_files
+                    logger.info(f"Auto-execute step {chain_step.order} completed, extracted={list(ext_data.keys())}, files={len(val_files)}")
+
+                    # Avanza al prossimo
+                    next_in_chain = next((s for s in steps if s.order > chain_step.order), None)
+                    if next_in_chain:
+                        pr.current_step_order = next_in_chain.order
+                        step_states[str(next_in_chain.order)] = {'status': 'in_progress'}
+                        auto_chain.append(next_in_chain)  # continua catena
                     else:
                         pr.current_step_order = None
                 except Exception as e:
-                    logger.error(f"Auto-execute step {next_step.order} failed: {e}", exc_info=True)
-                    step_states[str(next_step.order)]['status'] = 'error'
-                    step_states[str(next_step.order)]['error'] = str(e)
+                    logger.error(f"Auto-execute step {chain_step.order} failed: {e}", exc_info=True)
+                    step_states[str(chain_step.order)]['status'] = 'error'
+                    step_states[str(chain_step.order)]['error'] = str(e)
+                    break  # ferma catena su errore
         else:
             # Workflow completato
             pr.current_step_order = None
