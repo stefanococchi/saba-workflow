@@ -105,15 +105,36 @@ class SisterVisuraHandler(StepHandler):
             task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
             output = task_result.get('output', {})
 
+            # Salva chiavi output per debug
+            if isinstance(output, dict):
+                result['output_keys'] = list(output.keys())
+                logger.info(f"Sister visura output keys: {list(output.keys())}")
+                for ok, ov in output.items():
+                    ov_type = type(ov).__name__
+                    ov_preview = str(ov)[:120] if not isinstance(ov, (bytes, bytearray)) else f'<binary {len(ov)} bytes>'
+                    logger.info(f"  {ok} ({ov_type}): {ov_preview}")
+            else:
+                result['output_keys'] = [f'<{type(output).__name__}>']
+                logger.info(f"Sister visura output type: {type(output).__name__}, preview: {str(output)[:200]}")
+
             # ── 5. Cerca e salva file PDF ──
             file_data = None
             file_name = f"visura_{sister_input.get('comune', 'visura')}_{sister_input.get('foglio', '')}_{sister_input.get('particella', '')}.pdf"
 
             if isinstance(output, dict):
-                for key in ('file', 'pdf', 'data', 'document', 'binary'):
+                # Cerca in chiavi note
+                for key in ('file', 'pdf', 'data', 'document', 'binary', 'content', 'output', 'result', 'visura'):
                     if key in output and output[key]:
                         file_data = output[key]
+                        result['file_found_in'] = key
                         break
+                # Cerca anche base64 in qualsiasi valore stringa lungo (probabile PDF)
+                if not file_data:
+                    for key, val in output.items():
+                        if isinstance(val, str) and len(val) > 500:
+                            file_data = val
+                            result['file_found_in'] = key
+                            break
                 if output.get('fileName'):
                     file_name = output['fileName']
 
@@ -178,16 +199,23 @@ class SisterVisuraHandler(StepHandler):
             is_ok = exec_result['status'] == 'COMPLETED'
             fields.append({'label': 'Stato AO', 'value': exec_result['status'], 'status': 'ok' if is_ok else 'error'})
 
-        # Debug: mostra input inviato e campi trovati quando fallisce
+        # Output AO: mostra chiavi risposta e dove è stato trovato il file
+        output_keys = exec_result.get('output_keys', [])
+        if output_keys:
+            fields.append({'label': 'Output AO keys', 'value': ', '.join(output_keys), 'status': 'ok'})
+        if exec_result.get('file_found_in'):
+            fields.append({'label': 'File trovato in', 'value': exec_result['file_found_in'], 'status': 'ok'})
+        elif not exec_result.get('file_saved') and exec_result.get('status') == 'COMPLETED':
+            fields.append({'label': 'File PDF', 'value': 'non trovato nella risposta AO', 'status': 'error'})
+
+        # Debug extra: mostra input inviato e campi trovati quando fallisce
         has_error = exec_result.get('error') or exec_result.get('status') in ('FAILED', 'TIMEOUT', 'error')
         if has_error:
-            # Campi estratti disponibili
             flat_keys = exec_result.get('flat_keys', [])
             if flat_keys:
                 fields.append({'label': 'Campi trovati', 'value': ', '.join(flat_keys), 'status': 'ok'})
             else:
                 fields.append({'label': 'Campi trovati', 'value': 'nessuno', 'status': 'error'})
-            # Input completo inviato al sister-agent
             input_parts = [f"{k}={v}" for k, v in inp.items() if k not in ('authPassword',)]
             fields.append({'label': 'Input sister', 'value': ' | '.join(input_parts) if input_parts else 'vuoto', 'status': 'ok'})
 

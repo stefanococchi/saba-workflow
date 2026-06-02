@@ -4114,7 +4114,7 @@ function _renderComparisonPanel(wf) {
 
     if (entries.length === 1) {
       // Campo presente una sola volta
-      const val = String(entries[0].value);
+      const val = _formatComparisonValue(entries[0].value);
       const displayVal = val.length > 80 ? val.substring(0, 80) + '...' : val;
       rowsHtml += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04)">
         ${icon} <span style="min-width:140px;color:var(--md-on-surface-variant);font-size:0.78rem">${label}</span>
@@ -4123,7 +4123,7 @@ function _renderComparisonPanel(wf) {
     } else {
       // Campo con valori multipli — mostra tutti
       const valuesHtml = entries.map(e => {
-        const val = String(e.value);
+        const val = _formatComparisonValue(e.value);
         const displayVal = val.length > 60 ? val.substring(0, 60) + '...' : val;
         const style = isMismatch ? 'color:var(--md-error);font-weight:600' : 'font-weight:500';
         return `<span style="${style};font-size:0.8rem">${_escHtml(displayVal)}</span>`;
@@ -4153,6 +4153,19 @@ function _renderComparisonPanel(wf) {
 }
 
 function _escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function _formatComparisonValue(v) {
+  if (v == null) return '-';
+  if (Array.isArray(v)) {
+    // Array di oggetti → riassumi ogni elemento con i suoi valori
+    return v.map(item => {
+      if (item && typeof item === 'object') return Object.values(item).filter(x => x != null).join(', ');
+      return String(item);
+    }).join(' | ');
+  }
+  if (typeof v === 'object') return Object.values(v).filter(x => x != null).join(', ');
+  return String(v);
+}
 
 function _renderStepSummaries(wf) {
   const completedSteps = (wf.steps || []).filter(s => s.state?.status === 'completed' && s.display_data?.summary_fields?.length > 0);
