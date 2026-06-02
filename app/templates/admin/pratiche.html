@@ -2518,6 +2518,60 @@ async function switchFileTab(hash) {
     html += `</div></div>`;
   }
 
+  // ── Sezione Unità Immobiliari: espandi F/M/S in card editabili per combinazione ──
+  const _fmsKeys = {
+    foglio: null, mappale: null, subalterno: null, particella: null,
+  };
+  // Cerca valori F/M/S nei dati estratti (case-insensitive)
+  for (const [key, val] of Object.entries(data)) {
+    const kl = key.toLowerCase().replace(/[\s_]+/g, '');
+    if (kl === 'foglio' || kl === 'numerofoglio') _fmsKeys.foglio = { key, val: String(val ?? '') };
+    else if (kl === 'mappale' || kl === 'particella' || kl === 'numeromappale') _fmsKeys.mappale = { key, val: String(val ?? '') };
+    else if (kl === 'subalterno' || kl === 'sub' || kl === 'numerosubalterno') _fmsKeys.subalterno = { key, val: String(val ?? '') };
+  }
+
+  if (_fmsKeys.foglio || _fmsKeys.mappale || _fmsKeys.subalterno) {
+    const _splitSemi = s => (s || '').split(/[;|]+/).map(v => v.trim()).filter(Boolean);
+    const fogli = _splitSemi(_fmsKeys.foglio?.val) || [''];
+    const mappali = _splitSemi(_fmsKeys.mappale?.val) || [''];
+    const subalterni = _splitSemi(_fmsKeys.subalterno?.val) || [''];
+
+    // Genera combinazioni
+    const units = [];
+    if (fogli.length <= 1 && mappali.length <= 1) {
+      for (const s of (subalterni.length ? subalterni : [''])) {
+        units.push({ f: fogli[0] || '', m: mappali[0] || '', s });
+      }
+    } else {
+      for (const f of fogli) for (const m of mappali) for (const s of (subalterni.length ? subalterni : [''])) {
+        units.push({ f, m, s });
+      }
+    }
+
+    if (units.length > 1) {
+      html += `<div class="field-group">
+        <div class="field-group-title"><i class="bi bi-building"></i> Unità Immobiliari (${units.length})</div>`;
+      units.forEach((u, idx) => {
+        html += `<div class="fields-grid" style="padding:10px;background:rgba(0,0,0,0.02);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--md-primary)">
+          <div style="grid-column:1/-1;font-size:0.72rem;font-weight:600;color:var(--md-primary);margin-bottom:4px">Unità ${idx + 1}</div>
+          <div class="field-card" data-file-hash="${hash}" data-field-key="${_escAttr((_fmsKeys.foglio?.key || 'foglio') + '#' + idx)}" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(u.f)}">
+            <div class="fc-label">Foglio <span class="fc-edit-icon"><i class="bi bi-pencil"></i></span></div>
+            <div class="fc-value">${u.f || '-'}</div>
+          </div>
+          <div class="field-card" data-file-hash="${hash}" data-field-key="${_escAttr((_fmsKeys.mappale?.key || 'mappale') + '#' + idx)}" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(u.m)}">
+            <div class="fc-label">Mappale <span class="fc-edit-icon"><i class="bi bi-pencil"></i></span></div>
+            <div class="fc-value">${u.m || '-'}</div>
+          </div>
+          <div class="field-card" data-file-hash="${hash}" data-field-key="${_escAttr((_fmsKeys.subalterno?.key || 'subalterno') + '#' + idx)}" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(u.s)}">
+            <div class="fc-label">Subalterno <span class="fc-edit-icon"><i class="bi bi-pencil"></i></span></div>
+            <div class="fc-value">${u.s || '-'}</div>
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+  }
+
   dataScroll.innerHTML = html;
   dataScroll.classList.add('detail-animate');
   setTimeout(() => dataScroll.classList.remove('detail-animate'), 250);
