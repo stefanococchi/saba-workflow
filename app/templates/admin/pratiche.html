@@ -2126,6 +2126,8 @@ async function showPracticeResult(result, practiceId) {
   if (stepDocTypes && Array.isArray(stepDocTypes) && stepDocTypes.length > 0) {
     visibleEntries = fileEntries.filter(([hash, file]) => {
       const docType = (file.identification?.documentId || file.identification?.documentTypeId || '').toLowerCase();
+      // File non ancora identificati (pending) → sempre visibili
+      if (!docType) return true;
       const norm = s => s.toLowerCase().replace(/[_ ]/g, '');
       return stepDocTypes.some(t => norm(docType).includes(norm(t)) || norm(t).includes(norm(docType)));
     });
