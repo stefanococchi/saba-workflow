@@ -626,6 +626,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h6 class="mb-0" id="catalogTypesTitle" style="font-weight:600"></h6>
           <div class="d-flex gap-1">
+            <button class="btn btn-sm btn-outline-secondary" onclick="exportCatalogOverview()" style="border-radius:8px;font-size:0.72rem" title="Riepilogo testuale di tutti gli agenti, tipi e campi"><i class="bi bi-card-text"></i> Vista d'insieme</button>
             <button class="btn btn-sm btn-outline-secondary" onclick="allCatalogTypesOn()" style="border-radius:8px;font-size:0.72rem"><i class="bi bi-check-all"></i> Tutti on</button>
             <button class="btn btn-sm btn-outline-secondary" onclick="pasteCatalogType()" style="border-radius:8px;font-size:0.72rem"><i class="bi bi-clipboard-plus"></i> Incolla tipo</button>
             <button class="btn btn-sm btn-primary" onclick="newCatalogType()" style="border-radius:8px">
@@ -3066,6 +3067,84 @@ function renderCatalogTypes() {
         </div>
       </div>`;
   }
+}
+
+async function exportCatalogOverview() {
+  // Raccoglie il catalogo di TUTTI gli agenti e genera un riepilogo testuale
+  const btn = event.target.closest('button');
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="prat-spinner" style="width:12px;height:12px;border-width:2px"></span> Caricamento...';
+  btn.disabled = true;
+
+  let text = '═══ RIEPILOGO CATALOGHI AGENTI ═══\n';
+  text += `Data: ${new Date().toLocaleString('it')}\n\n`;
+
+  try {
+    for (const agent of agents) {
+      let catalog = {};
+      try {
+        const r = await fetch(`/api/ao/catalog/${agent.id}`);
+        const data = await r.json();
+        if (data.error) continue;
+        catalog = data.output?.catalog || data.catalog || {};
+        if (catalog.info?.catalog) catalog = catalog.info.catalog;
+        if (catalog.catalog && typeof catalog.catalog === 'object' && !catalog.identification) catalog = catalog.catalog;
+      } catch (_) { continue; }
+
+      // Filtra solo tipi documento validi
+      const types = Object.entries(catalog).filter(([k, v]) =>
+        v && typeof v === 'object' && !Array.isArray(v) && (v.identification || v.extraction)
+      );
+      if (types.length === 0) continue;
+
+      text += `━━━ AGENTE: ${agent.name || agent.id} ━━━\n`;
+      text += `    ID: ${agent.id}\n`;
+      text += `    Tipi documento: ${types.length}\n\n`;
+
+      for (const [typeId, typeDef] of types) {
+        const ident = typeDef.identification || {};
+        const questions = Array.isArray(typeDef.extraction?.questions) ? typeDef.extraction.questions : [];
+        const active = questions.filter(q => !q.disabled);
+        const disabled = questions.filter(q => q.disabled);
+        const off = typeDef._disabled;
+
+        text += `  ${off ? '⏸' : '▶'} ${typeId}${off ? ' [SOSPESO]' : ''}\n`;
+        text += `    Identificazione: AI=${ident.aiEnabled ? 'sì' : 'no'} Regex=${ident.regexEnabled ? 'sì' : 'no'}\n`;
+        if (ident.hint) text += `    Hint: ${ident.hint}\n`;
+        text += `    Campi attivi (${active.length}):\n`;
+        for (const q of active) {
+          const fmt = q.outputFormat ? ` [${q.outputFormat}]` : '';
+          text += `      - ${q.id}${fmt}${q.question ? ': ' + q.question.substring(0, 80) : ''}\n`;
+        }
+        if (disabled.length > 0) {
+          text += `    Campi disabilitati (${disabled.length}): ${disabled.map(q => q.id).join(', ')}\n`;
+        }
+        text += '\n';
+      }
+    }
+  } catch (e) {
+    text += `\nErrore: ${e.message}\n`;
+  }
+
+  btn.innerHTML = origHtml;
+  btn.disabled = false;
+
+  // Mostra in un modal con textarea copiabile
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:var(--md-surface);border-radius:16px;padding:24px;width:90%;max-width:700px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h6 style="margin:0;font-weight:600"><i class="bi bi-card-text"></i> Vista d'insieme cataloghi</h6>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-outline-primary" onclick="navigator.clipboard.writeText(this.closest('div').parentElement.querySelector('textarea').value);this.innerHTML='<i class=\\'bi bi-check\\'></i> Copiato'" style="border-radius:8px;font-size:0.75rem"><i class="bi bi-clipboard"></i> Copia</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="this.closest('[style*=fixed]').remove()" style="border-radius:8px;font-size:0.75rem"><i class="bi bi-x-lg"></i></button>
+        </div>
+      </div>
+      <textarea readonly style="flex:1;min-height:400px;font-family:monospace;font-size:0.78rem;border:1px solid var(--md-outline-variant);border-radius:10px;padding:12px;resize:none;background:var(--md-surface-container-lowest);color:var(--md-on-surface)">${text.replace(/</g,'&lt;')}</textarea>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
 }
 
 function suspendType(id) {
