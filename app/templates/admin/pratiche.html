@@ -2532,18 +2532,21 @@ async function switchFileTab(hash) {
 
   if (_fmsKeys.foglio || _fmsKeys.mappale || _fmsKeys.subalterno) {
     const _splitSemi = s => (s || '').split(/[;|]+/).map(v => v.trim()).filter(Boolean);
-    const fogli = _splitSemi(_fmsKeys.foglio?.val) || [''];
-    const mappali = _splitSemi(_fmsKeys.mappale?.val) || [''];
-    const subalterni = _splitSemi(_fmsKeys.subalterno?.val) || [''];
+    const fogli = _splitSemi(_fmsKeys.foglio?.val);
+    const mappali = _splitSemi(_fmsKeys.mappale?.val);
+    const subalterni = _splitSemi(_fmsKeys.subalterno?.val);
 
-    // Genera combinazioni
+    // Accoppia per posizione (zip), NON prodotto cartesiano
+    // Es. F="175; 175" M="73; 73" S="46; 66" → [175/73/46, 175/73/66]
+    const maxLen = Math.max(fogli.length || 1, mappali.length || 1, subalterni.length || 1);
     const units = [];
-    if (fogli.length <= 1 && mappali.length <= 1) {
-      for (const s of (subalterni.length ? subalterni : [''])) {
-        units.push({ f: fogli[0] || '', m: mappali[0] || '', s });
-      }
-    } else {
-      for (const f of fogli) for (const m of mappali) for (const s of (subalterni.length ? subalterni : [''])) {
+    for (let i = 0; i < maxLen; i++) {
+      const f = fogli[i] || fogli[fogli.length - 1] || '';
+      const m = mappali[i] || mappali[mappali.length - 1] || '';
+      const s = subalterni[i] || subalterni[subalterni.length - 1] || '';
+      // Dedup: non aggiungere se identica alla precedente
+      const prev = units[units.length - 1];
+      if (!prev || prev.f !== f || prev.m !== m || prev.s !== s) {
         units.push({ f, m, s });
       }
     }

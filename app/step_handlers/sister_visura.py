@@ -167,7 +167,10 @@ class SisterVisuraHandler(StepHandler):
         return flat
 
     def _build_combinations(self, flat, config):
-        """Genera lista di combinazioni F/M/S da valori eventualmente multipli."""
+        """Genera lista di combinazioni F/M/S da valori eventualmente multipli.
+        Accoppia per posizione (zip), NON prodotto cartesiano.
+        Es. F='175; 175' M='73; 73' S='46; 66' → [(175,73,46), (175,73,66)]
+        """
         foglio_raw = _find_field(flat, 'foglio', 'foglio', config)
         particella_raw = _find_field(flat, 'particella', 'particella', config)
         subalterno_raw = _find_field(flat, 'subalterno', 'subalterno', config)
@@ -176,28 +179,20 @@ class SisterVisuraHandler(StepHandler):
         particelle = _split_multi(particella_raw)
         subalterni = _split_multi(subalterno_raw)
 
-        # Se foglio e particella sono singoli, espandi solo i subalterni
-        # (caso più comune: stesso immobile, subalterni diversi)
+        # Zip per posizione: ogni indice è un'unità immobiliare
+        max_len = max(len(fogli), len(particelle), len(subalterni))
         combos = []
-        if len(fogli) == 1 and len(particelle) == 1:
-            for s in subalterni:
-                combos.append((fogli[0], particelle[0], s))
-        else:
-            # Cartesian product per casi più complessi
-            for f in fogli:
-                for p in particelle:
-                    for s in subalterni:
-                        combos.append((f, p, s))
-
-        # Rimuovi duplicati e combo vuote
         seen = set()
-        unique = []
-        for c in combos:
-            if c not in seen and (c[0] or c[1] or c[2]):
-                seen.add(c)
-                unique.append(c)
+        for i in range(max_len):
+            f = fogli[i] if i < len(fogli) else fogli[-1] if fogli else ''
+            p = particelle[i] if i < len(particelle) else particelle[-1] if particelle else ''
+            s = subalterni[i] if i < len(subalterni) else subalterni[-1] if subalterni else ''
+            combo = (f, p, s)
+            if combo not in seen and (f or p or s):
+                seen.add(combo)
+                combos.append(combo)
 
-        return unique
+        return combos
 
     def execute(self, step, practice_result, config, db_session):
         from app.services import ao_service
