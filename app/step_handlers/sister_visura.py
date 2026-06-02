@@ -49,16 +49,39 @@ class SisterVisuraHandler(StepHandler):
             elif v:
                 flat[k.lower()] = v
         # Parsa tripletta (foglio/particella/subalterno) se presente
-        tripletta = flat.get('tripletta', '')
-        if tripletta and isinstance(tripletta, str) and '/' in tripletta:
-            parts = [p.strip() for p in tripletta.split('/')]
-            if len(parts) >= 1 and parts[0] and 'foglio' not in flat:
-                flat['foglio'] = parts[0]
-            if len(parts) >= 2 and parts[1] and 'particella' not in flat and 'mappale' not in flat:
-                flat['particella'] = parts[1]
-            if len(parts) >= 3 and parts[2] and 'subalterno' not in flat:
-                flat['subalterno'] = parts[2]
-            logger.info(f"Sister visura parsed tripletta '{tripletta}' -> F={parts[0] if parts else ''}/P={parts[1] if len(parts)>1 else ''}/S={parts[2] if len(parts)>2 else ''}")
+        tripletta = flat.get('tripletta')
+        logger.info(f"Sister visura tripletta raw: {type(tripletta).__name__} = {str(tripletta)[:200]}")
+        if tripletta:
+            parts = []
+            if isinstance(tripletta, str):
+                # Formato stringa: "175/73/46" o "175-73-46" o "175,73,46"
+                import re
+                parts = [p.strip() for p in re.split(r'[/\-,;|]', tripletta)]
+            elif isinstance(tripletta, dict):
+                # Formato dict: {"foglio": "175", "particella": "73", "subalterno": "46"}
+                for tk, tv in tripletta.items():
+                    if tv and tk.lower() not in flat:
+                        flat[tk.lower()] = str(tv)
+                logger.info(f"Sister visura tripletta dict -> keys added: {list(tripletta.keys())}")
+            elif isinstance(tripletta, list):
+                if tripletta and isinstance(tripletta[0], dict):
+                    # Lista di dict: [{"foglio": "175", ...}]
+                    for tk, tv in tripletta[0].items():
+                        if tv and tk.lower() not in flat:
+                            flat[tk.lower()] = str(tv)
+                    logger.info(f"Sister visura tripletta list[dict] -> keys added: {list(tripletta[0].keys())}")
+                else:
+                    # Lista di valori: [175, 73, 46]
+                    parts = [str(p).strip() for p in tripletta]
+
+            if parts:
+                if len(parts) >= 1 and parts[0] and 'foglio' not in flat:
+                    flat['foglio'] = parts[0]
+                if len(parts) >= 2 and parts[1] and 'particella' not in flat and 'mappale' not in flat:
+                    flat['particella'] = parts[1]
+                if len(parts) >= 3 and parts[2] and 'subalterno' not in flat:
+                    flat['subalterno'] = parts[2]
+                logger.info(f"Sister visura tripletta parsed -> F={flat.get('foglio','')}/P={flat.get('particella','')}/S={flat.get('subalterno','')}")
 
         logger.info(f"Sister visura flat keys: {list(flat.keys())}")
 
