@@ -416,37 +416,35 @@ class SisterVisuraHandler(StepHandler):
         result['extracted_data'] = extracted
 
         # ── 7. Inietta dati SISTER corretti nei file visura in result_data ──
-        # Ogni visura conosce il proprio file_name (salvato in file_saved).
-        # I dati catastali (foglio, particella, subalterno) sono quelli dell'INPUT
-        # alla richiesta SISTER — certi by design, non serve matching.
+        # I file in result_data hanno nomi AO (DOC_xxx.pdf), diversi dai nostri
+        # (visura_COMUNE_F_P_S.pdf). Cerchiamo i file identificati come visura
+        # e li abbiniamo alle visure SISTER per posizione.
+        # I dati FMS vengono dall'INPUT della richiesta SISTER — certi by design.
         try:
             rd = practice_result.result_data
             if rd and isinstance(rd, dict) and rd.get('files'):
                 rd = dict(rd)
                 ao_files = rd['files']
 
-                # Indice fileName → hash per lookup rapido
-                name_to_hash = {}
-                for fh, fd in ao_files.items():
-                    fn = fd.get('fileName', '')
-                    if fn:
-                        name_to_hash[fn] = fh
+                # File identificati come visura in result_data, ordinati per hash
+                visura_entries = sorted([
+                    (fh, fd) for fh, fd in ao_files.items()
+                    if 'visura' in (fd.get('identification', {}).get('documentId', '') or '').lower()
+                ], key=lambda x: x[0])
+
+                # Visure SISTER completate con successo, nell'ordine di esecuzione
+                sister_ok = [v for v in result.get('visure', []) if not v.get('error')]
 
                 CATASTALI_PATTERNS = ['foglio', 'mappale', 'particella', 'subalterno',
                                       'csub', 'categoria', 'classe', 'consistenza',
                                       'rendita', 'indirizzo', 'superficie']
 
-                for v in result.get('visure', []):
-                    saved_name = v.get('file_saved', '')
-                    if not saved_name:
-                        continue
+                for idx, (fh, fd) in enumerate(visura_entries):
+                    if idx >= len(sister_ok):
+                        break
+                    v = sister_ok[idx]
 
-                    fh = name_to_hash.get(saved_name)
-                    if not fh:
-                        continue
-                    fd = ao_files[fh]
-
-                    # Dati certi dall'input SISTER (non dalla risposta)
+                    # Dati certi dall'input SISTER
                     sister_fields = {
                         'FOGLIO': v.get('foglio', ''),
                         'PARTICELLA': v.get('particella', ''),
@@ -487,7 +485,7 @@ class SisterVisuraHandler(StepHandler):
                         del ext_data[k]
                     ext_data.update(sister_fields)
                     ext_data['_source'] = 'SISTER'
-                    logger.info(f"Sister visura: iniettato dati in {saved_name} (F={v.get('foglio')}/P={v.get('particella')}/S={v.get('subalterno')})")
+                    logger.info(f"Sister visura: iniettato in {fd.get('fileName', fh[:12])} -> F={v.get('foglio')}/P={v.get('particella')}/S={v.get('subalterno')}")
 
                 practice_result.result_data = rd
                 db_session.flush()
