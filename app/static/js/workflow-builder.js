@@ -1756,6 +1756,14 @@ function _renderStepEditFormInner(step, index, common) {
                     </label>
                     <div class="form-text">Se attivo, l'operatore potrà caricare nuovi documenti (drag & drop) in questo step prima di validare.</div>
                 </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="editDocCheckAutoProcess"
+                           ${step.config.auto_process ? 'checked' : ''}>
+                    <label class="form-check-label" for="editDocCheckAutoProcess">
+                        <i class="bi bi-cpu"></i> Elaborazione automatica
+                    </label>
+                    <div class="form-text">Se attivo, i file non ancora elaborati vengono inviati automaticamente ad AO per identificazione ed estrazione quando lo step diventa attivo.</div>
+                </div>
                 <hr>
                 <h6 class="text-muted"><i class="bi bi-signpost-split"></i> Branching</h6>
                 <div class="row mb-3">
@@ -2978,6 +2986,7 @@ function saveStepEdit() {
             step.config.if_rejected = document.getElementById('editDocCheckIfRejected')?.value || 'stop';
             step.config.if_rejected_step = parseInt(document.getElementById('editDocCheckRejectedStep')?.value) || 0;
             step.config.allow_upload = document.getElementById('editDocCheckAllowUpload')?.checked || false;
+            step.config.auto_process = document.getElementById('editDocCheckAutoProcess')?.checked || false;
             // Tipi documento selezionati
             step.config.doc_types = [];
             document.querySelectorAll('.doc-check-type-cb:checked').forEach(function(cb) {

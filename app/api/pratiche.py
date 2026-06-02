@@ -1311,7 +1311,9 @@ def complete_practice_step(practice_id):
         from app.step_handlers import get_handler
         exec_result = {}
         current_handler = get_handler(step_type)
-        if action != 'skip' and current_handler and current_handler.is_auto_execute:
+        current_config = current_step.skip_conditions or {}
+        should_auto = current_handler.should_auto_execute(current_config) if current_handler else False
+        if action != 'skip' and current_handler and should_auto:
             exec_result = _execute_backoffice_step(current_step, pr, body)
             step_states[str(current_order)]['exec_result'] = exec_result
 
@@ -1333,7 +1335,9 @@ def complete_practice_step(practice_id):
 
             # Auto-esegui il prossimo step se il suo handler lo prevede
             next_handler = get_handler(next_step.type.name)
-            if next_handler and next_handler.is_auto_execute:
+            next_config = next_step.skip_conditions or {}
+            next_should_auto = next_handler.should_auto_execute(next_config) if next_handler else False
+            if next_handler and next_should_auto:
                 try:
                     next_exec_result = _execute_backoffice_step(next_step, pr, body)
                     step_states[str(next_step.order)]['status'] = 'completed'

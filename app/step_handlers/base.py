@@ -16,6 +16,10 @@ class StepHandler(ABC):
         """Se True, lo step viene eseguito automaticamente quando diventa corrente."""
         return True
 
+    def should_auto_execute(self, config):
+        """Decide se auto-eseguire in base alla config dello step. Override per logica custom."""
+        return self.is_auto_execute
+
     @abstractmethod
     def execute(self, step, practice_result, config, db_session):
         """Esegue lo step. NON fare db_session.commit() — lo fa il chiamante.
