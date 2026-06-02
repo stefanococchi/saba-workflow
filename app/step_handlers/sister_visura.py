@@ -392,6 +392,103 @@ class SisterVisuraHandler(StepHandler):
             extracted[key] = data
         result['extracted_data'] = extracted
 
+        # ── 7. Inietta dati SISTER corretti nei file visura in result_data ──
+        # Il pannello estrazione legge da result_data.files[hash].extraction.data
+        # che viene da Document AI (inaffidabile per le visure). Sovrascriviamo
+        # con i dati strutturati SISTER che sono certi.
+        try:
+            rd = practice_result.result_data
+            if rd and isinstance(rd, dict) and rd.get('files'):
+                rd = dict(rd)
+                files = rd['files']
+
+                # Trova file identificati come visura in result_data
+                visura_hashes = [
+                    fh for fh, fd in files.items()
+                    if 'visura' in (fd.get('identification', {}).get('documentId', '') or '').lower()
+                ]
+
+                # Match visura file ↔ sister result per foglio+particella,
+                # poi fallback per posizione
+                sister_results = [v for v in result.get('visure', []) if not v.get('error')]
+                used = set()
+
+                for fh in visura_hashes:
+                    fd = files[fh]
+                    ext = fd.get('extraction', {}).get('data', {})
+
+                    # Leggi foglio/particella dall'estrazione Document AI
+                    file_foglio = file_part = None
+                    for k, val in ext.items():
+                        kl = k.lower().replace(' ', '')
+                        if 'foglio' in kl and not file_foglio:
+                            file_foglio = str(val).strip()
+                        if ('mappale' in kl or 'particella' in kl) and not file_part:
+                            file_part = str(val).strip()
+
+                    # Cerca match univoco per foglio+particella
+                    matched = None
+                    candidates = [
+                        (i, sr) for i, sr in enumerate(sister_results)
+                        if i not in used
+                        and str(sr.get('foglio', '')).strip() == file_foglio
+                        and str(sr.get('particella', '')).strip() == file_part
+                    ]
+                    if len(candidates) == 1:
+                        matched = candidates[0]
+                    elif candidates:
+                        matched = candidates[0]  # primo non usato
+                    else:
+                        # Fallback: primo sister result non usato
+                        for i, sr in enumerate(sister_results):
+                            if i not in used:
+                                matched = (i, sr)
+                                break
+
+                    if matched:
+                        idx, sr = matched
+                        used.add(idx)
+
+                        # Costruisci dati SISTER puliti
+                        sister_fields = {
+                            'FOGLIO': sr.get('foglio', ''),
+                            'PARTICELLA': sr.get('particella', ''),
+                            'SUBALTERNO': sr.get('subalterno', ''),
+                        }
+                        if sr.get('categoria'):
+                            sister_fields['CATEGORIA'] = sr['categoria']
+                        if sr.get('classe'):
+                            sister_fields['CLASSE'] = sr['classe']
+                        if sr.get('consistenza'):
+                            sister_fields['CONSISTENZA'] = sr['consistenza']
+                        if sr.get('rendita'):
+                            sister_fields['RENDITA'] = sr['rendita']
+                        if sr.get('indirizzo'):
+                            sister_fields['INDIRIZZO'] = sr['indirizzo']
+                        if sr.get('superficie_mq'):
+                            sister_fields['SUPERFICIE'] = sr['superficie_mq']
+                        if sr.get('intestati'):
+                            sister_fields['INTESTATI'] = [
+                                {'nominativo': i['nominativo'], 'codiceFiscale': i.get('cf', ''),
+                                 'diritto': i['diritto'], 'quota': i['quota']}
+                                for i in sr['intestati']
+                            ]
+
+                        # Aggiorna estrazione: mantieni campi Document AI non catastali,
+                        # sovrascrivi/aggiungi quelli SISTER
+                        if 'extraction' not in fd:
+                            fd['extraction'] = {'data': {}}
+                        elif 'data' not in fd['extraction']:
+                            fd['extraction']['data'] = {}
+                        fd['extraction']['data'].update(sister_fields)
+                        fd['extraction']['data']['_source'] = 'SISTER'
+                        logger.info(f"Sister visura: iniettato dati SISTER in file {fh[:12]} (sub={sr.get('subalterno')})")
+
+                practice_result.result_data = rd
+                db_session.flush()
+        except Exception as e:
+            logger.error(f"Sister visura: errore iniezione result_data: {e}", exc_info=True)
+
         return result
 
     def get_display_data(self, step_config, step_state):

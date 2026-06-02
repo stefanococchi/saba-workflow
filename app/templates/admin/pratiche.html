@@ -1490,17 +1490,7 @@ function _renderFileTabs(files, practiceId, progress, total) {
   const tabsBar = document.getElementById('fileTabsBar');
   const validateBar = document.getElementById('validateBar');
 
-  // Filtra per step workflow se doc_types configurato
-  const currentStep = practiceWorkflow?.steps?.find(s => s.order === practiceWorkflow?.current_step_order);
-  const stepDocTypes = currentStep?.config?.doc_types;
-  if (stepDocTypes && Array.isArray(stepDocTypes) && stepDocTypes.length > 0) {
-    const filtered = fileEntries.filter(([hash, file]) => {
-      const docType = (file.identification?.documentId || file.identification?.documentTypeId || '').toLowerCase();
-      const norm = s => s.toLowerCase().replace(/[_ ]/g, '');
-      return stepDocTypes.some(t => norm(docType).includes(norm(t)) || norm(t).includes(norm(docType)));
-    });
-    if (filtered.length > 0) fileEntries = filtered;
-  }
+  // Tutti i file della pratica sono sempre visibili e selezionabili
 
   let tabsHtml = '';
   let firstCompleted = null;
@@ -2119,21 +2109,8 @@ async function showPracticeResult(result, practiceId) {
     return;
   }
 
-  // Filtra file per step workflow (se doc_types configurato)
+  // Tutti i file della pratica sono sempre visibili e selezionabili
   let visibleEntries = fileEntries;
-  const currentStep = practiceWorkflow?.steps?.find(s => s.order === practiceWorkflow?.current_step_order);
-  const stepDocTypes = currentStep?.config?.doc_types; // es. ["documento_identita", "atto_notarile"]
-  if (stepDocTypes && Array.isArray(stepDocTypes) && stepDocTypes.length > 0) {
-    visibleEntries = fileEntries.filter(([hash, file]) => {
-      const docType = (file.identification?.documentId || file.identification?.documentTypeId || '').toLowerCase();
-      // File non ancora identificati (pending) → sempre visibili
-      if (!docType) return true;
-      const norm = s => s.toLowerCase().replace(/[_ ]/g, '');
-      return stepDocTypes.some(t => norm(docType).includes(norm(t)) || norm(t).includes(norm(docType)));
-    });
-    // Fallback: se nessun file matcha, mostra tutti
-    if (visibleEntries.length === 0) visibleEntries = fileEntries;
-  }
 
   // Build file tabs
   let tabsHtml = '';
