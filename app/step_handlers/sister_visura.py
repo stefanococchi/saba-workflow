@@ -120,32 +120,80 @@ class SisterVisuraHandler(StepHandler):
             # ── 5. Cerca e salva file PDF ──
             file_data = None
             file_name = f"visura_{sister_input.get('comune', 'visura')}_{sister_input.get('foglio', '')}_{sister_input.get('particella', '')}.pdf"
+            content = None
 
             if isinstance(output, dict):
-                # Cerca in chiavi note
-                for key in ('file', 'pdf', 'data', 'document', 'binary', 'content', 'output', 'result', 'visura'):
-                    if key in output and output[key]:
-                        file_data = output[key]
-                        result['file_found_in'] = key
-                        break
-                # Cerca anche base64 in qualsiasi valore stringa lungo (probabile PDF)
-                if not file_data:
+                # A. Cerca nel binary output preservato da _extract_useful_output
+                binary_out = output.get('_binary')
+                if binary_out and isinstance(binary_out, dict):
+                    # _binary è {key: {data, mimeType, fileName, ...}} o lista
+                    for bk, bv in binary_out.items():
+                        if isinstance(bv, dict) and bv.get('data'):
+                            content = base64.b64decode(bv['data'])
+                            file_name = bv.get('fileName', file_name)
+                            result['file_found_in'] = f'_binary.{bk}'
+                            break
+                        elif isinstance(bv, str) and len(bv) > 100:
+                            content = base64.b64decode(bv)
+                            result['file_found_in'] = f'_binary.{bk}'
+                            break
+                elif binary_out and isinstance(binary_out, list):
+                    for i, bv in enumerate(binary_out):
+                        if isinstance(bv, dict) and bv.get('data'):
+                            content = base64.b64decode(bv['data'])
+                            file_name = bv.get('fileName', file_name)
+                            result['file_found_in'] = f'_binary[{i}]'
+                            break
+
+                # B. Cerca dentro chiavi note e chiavi nested (es. output.sister.file)
+                if not content:
+                    search_targets = [output]
+                    # Aggiungi sotto-dict come target (es. output['sister'])
+                    for k, v in output.items():
+                        if isinstance(v, dict) and k != '_binary':
+                            search_targets.append(v)
+
+                    for target in search_targets:
+                        for key in ('file', 'pdf', 'data', 'document', 'binary', 'content', 'output', 'result', 'visura'):
+                            if key in target and target[key]:
+                                file_data = target[key]
+                                result['file_found_in'] = key
+                                break
+                        if file_data:
+                            break
+
+                # C. Fallback: base64 in qualsiasi valore stringa lungo
+                if not content and not file_data:
                     for key, val in output.items():
+                        if key == '_binary':
+                            continue
                         if isinstance(val, str) and len(val) > 500:
                             file_data = val
                             result['file_found_in'] = key
                             break
+                        # Cerca anche dentro sotto-dict
+                        if isinstance(val, dict):
+                            for k2, v2 in val.items():
+                                if isinstance(v2, str) and len(v2) > 500:
+                                    file_data = v2
+                                    result['file_found_in'] = f'{key}.{k2}'
+                                    break
+                            if file_data:
+                                break
+
                 if output.get('fileName'):
                     file_name = output['fileName']
 
-            if file_data:
+            # Decodifica file_data se non già decodificato come content
+            if not content and file_data:
                 if isinstance(file_data, str):
                     content = base64.b64decode(file_data)
                 elif isinstance(file_data, dict) and file_data.get('data'):
                     content = base64.b64decode(file_data['data'])
-                else:
+                elif isinstance(file_data, (bytes, bytearray)):
                     content = file_data
 
+            if content:
                 existing = db_session.query(PracticeFile).filter_by(
                     practice_id=practice_result.practice_id, file_name=file_name
                 ).first()

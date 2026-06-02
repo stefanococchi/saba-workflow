@@ -35,13 +35,23 @@ def _headers(accept="application/json"):
 
 
 def _extract_useful_output(raw_output):
-    """Estrae l'oggetto utile dall'output grezzo del workflow AO."""
+    """Estrae l'oggetto utile dall'output grezzo del workflow AO.
+    Restituisce il json del primo nodo, con eventuale binary preservato sotto _binary.
+    """
     if isinstance(raw_output, str):
         raw_output = json.loads(raw_output)
     for node_name, node_data in raw_output.items():
         main = node_data.get("main", [])
         if main and main[0]:
-            return main[0][0].get("json", {})
+            item = main[0][0]
+            result = item.get("json", {})
+            # Preserva binary output (es. PDF da sister-agent)
+            if item.get("binary"):
+                if isinstance(result, dict):
+                    result["_binary"] = item["binary"]
+                else:
+                    result = {"_json": result, "_binary": item["binary"]}
+            return result
     return raw_output
 
 
