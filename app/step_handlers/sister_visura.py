@@ -72,17 +72,23 @@ class SisterVisuraHandler(StepHandler):
             'particella': ['particella', 'mappale', 'numero_particella', 'numero_mappale'],
             'foglio': ['foglio', 'numero_foglio'],
             'subalterno': ['subalterno', 'sub', 'numero_subalterno'],
-            'comune': ['comune', 'comune_catastale'],
-            'provincia': ['provincia', 'sigla_provincia'],
+            'comune': ['comune', 'comune_catastale', 'comune_immobile'],
+            'provincia': ['provincia', 'sigla_provincia', 'provincia_immobile'],
         }
 
         for sister_key, source_key in mapping_fields.items():
             val = flat.get(source_key.lower())
             if not val:
-                # Cerca tra gli alias del campo
+                # Cerca tra gli alias esatti
                 for alias in field_aliases.get(sister_key, []):
                     val = flat.get(alias.lower())
                     if val:
+                        break
+            if not val:
+                # Fallback: cerca chiavi che contengono il nome del campo
+                for fk, fv in flat.items():
+                    if sister_key in fk and fv:
+                        val = fv
                         break
             if not val:
                 val = config.get(sister_key, '')
