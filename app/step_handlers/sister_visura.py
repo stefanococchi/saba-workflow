@@ -1,14 +1,203 @@
-"""Handler per step SISTER_VISURA — visure catastali da portale SISTER via AO."""
+"""Handler per step SISTER_VISURA — visure catastali da portale SISTER via AO.
+
+Supporta valori multipli (es. subalterno "46; 66"): genera una visura
+per ogni combinazione F/M/S unica.
+"""
 import base64
 import logging
+import re
 from app.step_handlers import register
 from app.step_handlers.base import StepHandler
 
 logger = logging.getLogger(__name__)
 
+# Alias: nomi alternativi per campi catastali
+FIELD_ALIASES = {
+    'particella': ['particella', 'mappale', 'numero_particella', 'numero_mappale'],
+    'foglio': ['foglio', 'numero_foglio'],
+    'subalterno': ['subalterno', 'sub', 'numero_subalterno'],
+    'comune': ['comune', 'comune_catastale', 'comune_immobile'],
+    'provincia': ['provincia', 'sigla_provincia', 'provincia_immobile'],
+}
+
+
+def _find_field(flat, sister_key, source_key, config):
+    """Cerca un campo in flat con alias, match parziale, e fallback config."""
+    val = flat.get(source_key.lower())
+    if not val:
+        for alias in FIELD_ALIASES.get(sister_key, []):
+            val = flat.get(alias.lower())
+            if val:
+                break
+    if not val:
+        for fk, fv in flat.items():
+            if sister_key in fk and fv:
+                val = fv
+                break
+    if not val:
+        val = config.get(sister_key, '')
+    return str(val).strip() if val else ''
+
+
+def _split_multi(val):
+    """Splitta valori multipli separati da ; , o spazi (es. '46; 66' -> ['46', '66'])."""
+    if not val:
+        return ['']
+    parts = [p.strip() for p in re.split(r'[;,|]+', val) if p.strip()]
+    return parts if parts else ['']
+
+
+def _extract_pdf(output):
+    """Cerca e restituisce (content_bytes, file_name, found_in) dall'output AO."""
+    file_data = None
+    file_name = None
+    found_in = None
+    content = None
+
+    if not isinstance(output, dict):
+        return None, None, None
+
+    # A. Binary output preservato da _extract_useful_output
+    binary_out = output.get('_binary')
+    if binary_out and isinstance(binary_out, dict):
+        for bk, bv in binary_out.items():
+            if isinstance(bv, dict) and bv.get('data'):
+                content = base64.b64decode(bv['data'])
+                file_name = bv.get('fileName')
+                found_in = f'_binary.{bk}'
+                break
+            elif isinstance(bv, str) and len(bv) > 100:
+                content = base64.b64decode(bv)
+                found_in = f'_binary.{bk}'
+                break
+    elif binary_out and isinstance(binary_out, list):
+        for i, bv in enumerate(binary_out):
+            if isinstance(bv, dict) and bv.get('data'):
+                content = base64.b64decode(bv['data'])
+                file_name = bv.get('fileName')
+                found_in = f'_binary[{i}]'
+                break
+
+    # B. Chiavi note e sotto-dict
+    if not content:
+        search_targets = [output]
+        for k, v in output.items():
+            if isinstance(v, dict) and k != '_binary':
+                search_targets.append(v)
+        for target in search_targets:
+            for key in ('file', 'pdf', 'data', 'document', 'binary', 'content', 'output', 'result', 'visura'):
+                if key in target and target[key]:
+                    file_data = target[key]
+                    found_in = key
+                    break
+            if file_data:
+                break
+
+    # C. Fallback: stringa base64 lunga
+    if not content and not file_data:
+        for key, val in output.items():
+            if key == '_binary':
+                continue
+            if isinstance(val, str) and len(val) > 500:
+                file_data = val
+                found_in = key
+                break
+            if isinstance(val, dict):
+                for k2, v2 in val.items():
+                    if isinstance(v2, str) and len(v2) > 500:
+                        file_data = v2
+                        found_in = f'{key}.{k2}'
+                        break
+                if file_data:
+                    break
+
+    if output.get('fileName'):
+        file_name = output['fileName']
+
+    # Decodifica
+    if not content and file_data:
+        if isinstance(file_data, str):
+            content = base64.b64decode(file_data)
+        elif isinstance(file_data, dict) and file_data.get('data'):
+            content = base64.b64decode(file_data['data'])
+        elif isinstance(file_data, (bytes, bytearray)):
+            content = file_data
+
+    return content, file_name, found_in
+
 
 @register('SISTER_VISURA')
 class SisterVisuraHandler(StepHandler):
+
+    def _flatten_accumulated(self, accumulated):
+        """Appiattisci dati estratti in dict flat con chiavi lowercase."""
+        flat = {}
+        for k, v in accumulated.items():
+            if isinstance(v, list) and v and isinstance(v[0], dict):
+                for nk, nv in v[0].items():
+                    if nk.lower() not in flat and nv:
+                        flat[nk.lower()] = nv
+            elif isinstance(v, dict):
+                for nk, nv in v.items():
+                    if nk.lower() not in flat and nv:
+                        flat[nk.lower()] = nv
+            elif v:
+                flat[k.lower()] = v
+
+        # Parsa tripletta se presente
+        tripletta = flat.get('tripletta')
+        if tripletta:
+            if isinstance(tripletta, str) and re.search(r'[/\-]', tripletta):
+                parts = [p.strip() for p in re.split(r'[/\-]', tripletta)]
+                if len(parts) >= 1 and parts[0] and 'foglio' not in flat:
+                    flat['foglio'] = parts[0]
+                if len(parts) >= 2 and parts[1] and 'particella' not in flat and 'mappale' not in flat:
+                    flat['particella'] = parts[1]
+                if len(parts) >= 3 and parts[2] and 'subalterno' not in flat:
+                    flat['subalterno'] = parts[2]
+            elif isinstance(tripletta, dict):
+                for tk, tv in tripletta.items():
+                    if tv and tk.lower() not in flat:
+                        flat[tk.lower()] = str(tv)
+            elif isinstance(tripletta, list) and tripletta and isinstance(tripletta[0], dict):
+                for tk, tv in tripletta[0].items():
+                    if tv and tk.lower() not in flat:
+                        flat[tk.lower()] = str(tv)
+
+        return flat
+
+    def _build_combinations(self, flat, config):
+        """Genera lista di combinazioni F/M/S da valori eventualmente multipli."""
+        foglio_raw = _find_field(flat, 'foglio', 'foglio', config)
+        particella_raw = _find_field(flat, 'particella', 'particella', config)
+        subalterno_raw = _find_field(flat, 'subalterno', 'subalterno', config)
+
+        fogli = _split_multi(foglio_raw)
+        particelle = _split_multi(particella_raw)
+        subalterni = _split_multi(subalterno_raw)
+
+        # Se foglio e particella sono singoli, espandi solo i subalterni
+        # (caso più comune: stesso immobile, subalterni diversi)
+        combos = []
+        if len(fogli) == 1 and len(particelle) == 1:
+            for s in subalterni:
+                combos.append((fogli[0], particelle[0], s))
+        else:
+            # Cartesian product per casi più complessi
+            for f in fogli:
+                for p in particelle:
+                    for s in subalterni:
+                        combos.append((f, p, s))
+
+        # Rimuovi duplicati e combo vuote
+        seen = set()
+        unique = []
+        for c in combos:
+            if c not in seen and (c[0] or c[1] or c[2]):
+                seen.add(c)
+                unique.append(c)
+
+        return unique
 
     def execute(self, step, practice_result, config, db_session):
         from app.services import ao_service
@@ -27,288 +216,149 @@ class SisterVisuraHandler(StepHandler):
                 result['error'] = 'Agente sister-agent non trovato'
                 return result
 
-        # ── 2. Raccogli dati catastali dagli step precedenti ──
+        # ── 2. Raccogli e appiattisci dati catastali ──
         accumulated = self.get_accumulated_data(practice_result)
-
-        logger.info(f"Sister visura accumulated data keys: {list(accumulated.keys())}")
-        if accumulated:
-            logger.info(f"Sister visura accumulated sample: { {k: v for k, v in list(accumulated.items())[:10]} }")
-
-        # Appiattisci array di oggetti (es. immobili, acquirenti) in campi di primo livello
-        # Prende i valori dal primo elemento dell'array
-        flat = {}
-        for k, v in accumulated.items():
-            if isinstance(v, list) and v and isinstance(v[0], dict):
-                for nested_key, nested_val in v[0].items():
-                    if nested_key.lower() not in flat and nested_val:
-                        flat[nested_key.lower()] = nested_val
-            elif isinstance(v, dict):
-                for nested_key, nested_val in v.items():
-                    if nested_key.lower() not in flat and nested_val:
-                        flat[nested_key.lower()] = nested_val
-            elif v:
-                flat[k.lower()] = v
-        # Parsa tripletta (foglio/particella/subalterno) se presente
-        tripletta = flat.get('tripletta')
-        logger.info(f"Sister visura tripletta raw: {type(tripletta).__name__} = {str(tripletta)[:200]}")
-        if tripletta:
-            parts = []
-            if isinstance(tripletta, str):
-                # Formato stringa: "175/73/46" o "175-73-46" o "175,73,46"
-                import re
-                parts = [p.strip() for p in re.split(r'[/\-,;|]', tripletta)]
-            elif isinstance(tripletta, dict):
-                # Formato dict: {"foglio": "175", "particella": "73", "subalterno": "46"}
-                for tk, tv in tripletta.items():
-                    if tv and tk.lower() not in flat:
-                        flat[tk.lower()] = str(tv)
-                logger.info(f"Sister visura tripletta dict -> keys added: {list(tripletta.keys())}")
-            elif isinstance(tripletta, list):
-                if tripletta and isinstance(tripletta[0], dict):
-                    # Lista di dict: [{"foglio": "175", ...}]
-                    for tk, tv in tripletta[0].items():
-                        if tv and tk.lower() not in flat:
-                            flat[tk.lower()] = str(tv)
-                    logger.info(f"Sister visura tripletta list[dict] -> keys added: {list(tripletta[0].keys())}")
-                else:
-                    # Lista di valori: [175, 73, 46]
-                    parts = [str(p).strip() for p in tripletta]
-
-            if parts:
-                if len(parts) >= 1 and parts[0] and 'foglio' not in flat:
-                    flat['foglio'] = parts[0]
-                if len(parts) >= 2 and parts[1] and 'particella' not in flat and 'mappale' not in flat:
-                    flat['particella'] = parts[1]
-                if len(parts) >= 3 and parts[2] and 'subalterno' not in flat:
-                    flat['subalterno'] = parts[2]
-                logger.info(f"Sister visura tripletta parsed -> F={flat.get('foglio','')}/P={flat.get('particella','')}/S={flat.get('subalterno','')}")
-
+        flat = self._flatten_accumulated(accumulated)
+        result['flat_keys'] = list(flat.keys())
         logger.info(f"Sister visura flat keys: {list(flat.keys())}")
 
-        # ── 3. Costruisci input per sister-agent ──
-        sister_input = {
+        # ── 3. Dati comuni (non catastali) ──
+        provincia = _find_field(flat, 'provincia', 'provincia', config)
+        comune = _find_field(flat, 'comune', 'comune', config).upper()
+
+        base_input = {
             'operation': config.get('operation', 'visuraStorica'),
             'tipoCatasto': config.get('tipo_catasto', 'F'),
             'tipoVisura': config.get('tipo_visura', 'sintetica'),
         }
-
-        # Mapping: campo estratto → campo sister input
-        mapping_fields = {
-            'provincia': 'provincia',
-            'comune': 'comune',
-            'foglio': 'foglio',
-            'particella': 'particella',
-            'subalterno': 'subalterno',
-        }
-        mapping_fields.update(config.get('field_mapping', {}))
-
-        # Alias: nomi alternativi per lo stesso campo sister
-        field_aliases = {
-            'particella': ['particella', 'mappale', 'numero_particella', 'numero_mappale'],
-            'foglio': ['foglio', 'numero_foglio'],
-            'subalterno': ['subalterno', 'sub', 'numero_subalterno'],
-            'comune': ['comune', 'comune_catastale', 'comune_immobile'],
-            'provincia': ['provincia', 'sigla_provincia', 'provincia_immobile'],
-        }
-
-        for sister_key, source_key in mapping_fields.items():
-            val = flat.get(source_key.lower())
-            if not val:
-                # Cerca tra gli alias esatti
-                for alias in field_aliases.get(sister_key, []):
-                    val = flat.get(alias.lower())
-                    if val:
-                        break
-            if not val:
-                # Fallback: cerca chiavi che contengono il nome del campo
-                for fk, fv in flat.items():
-                    if sister_key in fk and fv:
-                        val = fv
-                        break
-            if not val:
-                val = config.get(sister_key, '')
-            if val:
-                val = str(val)
-                # SISTER vuole il comune in maiuscolo
-                if sister_key == 'comune':
-                    val = val.upper()
-                sister_input[sister_key] = val
+        if provincia:
+            base_input['provincia'] = provincia
+        if comune:
+            base_input['comune'] = comune
 
         # Credenziali auth
         if config.get('auth_username'):
-            sister_input['authProvider'] = config.get('auth_provider', 'sister')
-            sister_input['authUsername'] = config['auth_username']
-            sister_input['authPassword'] = config.get('auth_password', '')
+            base_input['authProvider'] = config.get('auth_provider', 'sister')
+            base_input['authUsername'] = config['auth_username']
+            base_input['authPassword'] = config.get('auth_password', '')
 
-        result['input'] = sister_input
-        result['flat_keys'] = list(flat.keys())
-        logger.info(f"Sister visura input: {sister_input}")
+        # ── 4. Genera combinazioni F/M/S ──
+        combos = self._build_combinations(flat, config)
+        if not combos:
+            combos = [('', '', '')]  # almeno una chiamata
 
-        # ── 4. Chiama sister-agent ──
-        try:
-            run_result = ao_service.run_agent(sister_agent_id, sister_input)
-            task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
-            output = task_result.get('output', {})
+        result['visure'] = []
+        result['errors'] = []
+        all_ok = True
 
-            # Salva chiavi output per debug
-            if isinstance(output, dict):
-                result['output_keys'] = list(output.keys())
-                logger.info(f"Sister visura output keys: {list(output.keys())}")
-                for ok, ov in output.items():
-                    ov_type = type(ov).__name__
-                    ov_preview = str(ov)[:120] if not isinstance(ov, (bytes, bytearray)) else f'<binary {len(ov)} bytes>'
-                    logger.info(f"  {ok} ({ov_type}): {ov_preview}")
-            else:
-                result['output_keys'] = [f'<{type(output).__name__}>']
-                logger.info(f"Sister visura output type: {type(output).__name__}, preview: {str(output)[:200]}")
+        logger.info(f"Sister visura: {len(combos)} combinazioni F/M/S da elaborare")
 
-            # ── 5. Cerca e salva file PDF ──
-            file_data = None
-            file_name = f"visura_{sister_input.get('comune', 'visura')}_{sister_input.get('foglio', '')}_{sister_input.get('particella', '')}.pdf"
-            content = None
+        # ── 5. Una visura per ogni combinazione ──
+        for foglio, particella, subalterno in combos:
+            visura_info = {'foglio': foglio, 'particella': particella, 'subalterno': subalterno}
+            sister_input = dict(base_input)
+            if foglio:
+                sister_input['foglio'] = foglio
+            if particella:
+                sister_input['particella'] = particella
+            if subalterno:
+                sister_input['subalterno'] = subalterno
 
-            if isinstance(output, dict):
-                # A. Cerca nel binary output preservato da _extract_useful_output
-                binary_out = output.get('_binary')
-                if binary_out and isinstance(binary_out, dict):
-                    # _binary è {key: {data, mimeType, fileName, ...}} o lista
-                    for bk, bv in binary_out.items():
-                        if isinstance(bv, dict) and bv.get('data'):
-                            content = base64.b64decode(bv['data'])
-                            file_name = bv.get('fileName', file_name)
-                            result['file_found_in'] = f'_binary.{bk}'
-                            break
-                        elif isinstance(bv, str) and len(bv) > 100:
-                            content = base64.b64decode(bv)
-                            result['file_found_in'] = f'_binary.{bk}'
-                            break
-                elif binary_out and isinstance(binary_out, list):
-                    for i, bv in enumerate(binary_out):
-                        if isinstance(bv, dict) and bv.get('data'):
-                            content = base64.b64decode(bv['data'])
-                            file_name = bv.get('fileName', file_name)
-                            result['file_found_in'] = f'_binary[{i}]'
-                            break
+            label = f"F{foglio}/P{particella}/S{subalterno}"
+            logger.info(f"Sister visura [{label}] input: {sister_input}")
 
-                # B. Cerca dentro chiavi note e chiavi nested (es. output.sister.file)
-                if not content:
-                    search_targets = [output]
-                    # Aggiungi sotto-dict come target (es. output['sister'])
-                    for k, v in output.items():
-                        if isinstance(v, dict) and k != '_binary':
-                            search_targets.append(v)
+            try:
+                run_result = ao_service.run_agent(sister_agent_id, sister_input)
+                task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
+                output = task_result.get('output', {})
+                status = task_result.get('status', 'unknown')
+                visura_info['status'] = status
 
-                    for target in search_targets:
-                        for key in ('file', 'pdf', 'data', 'document', 'binary', 'content', 'output', 'result', 'visura'):
-                            if key in target and target[key]:
-                                file_data = target[key]
-                                result['file_found_in'] = key
-                                break
-                        if file_data:
-                            break
+                if isinstance(output, dict):
+                    visura_info['output_keys'] = list(output.keys())
 
-                # C. Fallback: base64 in qualsiasi valore stringa lungo
-                if not content and not file_data:
-                    for key, val in output.items():
-                        if key == '_binary':
-                            continue
-                        if isinstance(val, str) and len(val) > 500:
-                            file_data = val
-                            result['file_found_in'] = key
-                            break
-                        # Cerca anche dentro sotto-dict
-                        if isinstance(val, dict):
-                            for k2, v2 in val.items():
-                                if isinstance(v2, str) and len(v2) > 500:
-                                    file_data = v2
-                                    result['file_found_in'] = f'{key}.{k2}'
-                                    break
-                            if file_data:
-                                break
+                # Cerca PDF
+                default_name = f"visura_{comune}_{foglio}_{particella}_{subalterno}.pdf"
+                content, ao_file_name, found_in = _extract_pdf(output)
+                file_name = ao_file_name or default_name
 
-                if output.get('fileName'):
-                    file_name = output['fileName']
+                if content:
+                    existing = db_session.query(PracticeFile).filter_by(
+                        practice_id=practice_result.practice_id, file_name=file_name
+                    ).first()
+                    if existing:
+                        existing.data = content
+                        existing.mime_type = 'application/pdf'
+                    else:
+                        db_session.add(PracticeFile(
+                            practice_id=practice_result.practice_id,
+                            file_name=file_name,
+                            mime_type='application/pdf',
+                            data=content,
+                        ))
+                    db_session.flush()
 
-            # Decodifica file_data se non già decodificato come content
-            if not content and file_data:
-                if isinstance(file_data, str):
-                    content = base64.b64decode(file_data)
-                elif isinstance(file_data, dict) and file_data.get('data'):
-                    content = base64.b64decode(file_data['data'])
-                elif isinstance(file_data, (bytes, bytearray)):
-                    content = file_data
-
-            if content:
-                existing = db_session.query(PracticeFile).filter_by(
-                    practice_id=practice_result.practice_id, file_name=file_name
-                ).first()
-                if existing:
-                    existing.data = content
-                    existing.mime_type = 'application/pdf'
+                    visura_info['file_saved'] = file_name
+                    visura_info['file_size'] = len(content)
+                    visura_info['file_found_in'] = found_in
+                    logger.info(f"Sister visura [{label}]: saved {file_name} ({len(content)} bytes)")
                 else:
-                    db_session.add(PracticeFile(
-                        practice_id=practice_result.practice_id,
-                        file_name=file_name,
-                        mime_type='application/pdf',
-                        data=content,
-                    ))
-                db_session.flush()
+                    visura_info['note'] = 'Nessun file nella risposta'
+                    if status != 'COMPLETED':
+                        all_ok = False
 
-                result['file_saved'] = file_name
-                result['file_size'] = len(content)
-                logger.info(f"Sister visura: saved {file_name} ({len(content)} bytes)")
-            else:
-                result['raw_output'] = str(output)[:500]
-                result['note'] = 'Nessun file trovato nella risposta AO'
+                if status != 'COMPLETED':
+                    all_ok = False
 
-            result['status'] = task_result.get('status', 'unknown')
+            except Exception as e:
+                visura_info['error'] = str(e)
+                all_ok = False
+                logger.error(f"Sister visura [{label}] error: {e}")
 
-        except Exception as e:
-            result['error'] = f'Errore chiamata sister-agent: {str(e)}'
-            logger.error(f"Sister visura error: {e}")
+            result['visure'].append(visura_info)
 
+        # Riepilogo
+        result['status'] = 'COMPLETED' if all_ok else 'FAILED'
+        result['input'] = base_input  # per display
+        result['combos_count'] = len(combos)
         return result
 
     def get_display_data(self, step_config, step_state):
         exec_result = step_state.get('exec_result', {})
         fields = []
 
-        # Input usato
+        # Dati comuni
         inp = exec_result.get('input', {})
         if inp.get('provincia'):
             fields.append({'label': 'Provincia', 'value': inp['provincia'], 'status': 'ok'})
         if inp.get('comune'):
             fields.append({'label': 'Comune', 'value': inp['comune'], 'status': 'ok'})
-        if inp.get('foglio'):
-            fields.append({'label': 'Foglio/Particella/Sub', 'value': f"{inp.get('foglio', '')}/{inp.get('particella', '')}/{inp.get('subalterno', '')}", 'status': 'ok'})
 
-        # Risultato
-        if exec_result.get('file_saved'):
-            size_kb = (exec_result.get('file_size', 0) / 1024)
-            fields.append({'label': 'File', 'value': f"{exec_result['file_saved']} ({size_kb:.0f} KB)", 'status': 'ok'})
-        if exec_result.get('error'):
-            fields.append({'label': 'Errore', 'value': exec_result['error'], 'status': 'error'})
-        if exec_result.get('status'):
-            is_ok = exec_result['status'] == 'COMPLETED'
-            fields.append({'label': 'Stato AO', 'value': exec_result['status'], 'status': 'ok' if is_ok else 'error'})
+        # Dettaglio per ogni visura
+        visure = exec_result.get('visure', [])
+        for i, v in enumerate(visure):
+            fms = f"{v.get('foglio', '')}/{v.get('particella', '')}/{v.get('subalterno', '')}"
+            prefix = f"Unità {i+1}" if len(visure) > 1 else "F/M/S"
+            is_ok = v.get('status') == 'COMPLETED' and v.get('file_saved')
+            fields.append({'label': prefix, 'value': fms, 'status': 'ok' if v.get('status') == 'COMPLETED' else 'error'})
+            if v.get('file_saved'):
+                size_kb = (v.get('file_size', 0) / 1024)
+                fields.append({'label': f'File {prefix}', 'value': f"{v['file_saved']} ({size_kb:.0f} KB)", 'status': 'ok'})
+            if v.get('error'):
+                fields.append({'label': f'Errore {prefix}', 'value': v['error'], 'status': 'error'})
 
-        # Output AO: mostra chiavi risposta e dove è stato trovato il file
-        output_keys = exec_result.get('output_keys', [])
-        if output_keys:
-            fields.append({'label': 'Output AO keys', 'value': ', '.join(output_keys), 'status': 'ok'})
-        if exec_result.get('file_found_in'):
-            fields.append({'label': 'File trovato in', 'value': exec_result['file_found_in'], 'status': 'ok'})
-        elif not exec_result.get('file_saved') and exec_result.get('status') == 'COMPLETED':
-            fields.append({'label': 'File PDF', 'value': 'non trovato nella risposta AO', 'status': 'error'})
+        # Stato globale
+        status = exec_result.get('status')
+        if status:
+            is_ok = status == 'COMPLETED'
+            fields.append({'label': 'Stato', 'value': f"{status} ({len(visure)} visure)", 'status': 'ok' if is_ok else 'error'})
 
-        # Debug extra: mostra input inviato e campi trovati quando fallisce
-        has_error = exec_result.get('error') or exec_result.get('status') in ('FAILED', 'TIMEOUT', 'error')
+        # Debug su errore
+        has_error = exec_result.get('status') in ('FAILED', 'TIMEOUT', 'error')
         if has_error:
             flat_keys = exec_result.get('flat_keys', [])
             if flat_keys:
                 fields.append({'label': 'Campi trovati', 'value': ', '.join(flat_keys), 'status': 'ok'})
-            else:
-                fields.append({'label': 'Campi trovati', 'value': 'nessuno', 'status': 'error'})
             input_parts = [f"{k}={v}" for k, v in inp.items() if k not in ('authPassword',)]
             fields.append({'label': 'Input sister', 'value': ' | '.join(input_parts) if input_parts else 'vuoto', 'status': 'ok'})
 
