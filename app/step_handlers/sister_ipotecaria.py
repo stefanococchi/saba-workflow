@@ -1,10 +1,15 @@
-"""Handler per step SISTER_IPOTECARIA — ispezione ipotecaria per soggetto (CF) via AO."""
+"""Handler per step SISTER_IPOTECARIA — ispezione ipotecaria per soggetto (CF) via AO.
+
+Output AO include:
+- PDF ispezione
+- Dati strutturati (xmlJson): formalità, soggetti, costo
+"""
 import base64
 import logging
 import re
 from app.step_handlers import register
 from app.step_handlers.base import StepHandler
-from app.step_handlers.sister_visura import _extract_pdf, _clean_numeric, FIELD_ALIASES, _find_field
+from app.step_handlers.sister_visura import _extract_pdf, FIELD_ALIASES, _find_field
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +19,49 @@ def _split_cf(val):
     if not val:
         return []
     parts = [p.strip().upper() for p in re.split(r'[;,|]+', str(val)) if p.strip()]
-    # Filtra solo CF validi (16 caratteri alfanumerici)
     return [p for p in parts if re.match(r'^[A-Z0-9]{16}$', p)]
+
+
+def _extract_sister_data(output):
+    """Estrae dati strutturati dalla risposta sister-agent."""
+    sister = output.get('sister', {})
+    if not isinstance(sister, dict):
+        return {}
+    result_data = sister.get('result', sister)
+    xml_json = result_data.get('xmlJson', sister.get('xmlJson', {}))
+    costo = result_data.get('costo', sister.get('costo'))
+    return {
+        'costo': costo,
+        'xmlJson': xml_json,
+        'status': sister.get('status'),
+        'requestId': sister.get('requestId'),
+    }
+
+
+def _format_formalita(formalita_list):
+    """Formatta lista formalità per display nel banner."""
+    items = []
+    for f in (formalita_list or []):
+        desc = f.get('descrizione', '?')
+        data = f.get('data', '')
+        qualifica = f.get('qualifica', '')
+        repertorio = f.get('repertorio', '')
+        specie = f.get('specieAtto', '')
+        cancellata = ' [CANCELLATA]' if f.get('flagCancellazione') == '1' else ''
+        ubicazioni = ', '.join(u.get('descrizione', '') for u in f.get('ubicazioneImmobili', []))
+        parts = [desc]
+        if data:
+            parts.append(data)
+        if qualifica:
+            parts.append(qualifica)
+        if specie:
+            parts.append(specie)
+        if repertorio:
+            parts.append(f'rep. {repertorio}')
+        if ubicazioni:
+            parts.append(ubicazioni)
+        items.append(' — '.join(parts) + cancellata)
+    return items
 
 
 @register('SISTER_IPOTECARIA')
@@ -40,8 +86,6 @@ class SisterIpotecariaHandler(StepHandler):
 
         # ── 2. Raccogli dati dagli step precedenti ──
         accumulated = self.get_accumulated_data(practice_result)
-
-        # Appiattisci (stessa logica di sister_visura)
         flat = {}
         for k, v in accumulated.items():
             if isinstance(v, list) and v and isinstance(v[0], dict):
@@ -67,13 +111,11 @@ class SisterIpotecariaHandler(StepHandler):
             if val:
                 cf_raw = str(val)
                 break
-        # Fallback: cerca chiavi che contengono 'cf' o 'codice_fiscale'
         if not cf_raw:
             for fk, fv in flat.items():
                 if ('cf' in fk or 'codice_fiscale' in fk or 'codicefiscale' in fk) and fv:
                     cf_raw = str(fv)
                     break
-        # Anche dalla config
         if not cf_raw:
             cf_raw = config.get('codice_fiscale', '')
 
@@ -88,27 +130,24 @@ class SisterIpotecariaHandler(StepHandler):
         provincia = _find_field(flat, 'provincia', 'provincia', config)
         comune = _find_field(flat, 'comune', 'comune', config).upper()
 
-        base_input = {
-            'operation': 'ispezioneIpotecaria',
-        }
+        base_input = {'operation': 'ispezioneIpotecaria'}
         if provincia:
             base_input['provincia'] = provincia
         if comune:
             base_input['comune'] = comune
-
-        # Credenziali auth
         if config.get('auth_username'):
             base_input['authProvider'] = config.get('auth_provider', 'sister')
             base_input['authUsername'] = config['auth_username']
             base_input['authPassword'] = config.get('auth_password', '')
 
         result['input'] = base_input
-        result['visure'] = []
+        result['ispezioni'] = []
+        costo_totale = 0.0
         all_ok = True
 
         # ── 5. Una chiamata SISTER per ogni CF ──
         for cf in codici_fiscali:
-            visura_info = {'codiceFiscale': cf}
+            isp = {'codiceFiscale': cf}
             sister_input = dict(base_input)
             sister_input['codiceFiscale'] = cf
 
@@ -119,11 +158,25 @@ class SisterIpotecariaHandler(StepHandler):
                 task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
                 output = task_result.get('output', {})
                 status = task_result.get('status', 'unknown')
-                visura_info['status'] = status
+                isp['status'] = status
 
+                # Estrai dati strutturati
                 if isinstance(output, dict):
-                    visura_info['output_keys'] = list(output.keys())
+                    sister_data = _extract_sister_data(output)
+                    isp['costo'] = sister_data.get('costo')
+                    if isp['costo']:
+                        costo_totale += float(isp['costo'])
 
+                    xml_json = sister_data.get('xmlJson', {})
+                    isp['formalita'] = xml_json.get('formalita', [])
+                    isp['soggetti'] = xml_json.get('soggettiSelezionati', [])
+                    isp['documento'] = xml_json.get('documento', {})
+                    isp['schema'] = xml_json.get('tipoDocumento', '')
+                    isp['num_formalita'] = len(isp['formalita'])
+
+                    logger.info(f"Sister ipotecaria [{cf}]: costo={isp['costo']}, formalità={isp['num_formalita']}")
+
+                # Salva PDF
                 default_name = f"ipotecaria_{cf}.pdf"
                 content, ao_file_name, found_in = _extract_pdf(output)
                 file_name = ao_file_name or default_name
@@ -143,26 +196,43 @@ class SisterIpotecariaHandler(StepHandler):
                             data=content,
                         ))
                     db_session.flush()
-                    visura_info['file_saved'] = file_name
-                    visura_info['file_size'] = len(content)
-                    visura_info['file_found_in'] = found_in
+                    isp['file_saved'] = file_name
+                    isp['file_size'] = len(content)
                     logger.info(f"Sister ipotecaria [{cf}]: saved {file_name} ({len(content)} bytes)")
                 else:
-                    visura_info['note'] = 'Nessun file nella risposta'
+                    isp['note'] = 'Nessun file nella risposta'
                     all_ok = False
 
                 if status != 'COMPLETED':
                     all_ok = False
-                    visura_info['error'] = task_result.get('error', f'AO status: {status}')
+                    isp['error'] = task_result.get('error', f'AO status: {status}')
 
             except Exception as e:
-                visura_info['error'] = str(e)
+                isp['error'] = str(e)
                 all_ok = False
                 logger.error(f"Sister ipotecaria [{cf}] error: {e}")
 
-            result['visure'].append(visura_info)
+            result['ispezioni'].append(isp)
 
         result['status'] = 'COMPLETED' if all_ok else 'FAILED'
+        result['costo_totale'] = costo_totale
+
+        # ── 6. Salva dati strutturati in extracted_data per confronto campi ──
+        extracted = {}
+        for isp in result['ispezioni']:
+            cf = isp.get('codiceFiscale', '?')
+            formalita_descs = [f.get('descrizione', '?') for f in isp.get('formalita', [])]
+            extracted[f'ipotecaria_{cf}'] = {
+                'codice_fiscale': cf,
+                'costo': isp.get('costo'),
+                'num_formalita': isp.get('num_formalita', 0),
+                'formalita': '; '.join(formalita_descs) if formalita_descs else 'nessuna',
+                'soggetto': ', '.join(
+                    f"{s.get('cognome', '')} {s.get('nome', '')}" for s in isp.get('soggetti', [])
+                ),
+            }
+        result['extracted_data'] = extracted
+
         return result
 
     def get_display_data(self, step_config, step_state):
@@ -176,31 +246,63 @@ class SisterIpotecariaHandler(StepHandler):
         if inp.get('comune'):
             fields.append({'label': 'Comune', 'value': inp['comune'], 'status': 'ok'})
 
+        # Costo totale
+        costo = exec_result.get('costo_totale')
+        if costo:
+            fields.append({'label': 'Costo totale', 'value': f'€ {costo:.2f}', 'status': 'ok'})
+
         # Dettaglio per ogni CF
-        visure = exec_result.get('visure', [])
-        for i, v in enumerate(visure):
-            cf = v.get('codiceFiscale', '?')
-            prefix = f"CF {i+1}" if len(visure) > 1 else "CF"
-            fields.append({'label': prefix, 'value': cf, 'status': 'ok' if v.get('status') == 'COMPLETED' else 'error'})
-            if v.get('file_saved'):
-                size_kb = (v.get('file_size', 0) / 1024)
-                fields.append({'label': f'File {prefix}', 'value': f"{v['file_saved']} ({size_kb:.0f} KB)", 'status': 'ok'})
-            elif v.get('status') == 'COMPLETED':
-                fields.append({'label': f'File {prefix}', 'value': v.get('note', 'nessun PDF'), 'status': 'error'})
-            if v.get('error'):
-                fields.append({'label': f'Errore {prefix}', 'value': v['error'], 'status': 'error'})
+        ispezioni = exec_result.get('ispezioni', [])
+        for i, isp in enumerate(ispezioni):
+            cf = isp.get('codiceFiscale', '?')
+            prefix = f"Soggetto {i+1}" if len(ispezioni) > 1 else "Soggetto"
+            is_ok = isp.get('status') == 'COMPLETED'
+
+            # CF e soggetto
+            sogg_names = ', '.join(
+                f"{s.get('cognome', '')} {s.get('nome', '')}" for s in isp.get('soggetti', [])
+            )
+            cf_label = f"{cf}" + (f" ({sogg_names})" if sogg_names else '')
+            fields.append({'label': prefix, 'value': cf_label, 'status': 'ok' if is_ok else 'error'})
+
+            # Costo singolo
+            if isp.get('costo'):
+                fields.append({'label': f'Costo {prefix}', 'value': f"€ {isp['costo']:.2f}", 'status': 'ok'})
+
+            # Formalità
+            num_form = isp.get('num_formalita', 0)
+            if num_form > 0:
+                formalita_items = _format_formalita(isp.get('formalita', []))
+                summary = f"{num_form} formalità"
+                fields.append({'label': f'Formalità {prefix}', 'value': summary, 'status': 'ok'})
+                # Mostra le prime 5 formalità
+                for j, item in enumerate(formalita_items[:5]):
+                    fields.append({'label': f'  #{j+1}', 'value': item, 'status': 'ok'})
+                if len(formalita_items) > 5:
+                    fields.append({'label': '', 'value': f'... e altre {len(formalita_items) - 5}', 'status': 'ok'})
+            elif is_ok:
+                fields.append({'label': f'Formalità {prefix}', 'value': 'Nessuna formalità trovata', 'status': 'ok'})
+
+            # File
+            if isp.get('file_saved'):
+                size_kb = (isp.get('file_size', 0) / 1024)
+                fields.append({'label': f'File {prefix}', 'value': f"{isp['file_saved']} ({size_kb:.0f} KB)", 'status': 'ok'})
+            elif is_ok:
+                fields.append({'label': f'File {prefix}', 'value': isp.get('note', 'nessun PDF'), 'status': 'error'})
+
+            if isp.get('error'):
+                fields.append({'label': f'Errore {prefix}', 'value': isp['error'], 'status': 'error'})
 
         # Stato globale
         status = exec_result.get('status')
         if status:
             is_ok = status == 'COMPLETED'
-            fields.append({'label': 'Stato', 'value': f"{status} ({len(visure)} ispezioni)", 'status': 'ok' if is_ok else 'error'})
+            fields.append({'label': 'Stato', 'value': f"{status} ({len(ispezioni)} ispezioni)", 'status': 'ok' if is_ok else 'error'})
 
         # Debug su errore
         if exec_result.get('error'):
             fields.append({'label': 'Errore', 'value': exec_result['error'], 'status': 'error'})
-        has_error = exec_result.get('status') in ('FAILED', 'TIMEOUT', 'error')
-        if has_error:
+        if exec_result.get('status') in ('FAILED', 'TIMEOUT', 'error'):
             flat_keys = exec_result.get('flat_keys', [])
             if flat_keys:
                 fields.append({'label': 'Campi trovati', 'value': ', '.join(flat_keys), 'status': 'ok'})

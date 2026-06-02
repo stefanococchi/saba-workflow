@@ -1385,6 +1385,9 @@ def complete_practice_step(practice_id):
                     chain_exec = _execute_backoffice_step(chain_step, pr, body)
                     # Raccogli extracted_data per il confronto campi
                     ext_data, val_files = _collect_step_data(chain_step, chain_config)
+                    # Merge: se l'handler restituisce extracted_data propri (es. ipotecaria)
+                    if isinstance(chain_exec, dict) and chain_exec.get('extracted_data'):
+                        ext_data.update(chain_exec['extracted_data'])
                     step_states[str(chain_step.order)]['status'] = 'completed'
                     step_states[str(chain_step.order)]['completed_at'] = datetime.utcnow().isoformat()
                     step_states[str(chain_step.order)]['exec_result'] = chain_exec
