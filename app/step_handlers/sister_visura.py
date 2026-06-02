@@ -34,6 +34,22 @@ class SisterVisuraHandler(StepHandler):
         if accumulated:
             logger.info(f"Sister visura accumulated sample: { {k: v for k, v in list(accumulated.items())[:10]} }")
 
+        # Appiattisci array di oggetti (es. immobili, acquirenti) in campi di primo livello
+        # Prende i valori dal primo elemento dell'array
+        flat = {}
+        for k, v in accumulated.items():
+            if isinstance(v, list) and v and isinstance(v[0], dict):
+                for nested_key, nested_val in v[0].items():
+                    if nested_key.lower() not in flat and nested_val:
+                        flat[nested_key.lower()] = nested_val
+            elif isinstance(v, dict):
+                for nested_key, nested_val in v.items():
+                    if nested_key.lower() not in flat and nested_val:
+                        flat[nested_key.lower()] = nested_val
+            elif v:
+                flat[k.lower()] = v
+        logger.info(f"Sister visura flat keys: {list(flat.keys())}")
+
         # ── 3. Costruisci input per sister-agent ──
         sister_input = {
             'operation': config.get('operation', 'visuraStorica'),
@@ -52,11 +68,11 @@ class SisterVisuraHandler(StepHandler):
         mapping_fields.update(config.get('field_mapping', {}))
 
         for sister_key, source_key in mapping_fields.items():
-            val = None
-            for k, v in accumulated.items():
-                if k.lower() == source_key.lower() or k.lower().replace(' ', '_') == source_key.lower():
-                    val = v
-                    break
+            val = flat.get(source_key.lower())
+            if not val:
+                # Fallback: cerca anche con underscore/spazi normalizzati
+                norm_key = source_key.lower().replace(' ', '_')
+                val = flat.get(norm_key)
             if not val:
                 val = config.get(sister_key, '')
             if val:
@@ -69,6 +85,7 @@ class SisterVisuraHandler(StepHandler):
             sister_input['authPassword'] = config.get('auth_password', '')
 
         result['input'] = sister_input
+        result['flat_keys'] = list(flat.keys())
         logger.info(f"Sister visura input: {sister_input}")
 
         # ── 4. Chiama sister-agent ──
@@ -149,6 +166,19 @@ class SisterVisuraHandler(StepHandler):
         if exec_result.get('status'):
             is_ok = exec_result['status'] == 'COMPLETED'
             fields.append({'label': 'Stato AO', 'value': exec_result['status'], 'status': 'ok' if is_ok else 'error'})
+
+        # Debug: mostra input inviato e campi trovati quando fallisce
+        has_error = exec_result.get('error') or exec_result.get('status') in ('FAILED', 'TIMEOUT', 'error')
+        if has_error:
+            # Campi estratti disponibili
+            flat_keys = exec_result.get('flat_keys', [])
+            if flat_keys:
+                fields.append({'label': 'Campi trovati', 'value': ', '.join(flat_keys), 'status': 'ok'})
+            else:
+                fields.append({'label': 'Campi trovati', 'value': 'nessuno', 'status': 'error'})
+            # Input completo inviato al sister-agent
+            input_parts = [f"{k}={v}" for k, v in inp.items() if k not in ('authPassword',)]
+            fields.append({'label': 'Input sister', 'value': ' | '.join(input_parts) if input_parts else 'vuoto', 'status': 'ok'})
 
         return {
             'buttons': [
