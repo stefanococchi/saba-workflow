@@ -4436,6 +4436,29 @@ async function completeCurrentStep(action) {
   const practiceId = window._practiceId;
   if (!practiceId) return;
 
+  // Mostra stato di avanzamento nel pannello dati
+  const dataScroll = document.getElementById('dataScroll');
+  const vbRight = document.querySelector('.validate-bar .vb-right');
+  const prevButtons = vbRight ? vbRight.innerHTML : '';
+  if (vbRight) vbRight.innerHTML = '<span class="prat-spinner" style="width:14px;height:14px;border-width:2px"></span>';
+
+  // Costruisci lista step che verranno auto-eseguiti
+  const steps = practiceWorkflow?.steps || [];
+  const currentOrder = practiceWorkflow?.current_step_order;
+  const nextSteps = steps.filter(s => s.order > currentOrder).map(s => s.name);
+  let statusMsg = action === 'skip' ? 'Salto step...' : 'Completamento step...';
+  if (nextSteps.length > 0) {
+    statusMsg = `<div class="prat-spinner" style="width:24px;height:24px;border-width:3px;margin:0 auto 10px"></div>
+      <div style="font-weight:500;font-size:0.85rem">Esecuzione in corso...</div>
+      <div style="margin-top:8px;font-size:0.78rem;color:var(--md-on-surface-variant)">
+        Step in coda: ${nextSteps.map((n, i) => `<div style="padding:3px 0"><span class="prat-spinner" style="width:10px;height:10px;border-width:2px;margin-right:6px;vertical-align:middle"></span>${n}</div>`).join('')}
+      </div>
+      <div style="margin-top:10px;font-size:0.72rem;color:var(--md-on-surface-variant)">Gli step automatici vengono eseguiti in sequenza.<br>Questo può richiedere qualche minuto.</div>`;
+  }
+  if (dataScroll) {
+    dataScroll.innerHTML = `<div class="text-center py-5" style="color:var(--md-on-surface-variant)">${statusMsg}</div>`;
+  }
+
   try {
     // 1. Una sola chiamata — il backend salva tutto atomicamente nel DB
     const r = await fetch(`/api/ao/practice/${practiceId}/complete-step`, {
@@ -4444,7 +4467,11 @@ async function completeCurrentStep(action) {
       body: JSON.stringify({ action }),
     });
     const data = await r.json();
-    if (data.error) { alert('Errore: ' + data.error); return; }
+    if (data.error) {
+      if (vbRight) vbRight.innerHTML = prevButtons;
+      alert('Errore: ' + data.error);
+      return;
+    }
 
     // 2. Ricarica dal DB e mostra — il DB è l'unica fonte di verità
     const cached = await loadPracticeFromDb(practiceId);
