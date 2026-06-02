@@ -39,11 +39,23 @@ def _find_field(flat, sister_key, source_key, config):
     return str(val).strip() if val else ''
 
 
+def _clean_numeric(val):
+    """Estrae solo il numero da un valore catastale sporco.
+    Es. '8 (mappale 1912)' -> '8', '175' -> '175', '73/bis' -> '73'
+    """
+    if not val:
+        return ''
+    val = str(val).strip()
+    # Prendi solo il primo numero trovato
+    m = re.match(r'^(\d+)', val)
+    return m.group(1) if m else val
+
+
 def _split_multi(val):
-    """Splitta valori multipli separati da ; , o spazi (es. '46; 66' -> ['46', '66'])."""
+    """Splitta valori multipli separati da ; , e pulisce ogni valore a solo numero."""
     if not val:
         return ['']
-    parts = [p.strip() for p in re.split(r'[;,|]+', val) if p.strip()]
+    parts = [_clean_numeric(p) for p in re.split(r'[;,|]+', str(val)) if p.strip()]
     return parts if parts else ['']
 
 
