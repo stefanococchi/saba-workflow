@@ -2457,13 +2457,25 @@ async function switchFileTab(hash) {
   </div>`;
 
   // Group and render fields (usa ordine catalogo se disponibile)
+  // Escludi campi FMS dalla griglia (renderizzati nella sezione Unità Immobiliari)
+  const _fmsExclude = new Set();
+  for (const [key] of Object.entries(data)) {
+    const kl = key.toLowerCase().replace(/[\s_]+/g, '');
+    if (['foglio', 'numerofoglio', 'mappale', 'particella', 'numeromappale',
+         'subalterno', 'sub', 'numerosubalterno'].includes(kl)) _fmsExclude.add(key);
+  }
+  // Escludi anche _source (campo tecnico)
+  _fmsExclude.add('_source');
+
   const groups = groupFields(data, docType);
   for (const [groupId, group] of Object.entries(groups)) {
+    const filteredFields = group.fields.filter(([key]) => !_fmsExclude.has(key));
+    if (filteredFields.length === 0) continue;
     html += `<div class="field-group">
       <div class="field-group-title"><i class="bi ${group.icon}"></i> ${group.label}</div>
       <div class="fields-grid">`;
 
-    for (const [key, val] of group.fields) {
+    for (const [key, val] of filteredFields) {
       if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object' && val[0] !== null) {
         // Array di oggetti (es. acquirenti, immobili) — render ciascun elemento come sub-card
         html += `<div class="field-card" style="grid-column:1/-1;cursor:default">
@@ -2538,12 +2550,14 @@ async function switchFileTab(hash) {
       }
     }
 
-    if (units.length > 1) {
+    if (units.length >= 1) {
+      const titleLabel = units.length > 1 ? `Unità Immobiliari (${units.length})` : 'Unità Immobiliare';
       html += `<div class="field-group">
-        <div class="field-group-title"><i class="bi bi-building"></i> Unità Immobiliari (${units.length})</div>`;
+        <div class="field-group-title"><i class="bi bi-building"></i> ${titleLabel}</div>`;
       units.forEach((u, idx) => {
+        const unitLabel = units.length > 1 ? `<div style="grid-column:1/-1;font-size:0.72rem;font-weight:600;color:var(--md-primary);margin-bottom:4px">Unità ${idx + 1}</div>` : '';
         html += `<div class="fields-grid" style="padding:10px;background:rgba(0,0,0,0.02);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--md-primary)">
-          <div style="grid-column:1/-1;font-size:0.72rem;font-weight:600;color:var(--md-primary);margin-bottom:4px">Unità ${idx + 1}</div>
+          ${unitLabel}
           <div class="field-card" data-file-hash="${hash}" data-field-key="${_escAttr((_fmsKeys.foglio?.key || 'foglio') + '#' + idx)}" data-pdf="${_escAttr(fn)}" data-search="${_escAttr(u.f)}">
             <div class="fc-label">Foglio <span class="fc-edit-icon"><i class="bi bi-pencil"></i></span></div>
             <div class="fc-value">${u.f || '-'}</div>

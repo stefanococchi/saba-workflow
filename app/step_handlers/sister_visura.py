@@ -474,14 +474,25 @@ class SisterVisuraHandler(StepHandler):
                                 for i in sr['intestati']
                             ]
 
-                        # Aggiorna estrazione: mantieni campi Document AI non catastali,
-                        # sovrascrivi/aggiungi quelli SISTER
+                        # Aggiorna estrazione: rimuovi campi Document AI catastali
+                        # (spesso garbled/errati), poi inietta quelli SISTER certi
                         if 'extraction' not in fd:
                             fd['extraction'] = {'data': {}}
                         elif 'data' not in fd['extraction']:
                             fd['extraction']['data'] = {}
-                        fd['extraction']['data'].update(sister_fields)
-                        fd['extraction']['data']['_source'] = 'SISTER'
+                        ext_data = fd['extraction']['data']
+                        # Rimuovi campi Document AI catastali che SISTER sovrascrive
+                        CATASTALI_PATTERNS = ['foglio', 'mappale', 'particella', 'subalterno',
+                                              'csub', 'categoria', 'classe', 'consistenza',
+                                              'rendita', 'indirizzo', 'superficie']
+                        keys_to_remove = [
+                            k for k in ext_data
+                            if any(p in k.lower().replace(' ', '') for p in CATASTALI_PATTERNS)
+                        ]
+                        for k in keys_to_remove:
+                            del ext_data[k]
+                        ext_data.update(sister_fields)
+                        ext_data['_source'] = 'SISTER'
                         logger.info(f"Sister visura: iniettato dati SISTER in file {fh[:12]} (sub={sr.get('subalterno')})")
 
                 practice_result.result_data = rd
