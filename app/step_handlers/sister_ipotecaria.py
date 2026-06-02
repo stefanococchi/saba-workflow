@@ -153,64 +153,87 @@ class SisterIpotecariaHandler(StepHandler):
 
             logger.info(f"Sister ipotecaria [{cf}] input: {sister_input}")
 
-            try:
-                run_result = ao_service.run_agent(sister_agent_id, sister_input)
-                task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
-                output = task_result.get('output', {})
-                status = task_result.get('status', 'unknown')
-                isp['status'] = status
+            MAX_RETRIES = 2
+            for attempt in range(MAX_RETRIES + 1):
+                try:
+                    run_result = ao_service.run_agent(sister_agent_id, sister_input)
+                    task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
+                    output = task_result.get('output', {})
+                    status = task_result.get('status', 'unknown')
+                    error_msg = task_result.get('error', '') or ''
 
-                # Estrai dati strutturati
-                if isinstance(output, dict):
-                    sister_data = _extract_sister_data(output)
-                    isp['costo'] = sister_data.get('costo')
-                    if isp['costo']:
-                        costo_totale += float(isp['costo'])
+                    # Retry su timeout SISTER
+                    if status != 'COMPLETED' and 'timeout' in error_msg.lower() and attempt < MAX_RETRIES:
+                        import time
+                        wait = 5 * (attempt + 1)
+                        logger.warning(f"Sister ipotecaria [{cf}] timeout (tentativo {attempt + 1}/{MAX_RETRIES + 1}), retry tra {wait}s...")
+                        time.sleep(wait)
+                        continue
 
-                    xml_json = sister_data.get('xmlJson', {})
-                    isp['formalita'] = xml_json.get('formalita', [])
-                    isp['soggetti'] = xml_json.get('soggettiSelezionati', [])
-                    isp['documento'] = xml_json.get('documento', {})
-                    isp['schema'] = xml_json.get('tipoDocumento', '')
-                    isp['num_formalita'] = len(isp['formalita'])
+                    isp['status'] = status
+                    if attempt > 0:
+                        isp['retries'] = attempt
 
-                    logger.info(f"Sister ipotecaria [{cf}]: costo={isp['costo']}, formalità={isp['num_formalita']}")
+                    # Estrai dati strutturati
+                    if isinstance(output, dict):
+                        sister_data = _extract_sister_data(output)
+                        isp['costo'] = sister_data.get('costo')
+                        if isp['costo']:
+                            costo_totale += float(isp['costo'])
 
-                # Salva PDF
-                default_name = f"ipotecaria_{cf}.pdf"
-                content, ao_file_name, found_in = _extract_pdf(output)
-                file_name = ao_file_name or default_name
+                        xml_json = sister_data.get('xmlJson', {})
+                        isp['formalita'] = xml_json.get('formalita', [])
+                        isp['soggetti'] = xml_json.get('soggettiSelezionati', [])
+                        isp['documento'] = xml_json.get('documento', {})
+                        isp['schema'] = xml_json.get('tipoDocumento', '')
+                        isp['num_formalita'] = len(isp['formalita'])
 
-                if content:
-                    existing = db_session.query(PracticeFile).filter_by(
-                        practice_id=practice_result.practice_id, file_name=file_name
-                    ).first()
-                    if existing:
-                        existing.data = content
-                        existing.mime_type = 'application/pdf'
+                        logger.info(f"Sister ipotecaria [{cf}]: costo={isp['costo']}, formalità={isp['num_formalita']}")
+
+                    # Salva PDF
+                    default_name = f"ipotecaria_{cf}.pdf"
+                    content, ao_file_name, found_in = _extract_pdf(output)
+                    file_name = ao_file_name or default_name
+
+                    if content:
+                        existing = db_session.query(PracticeFile).filter_by(
+                            practice_id=practice_result.practice_id, file_name=file_name
+                        ).first()
+                        if existing:
+                            existing.data = content
+                            existing.mime_type = 'application/pdf'
+                        else:
+                            db_session.add(PracticeFile(
+                                practice_id=practice_result.practice_id,
+                                file_name=file_name,
+                                mime_type='application/pdf',
+                                data=content,
+                            ))
+                        db_session.flush()
+                        isp['file_saved'] = file_name
+                        isp['file_size'] = len(content)
+                        logger.info(f"Sister ipotecaria [{cf}]: saved {file_name} ({len(content)} bytes)")
                     else:
-                        db_session.add(PracticeFile(
-                            practice_id=practice_result.practice_id,
-                            file_name=file_name,
-                            mime_type='application/pdf',
-                            data=content,
-                        ))
-                    db_session.flush()
-                    isp['file_saved'] = file_name
-                    isp['file_size'] = len(content)
-                    logger.info(f"Sister ipotecaria [{cf}]: saved {file_name} ({len(content)} bytes)")
-                else:
-                    isp['note'] = 'Nessun file nella risposta'
-                    all_ok = False
+                        isp['note'] = 'Nessun file nella risposta'
+                        all_ok = False
 
-                if status != 'COMPLETED':
-                    all_ok = False
-                    isp['error'] = task_result.get('error', f'AO status: {status}')
+                    if status != 'COMPLETED':
+                        all_ok = False
+                        isp['error'] = task_result.get('error', f'AO status: {status}')
 
-            except Exception as e:
-                isp['error'] = str(e)
-                all_ok = False
-                logger.error(f"Sister ipotecaria [{cf}] error: {e}")
+                    break  # successo o errore non-timeout, esci dal retry
+
+                except Exception as e:
+                    if 'timeout' in str(e).lower() and attempt < MAX_RETRIES:
+                        import time
+                        wait = 5 * (attempt + 1)
+                        logger.warning(f"Sister ipotecaria [{cf}] exception timeout (tentativo {attempt + 1}), retry tra {wait}s...")
+                        time.sleep(wait)
+                        continue
+                    isp['error'] = str(e)
+                    all_ok = False
+                    logger.error(f"Sister ipotecaria [{cf}] error: {e}")
+                    break
 
             result['ispezioni'].append(isp)
 

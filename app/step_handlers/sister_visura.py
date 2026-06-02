@@ -274,90 +274,113 @@ class SisterVisuraHandler(StepHandler):
             label = f"{foglio}/{particella}/{subalterno}"
             logger.info(f"Sister visura [{label}] input: {sister_input}")
 
-            try:
-                run_result = ao_service.run_agent(sister_agent_id, sister_input)
-                task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
-                output = task_result.get('output', {})
-                status = task_result.get('status', 'unknown')
-                visura_info['status'] = status
+            MAX_RETRIES = 2
+            for attempt in range(MAX_RETRIES + 1):
+                try:
+                    run_result = ao_service.run_agent(sister_agent_id, sister_input)
+                    task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
+                    output = task_result.get('output', {})
+                    status = task_result.get('status', 'unknown')
+                    error_msg = task_result.get('error', '') or ''
 
-                if isinstance(output, dict):
-                    visura_info['output_keys'] = list(output.keys())
+                    # Retry su timeout SISTER
+                    if status != 'COMPLETED' and 'timeout' in error_msg.lower() and attempt < MAX_RETRIES:
+                        import time
+                        wait = 5 * (attempt + 1)
+                        logger.warning(f"Sister visura [{label}] timeout (tentativo {attempt + 1}/{MAX_RETRIES + 1}), retry tra {wait}s...")
+                        time.sleep(wait)
+                        continue
 
-                    # Estrai dati strutturati da sister.result
-                    sister = output.get('sister', {})
-                    if isinstance(sister, dict):
-                        sr = sister.get('result', sister)
-                        immobili = sr.get('immobili', [])
-                        xml_json = sr.get('xmlJson', sister.get('xmlJson', {}))
-                        sit_attuale = xml_json.get('situazioneAttuale', {})
+                    visura_info['status'] = status
+                    if attempt > 0:
+                        visura_info['retries'] = attempt
 
-                        if immobili:
-                            imm = immobili[0]
-                            visura_info['categoria'] = imm.get('categoria', '')
-                            visura_info['classe'] = imm.get('classe', '')
-                            visura_info['consistenza'] = imm.get('consistenza', '')
-                            visura_info['rendita'] = imm.get('rendita', '')
-                            visura_info['indirizzo'] = imm.get('indirizzo', '')
+                    if isinstance(output, dict):
+                        visura_info['output_keys'] = list(output.keys())
 
-                        if sit_attuale:
-                            visura_info['indirizzo'] = visura_info.get('indirizzo') or sit_attuale.get('indirizzo', '')
-                            classamento = sit_attuale.get('classamento', {})
-                            if classamento:
-                                visura_info['categoria'] = visura_info.get('categoria') or classamento.get('categoria', '')
-                                rendita = classamento.get('renditaEuro', '')
-                                if rendita:
-                                    visura_info['rendita'] = f'€ {rendita}'
-                            superficie = sit_attuale.get('superficie', {})
-                            if superficie:
-                                visura_info['superficie_mq'] = superficie.get('totale', '')
-                            intestati = sit_attuale.get('intestati', [])
-                            if intestati:
-                                visura_info['intestati'] = [
-                                    {'nominativo': i.get('nominativo', ''), 'cf': i.get('codiceFiscale', ''),
-                                     'diritto': i.get('diritto', {}).get('descrizione', ''),
-                                     'quota': i.get('diritto', {}).get('quota', '')}
-                                    for i in intestati
-                                ]
+                        # Estrai dati strutturati da sister.result
+                        sister = output.get('sister', {})
+                        if isinstance(sister, dict):
+                            sr = sister.get('result', sister)
+                            immobili = sr.get('immobili', [])
+                            xml_json = sr.get('xmlJson', sister.get('xmlJson', {}))
+                            sit_attuale = xml_json.get('situazioneAttuale', {})
 
-                        visura_info['total_results'] = sr.get('totalResults', len(immobili))
-                        logger.info(f"Sister visura [{label}]: {len(immobili)} immobili, categoria={visura_info.get('categoria')}")
+                            if immobili:
+                                imm = immobili[0]
+                                visura_info['categoria'] = imm.get('categoria', '')
+                                visura_info['classe'] = imm.get('classe', '')
+                                visura_info['consistenza'] = imm.get('consistenza', '')
+                                visura_info['rendita'] = imm.get('rendita', '')
+                                visura_info['indirizzo'] = imm.get('indirizzo', '')
 
-                default_name = f"visura_{comune}_{foglio}_{particella}_{subalterno}.pdf"
-                content, ao_file_name, found_in = _extract_pdf(output)
-                file_name = ao_file_name or default_name
+                            if sit_attuale:
+                                visura_info['indirizzo'] = visura_info.get('indirizzo') or sit_attuale.get('indirizzo', '')
+                                classamento = sit_attuale.get('classamento', {})
+                                if classamento:
+                                    visura_info['categoria'] = visura_info.get('categoria') or classamento.get('categoria', '')
+                                    rendita = classamento.get('renditaEuro', '')
+                                    if rendita:
+                                        visura_info['rendita'] = f'€ {rendita}'
+                                superficie = sit_attuale.get('superficie', {})
+                                if superficie:
+                                    visura_info['superficie_mq'] = superficie.get('totale', '')
+                                intestati = sit_attuale.get('intestati', [])
+                                if intestati:
+                                    visura_info['intestati'] = [
+                                        {'nominativo': i.get('nominativo', ''), 'cf': i.get('codiceFiscale', ''),
+                                         'diritto': i.get('diritto', {}).get('descrizione', ''),
+                                         'quota': i.get('diritto', {}).get('quota', '')}
+                                        for i in intestati
+                                    ]
 
-                if content:
-                    existing = db_session.query(PracticeFile).filter_by(
-                        practice_id=practice_result.practice_id, file_name=file_name
-                    ).first()
-                    if existing:
-                        existing.data = content
-                        existing.mime_type = 'application/pdf'
+                            visura_info['total_results'] = sr.get('totalResults', len(immobili))
+                            logger.info(f"Sister visura [{label}]: {len(immobili)} immobili, categoria={visura_info.get('categoria')}")
+
+                    default_name = f"visura_{comune}_{foglio}_{particella}_{subalterno}.pdf"
+                    content, ao_file_name, found_in = _extract_pdf(output)
+                    file_name = ao_file_name or default_name
+
+                    if content:
+                        existing = db_session.query(PracticeFile).filter_by(
+                            practice_id=practice_result.practice_id, file_name=file_name
+                        ).first()
+                        if existing:
+                            existing.data = content
+                            existing.mime_type = 'application/pdf'
+                        else:
+                            db_session.add(PracticeFile(
+                                practice_id=practice_result.practice_id,
+                                file_name=file_name,
+                                mime_type='application/pdf',
+                                data=content,
+                            ))
+                        db_session.flush()
+                        visura_info['file_saved'] = file_name
+                        visura_info['file_size'] = len(content)
+                        visura_info['file_found_in'] = found_in
+                        logger.info(f"Sister visura [{label}]: saved {file_name} ({len(content)} bytes)")
                     else:
-                        db_session.add(PracticeFile(
-                            practice_id=practice_result.practice_id,
-                            file_name=file_name,
-                            mime_type='application/pdf',
-                            data=content,
-                        ))
-                    db_session.flush()
-                    visura_info['file_saved'] = file_name
-                    visura_info['file_size'] = len(content)
-                    visura_info['file_found_in'] = found_in
-                    logger.info(f"Sister visura [{label}]: saved {file_name} ({len(content)} bytes)")
-                else:
-                    visura_info['note'] = 'Nessun file nella risposta'
-                    all_ok = False
+                        visura_info['note'] = 'Nessun file nella risposta'
+                        all_ok = False
 
-                if status != 'COMPLETED':
-                    all_ok = False
-                    visura_info['error'] = task_result.get('error', f'AO status: {status}')
+                    if status != 'COMPLETED':
+                        all_ok = False
+                        visura_info['error'] = task_result.get('error', f'AO status: {status}')
 
-            except Exception as e:
-                visura_info['error'] = str(e)
-                all_ok = False
-                logger.error(f"Sister visura [{label}] error: {e}")
+                    break  # successo o errore non-timeout, esci dal retry
+
+                except Exception as e:
+                    if 'timeout' in str(e).lower() and attempt < MAX_RETRIES:
+                        import time
+                        wait = 5 * (attempt + 1)
+                        logger.warning(f"Sister visura [{label}] exception timeout (tentativo {attempt + 1}), retry tra {wait}s...")
+                        time.sleep(wait)
+                        continue
+                    visura_info['error'] = str(e)
+                    all_ok = False
+                    logger.error(f"Sister visura [{label}] error: {e}")
+                    break
 
             result['visure'].append(visura_info)
 
