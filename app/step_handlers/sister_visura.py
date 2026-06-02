@@ -67,12 +67,23 @@ class SisterVisuraHandler(StepHandler):
         }
         mapping_fields.update(config.get('field_mapping', {}))
 
+        # Alias: nomi alternativi per lo stesso campo sister
+        field_aliases = {
+            'particella': ['particella', 'mappale', 'numero_particella', 'numero_mappale'],
+            'foglio': ['foglio', 'numero_foglio'],
+            'subalterno': ['subalterno', 'sub', 'numero_subalterno'],
+            'comune': ['comune', 'comune_catastale'],
+            'provincia': ['provincia', 'sigla_provincia'],
+        }
+
         for sister_key, source_key in mapping_fields.items():
             val = flat.get(source_key.lower())
             if not val:
-                # Fallback: cerca anche con underscore/spazi normalizzati
-                norm_key = source_key.lower().replace(' ', '_')
-                val = flat.get(norm_key)
+                # Cerca tra gli alias del campo
+                for alias in field_aliases.get(sister_key, []):
+                    val = flat.get(alias.lower())
+                    if val:
+                        break
             if not val:
                 val = config.get(sister_key, '')
             if val:
