@@ -4259,13 +4259,23 @@ function _renderComparisonPanel(wf) {
 
   const fields = wf.comparison_fields;
   if (!fields || Object.keys(fields).length === 0) return;
-  // Mostra solo se c'è uno step corrente (non workflow completato)
-  if (!wf.current_step_order) return;
 
   const stepperBar = document.getElementById('workflowStepperBar');
   if (!stepperBar) return;
 
-  // Ordina: prima i campi con mismatch, poi alfabetico
+  // Raccogli tutte le colonne (doc_type) uniche, ordinate per prima apparizione
+  const colOrder = [];
+  const colSet = new Set();
+  for (const [, entries] of Object.entries(fields)) {
+    for (const e of entries) {
+      if (!colSet.has(e.doc_type)) {
+        colSet.add(e.doc_type);
+        colOrder.push(e.doc_type);
+      }
+    }
+  }
+
+  // Ordina righe: prima mismatch, poi alfabetico
   const sorted = Object.entries(fields).sort((a, b) => {
     const aMismatch = a[1].some(e => !e.match);
     const bMismatch = b[1].some(e => !e.match);
@@ -4273,45 +4283,58 @@ function _renderComparisonPanel(wf) {
     return a[0].localeCompare(b[0]);
   });
 
-  const hasMismatch = sorted.some(([, entries]) => entries.some(e => !e.match));
-  const borderColor = hasMismatch ? 'var(--md-error, #B3261E)' : 'var(--md-outline-variant, #c4c7c5)';
   const totalFields = sorted.length;
   const mismatchCount = sorted.filter(([, entries]) => entries.some(e => !e.match)).length;
+  const hasMismatch = mismatchCount > 0;
+  const borderColor = hasMismatch ? 'var(--md-error, #B3261E)' : 'var(--md-outline-variant, #c4c7c5)';
+
+  // Costruisci tabella
+  const colHeaders = colOrder.map(dt =>
+    `<th style="padding:6px 10px;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:var(--md-on-surface-variant);white-space:nowrap">${humanLabel(dt)}</th>`
+  ).join('');
 
   let rowsHtml = '';
   for (const [fieldName, entries] of sorted) {
     const isMismatch = entries.some(e => !e.match);
     const icon = isMismatch
-      ? '<i class="bi bi-exclamation-triangle-fill" style="color:var(--md-error);font-size:0.75rem"></i>'
-      : '<i class="bi bi-check-lg" style="color:var(--md-success);font-size:0.75rem"></i>';
-    const label = humanLabel(fieldName);
+      ? '<i class="bi bi-exclamation-triangle-fill" style="color:var(--md-error)"></i>'
+      : '<i class="bi bi-check-lg" style="color:var(--md-success)"></i>';
+    const rowBg = isMismatch ? 'background:rgba(179,38,30,0.04)' : '';
 
-    if (entries.length === 1) {
-      // Campo presente una sola volta
-      const val = _formatComparisonValue(entries[0].value);
-      const displayVal = val.length > 80 ? val.substring(0, 80) + '...' : val;
-      rowsHtml += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04)">
-        ${icon} <span style="min-width:140px;color:var(--md-on-surface-variant);font-size:0.78rem">${label}</span>
-        <span style="font-size:0.8rem;font-weight:500">${_escHtml(displayVal)}</span>
-      </div>`;
-    } else {
-      // Campo con valori multipli — mostra tutti
-      const valuesHtml = entries.map(e => {
-        const val = _formatComparisonValue(e.value);
-        const displayVal = val.length > 60 ? val.substring(0, 60) + '...' : val;
-        const style = isMismatch ? 'color:var(--md-error);font-weight:600' : 'font-weight:500';
-        return `<span style="${style};font-size:0.8rem">${_escHtml(displayVal)}</span>`;
-      }).join('<span style="color:var(--md-on-surface-variant);font-size:0.7rem;margin:0 4px">vs</span>');
-      rowsHtml += `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);flex-wrap:wrap">
-        ${icon} <span style="min-width:140px;color:var(--md-on-surface-variant);font-size:0.78rem">${label}</span>
-        <div style="display:flex;gap:4px;align-items:baseline;flex-wrap:wrap">${valuesHtml}</div>
-      </div>`;
+    // Mappa valori per colonna
+    const valByCol = {};
+    for (const e of entries) {
+      valByCol[e.doc_type] = e;
     }
+
+    const cells = colOrder.map(dt => {
+      const e = valByCol[dt];
+      if (!e) return `<td style="padding:5px 10px;font-size:0.78rem;color:var(--md-on-surface-variant);border-bottom:1px solid rgba(0,0,0,0.06)">—</td>`;
+      const val = _formatComparisonValue(e.value);
+      const displayVal = val.length > 60 ? val.substring(0, 60) + '...' : val;
+      const style = isMismatch ? 'color:var(--md-error);font-weight:600' : 'font-weight:500';
+      return `<td style="padding:5px 10px;font-size:0.78rem;${style};border-bottom:1px solid rgba(0,0,0,0.06)" title="${_escHtml(val)}">${_escHtml(displayVal)}</td>`;
+    }).join('');
+
+    rowsHtml += `<tr style="${rowBg}">
+      <td style="padding:5px 10px;font-size:0.75rem;white-space:nowrap;border-bottom:1px solid rgba(0,0,0,0.06)">${icon}</td>
+      <td style="padding:5px 10px;font-size:0.75rem;font-weight:600;color:var(--md-on-surface-variant);white-space:nowrap;border-bottom:1px solid rgba(0,0,0,0.06)">${humanLabel(fieldName)}</td>
+      ${cells}
+    </tr>`;
   }
 
   const summaryText = mismatchCount > 0
     ? `${totalFields} campi estratti — <strong style="color:var(--md-error)">${mismatchCount} discordanz${mismatchCount === 1 ? 'a' : 'e'}</strong>`
     : `${totalFields} campi estratti — tutti concordi`;
+
+  const tableHtml = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="padding:6px 10px;width:24px"></th>
+      <th style="padding:6px 10px;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:var(--md-on-surface-variant)">Campo</th>
+      ${colHeaders}
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>`;
 
   const panelHtml = `<div class="comparison-panel" style="margin:4px 16px 8px;border:1px solid ${borderColor};border-radius:10px;overflow:hidden">
     <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;background:var(--md-surface-container-low, #f8f5f0)"
@@ -4320,7 +4343,7 @@ function _renderComparisonPanel(wf) {
       <span style="flex:1;font-size:0.82rem">${summaryText}</span>
       <i class="bi bi-chevron-right chevron" style="font-size:0.7rem;color:var(--md-on-surface-variant)"></i>
     </div>
-    <div id="comparisonBody" style="display:none;padding:8px 14px;max-height:300px;overflow-y:auto">${rowsHtml}</div>
+    <div id="comparisonBody" style="display:none;padding:0;max-height:400px;overflow:auto">${tableHtml}</div>
   </div>`;
 
   stepperBar.insertAdjacentHTML('afterend', panelHtml);
