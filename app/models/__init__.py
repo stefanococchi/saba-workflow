@@ -31,6 +31,7 @@ class StepType(str, Enum):
     DOCUMENT_PROCESSING = 'document_processing'
     DOCUMENT_CHECK = 'document_check'
     SISTER_VISURA = 'sister_visura'
+    SISTER_IPOTECARIA = 'sister_ipotecaria'
 
 
 class ParticipantStatus(str, Enum):

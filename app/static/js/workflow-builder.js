@@ -823,6 +823,8 @@ function renderNodeSubtitle(step) {
             return (step.config.ao_agent_name || 'Agent non configurato') + ' · ' + dcLabel;
         case 'sister_visura':
             return 'SISTER · ' + (step.config.operation || 'visuraStorica') + ' · ' + (step.config.tipo_catasto || 'F');
+        case 'sister_ipotecaria':
+            return 'SISTER · Ispezione Ipotecaria per CF';
         default:
             return capitalize(step.type);
     }
@@ -1804,6 +1806,33 @@ function _renderStepEditFormInner(step, index, common) {
             `;
         }
 
+        case 'sister_ipotecaria': {
+            return common + `
+                <hr>
+                <h6 class="text-muted"><i class="bi bi-key"></i> Credenziali SISTER</h6>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.82rem">Username</label>
+                        <input type="text" class="form-control form-control-sm" id="editIpoUsername"
+                               value="${step.config.auth_username || ''}" placeholder="Username SISTER">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.82rem">Password</label>
+                        <input type="password" class="form-control form-control-sm" id="editIpoPassword"
+                               value="${step.config.auth_password || ''}" placeholder="Password SISTER">
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <small><i class="bi bi-info-circle"></i>
+                    <strong>Ispezione Ipotecaria per CF:</strong><br>
+                    1. Legge i codici fiscali (CF acquirenti) dagli step precedenti<br>
+                    2. Per ogni CF, chiama SISTER per l'ispezione ipotecaria<br>
+                    3. Salva i PDF delle ispezioni nella pratica<br>
+                    4. Serve anche il comune o la provincia per identificare la conservatoria
+                    </small>
+                </div>
+            `;
+        }
         case 'sister_visura': {
             return common + `
                 <div class="mb-3">
@@ -2993,6 +3022,10 @@ function saveStepEdit() {
                 step.config.doc_types.push(cb.value);
             });
             break;
+        case 'sister_ipotecaria':
+            step.config.auth_username = document.getElementById('editIpoUsername')?.value || '';
+            step.config.auth_password = document.getElementById('editIpoPassword')?.value || '';
+            break;
         case 'sister_visura':
             step.config.operation = document.getElementById('editSisterOperation')?.value || 'visuraStorica';
             step.config.tipo_catasto = document.getElementById('editSisterTipoCatasto')?.value || 'F';
@@ -3490,6 +3523,14 @@ function saveWorkflow() {
                     ao_agent_name: step.config.ao_agent_name || '',
                     delay_hours: step.config.delay_hours || 0,
                     rules: step.config.rules || []
+                };
+            }
+
+            // For sister_ipotecaria steps
+            if (step.type === 'sister_ipotecaria') {
+                stepData.skip_conditions = {
+                    auth_username: step.config.auth_username || '',
+                    auth_password: step.config.auth_password || '',
                 };
             }
 
@@ -4025,7 +4066,8 @@ var DR_TYPE_ICONS = {
     excel_write: 'bi-file-earmark-spreadsheet-fill', whatsapp: 'bi-whatsapp',
     document_processing: 'bi-file-earmark-check-fill',
     document_check: 'bi-file-earmark-ruled-fill',
-    sister_visura: 'bi-building-fill'
+    sister_visura: 'bi-building-fill',
+    sister_ipotecaria: 'bi-person-badge-fill'
 };
 
 var DR_TYPE_COLORS = {
@@ -4035,7 +4077,8 @@ var DR_TYPE_COLORS = {
     sms: '#E65100', webhook: '#455A64',
     document_processing: '#1565C0',
     document_check: '#6A1B9A',
-    sister_visura: '#00695C'
+    sister_visura: '#00695C',
+    sister_ipotecaria: '#4527A0'
 };
 
 function switchReviewTab(tab) {
