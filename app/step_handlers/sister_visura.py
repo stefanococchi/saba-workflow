@@ -260,6 +260,21 @@ class SisterVisuraHandler(StepHandler):
 
         logger.info(f"Sister visura: {len(combos)} triplette F/M/S -> {len(combos)} chiamate SISTER")
 
+        # Prepara result_data per iniezione dati SISTER (letto una volta, aggiornato in-place)
+        import hashlib
+        _rd = dict(practice_result.result_data or {})
+        if 'files' not in _rd:
+            _rd['files'] = {}
+        # Rimuovi file visura Document AI esistenti (dati catastali inaffidabili)
+        # Verranno sostituiti con entry SISTER con dati certi
+        _visura_hashes_to_remove = [
+            fh for fh, fd in _rd['files'].items()
+            if 'visura' in (fd.get('identification', {}).get('documentId', '') or '').lower()
+        ]
+        for fh in _visura_hashes_to_remove:
+            del _rd['files'][fh]
+            logger.info(f"Sister visura: rimosso file Document AI {fh[:12]} da result_data")
+
         # ── 5. Una chiamata SISTER per ogni tripletta F/M/S unica ──
         for foglio, particella, subalterno in combos:
             visura_info = {'foglio': foglio, 'particella': particella, 'subalterno': subalterno}
@@ -361,84 +376,43 @@ class SisterVisuraHandler(StepHandler):
                         visura_info['file_found_in'] = found_in
                         logger.info(f"Sister visura [{label}]: saved {file_name} ({len(content)} bytes)")
 
-                        # ── Inietta subito i dati SISTER in result_data ──
-                        # Uso i dati della QUERY (certi by design) + risposta SISTER.
-                        # Cerco il prossimo file visura in result_data non ancora aggiornato.
+                        # ── Inietta dati SISTER in _rd con chiave deterministica ──
+                        # Chiave = hash della tripletta → nessuna ambiguità di matching.
                         try:
-                            import hashlib
-                            rd = practice_result.result_data
-                            if rd and isinstance(rd, dict):
-                                if 'files' not in rd:
-                                    rd = dict(rd)
-                                    rd['files'] = {}
+                            sister_fields = {
+                                'FOGLIO': foglio,
+                                'PARTICELLA': particella,
+                                'SUBALTERNO': subalterno,
+                                '_source': 'SISTER',
+                            }
+                            if visura_info.get('categoria'):
+                                sister_fields['CATEGORIA'] = visura_info['categoria']
+                            if visura_info.get('classe'):
+                                sister_fields['CLASSE'] = visura_info['classe']
+                            if visura_info.get('consistenza'):
+                                sister_fields['CONSISTENZA'] = visura_info['consistenza']
+                            if visura_info.get('rendita'):
+                                sister_fields['RENDITA'] = visura_info['rendita']
+                            if visura_info.get('indirizzo'):
+                                sister_fields['INDIRIZZO'] = visura_info['indirizzo']
+                            if visura_info.get('superficie_mq'):
+                                sister_fields['SUPERFICIE'] = visura_info['superficie_mq']
+                            if visura_info.get('intestati'):
+                                sister_fields['INTESTATI'] = [
+                                    {'nominativo': i['nominativo'], 'codiceFiscale': i.get('cf', ''),
+                                     'diritto': i['diritto'], 'quota': i['quota']}
+                                    for i in visura_info['intestati']
+                                ]
 
-                                CATASTALI_PATTERNS = ['foglio', 'mappale', 'particella',
-                                    'subalterno', 'csub', 'categoria', 'classe',
-                                    'consistenza', 'rendita', 'indirizzo', 'superficie']
-
-                                # Costruisci dati da iniettare
-                                sister_fields = {
-                                    'FOGLIO': foglio,
-                                    'PARTICELLA': particella,
-                                    'SUBALTERNO': subalterno,
-                                }
-                                if visura_info.get('categoria'):
-                                    sister_fields['CATEGORIA'] = visura_info['categoria']
-                                if visura_info.get('classe'):
-                                    sister_fields['CLASSE'] = visura_info['classe']
-                                if visura_info.get('consistenza'):
-                                    sister_fields['CONSISTENZA'] = visura_info['consistenza']
-                                if visura_info.get('rendita'):
-                                    sister_fields['RENDITA'] = visura_info['rendita']
-                                if visura_info.get('indirizzo'):
-                                    sister_fields['INDIRIZZO'] = visura_info['indirizzo']
-                                if visura_info.get('superficie_mq'):
-                                    sister_fields['SUPERFICIE'] = visura_info['superficie_mq']
-                                if visura_info.get('intestati'):
-                                    sister_fields['INTESTATI'] = [
-                                        {'nominativo': i['nominativo'], 'codiceFiscale': i.get('cf', ''),
-                                         'diritto': i['diritto'], 'quota': i['quota']}
-                                        for i in visura_info['intestati']
-                                    ]
-
-                                # Cerca file visura in result_data non ancora iniettato
-                                rd = dict(rd)
-                                target_fh = None
-                                for fh_rd, fd_rd in rd['files'].items():
-                                    doc_id = (fd_rd.get('identification', {}).get('documentId', '') or '').lower()
-                                    already = fd_rd.get('extraction', {}).get('data', {}).get('_source')
-                                    if 'visura' in doc_id and already != 'SISTER':
-                                        target_fh = fh_rd
-                                        break
-
-                                if target_fh:
-                                    # Aggiorna file esistente (Document AI)
-                                    fd_target = rd['files'][target_fh]
-                                    if 'extraction' not in fd_target:
-                                        fd_target['extraction'] = {'data': {}}
-                                    elif 'data' not in fd_target['extraction']:
-                                        fd_target['extraction']['data'] = {}
-                                    ext_data = fd_target['extraction']['data']
-                                    # Rimuovi campi catastali Document AI
-                                    for k in [k for k in ext_data if any(p in k.lower().replace(' ', '') for p in CATASTALI_PATTERNS)]:
-                                        del ext_data[k]
-                                    ext_data.update(sister_fields)
-                                    ext_data['_source'] = 'SISTER'
-                                else:
-                                    # Nessun file visura Document AI: aggiungi entry
-                                    fh_new = hashlib.sha256(content).hexdigest()[:16]
-                                    rd['files'][fh_new] = {
-                                        'fileName': file_name,
-                                        'identification': {'documentId': 'Visura Storica Sintetica'},
-                                        'state': {'identification': 'completed', 'extraction': 'completed'},
-                                        'extraction': {'data': {**sister_fields, '_source': 'SISTER'}},
-                                    }
-
-                                practice_result.result_data = rd
-                                from sqlalchemy.orm.attributes import flag_modified
-                                flag_modified(practice_result, 'result_data')
-                                db_session.flush()
-                                logger.info(f"Sister visura [{label}]: iniettato in result_data (F={foglio}/P={particella}/S={subalterno})")
+                            # Chiave deterministica dalla tripletta
+                            fh_key = hashlib.md5(f"sister_{foglio}_{particella}_{subalterno}".encode()).hexdigest()[:16]
+                            _rd['files'][fh_key] = {
+                                'fileName': file_name,
+                                'identification': {'documentId': 'Visura Storica Sintetica'},
+                                'state': {'identification': 'completed', 'extraction': 'completed'},
+                                'extraction': {'data': sister_fields},
+                            }
+                            logger.info(f"Sister visura [{label}]: aggiunto in result_data key={fh_key} (F={foglio}/P={particella}/S={subalterno})")
                         except Exception as inject_err:
                             logger.error(f"Sister visura [{label}]: errore iniezione result_data: {inject_err}")
                     else:
@@ -495,6 +469,16 @@ class SisterVisuraHandler(StepHandler):
                 )
             extracted[key] = data
         result['extracted_data'] = extracted
+
+        # ── 7. Salva result_data aggiornato (accumulato durante il loop) ──
+        try:
+            practice_result.result_data = _rd
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(practice_result, 'result_data')
+            db_session.flush()
+            logger.info(f"Sister visura: result_data salvato ({len(_rd.get('files', {}))} file)")
+        except Exception as e:
+            logger.error(f"Sister visura: errore salvataggio result_data: {e}")
 
         return result
 
