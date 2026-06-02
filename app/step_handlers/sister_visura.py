@@ -245,15 +245,15 @@ class SisterVisuraHandler(StepHandler):
         # ── 4. Genera combinazioni F/M/S ──
         combos = self._build_combinations(flat, config)
         if not combos:
-            combos = [('', '', '')]  # almeno una chiamata
+            combos = [('', '', '')]
 
+        result['input'] = base_input
         result['visure'] = []
-        result['errors'] = []
         all_ok = True
 
-        logger.info(f"Sister visura: {len(combos)} combinazioni F/M/S da elaborare")
+        logger.info(f"Sister visura: {len(combos)} triplette F/M/S -> {len(combos)} chiamate SISTER")
 
-        # ── 5. Una visura per ogni combinazione ──
+        # ── 5. Una chiamata SISTER per ogni tripletta F/M/S unica ──
         for foglio, particella, subalterno in combos:
             visura_info = {'foglio': foglio, 'particella': particella, 'subalterno': subalterno}
             sister_input = dict(base_input)
@@ -264,7 +264,7 @@ class SisterVisuraHandler(StepHandler):
             if subalterno:
                 sister_input['subalterno'] = subalterno
 
-            label = f"F{foglio}/P{particella}/S{subalterno}"
+            label = f"{foglio}/{particella}/{subalterno}"
             logger.info(f"Sister visura [{label}] input: {sister_input}")
 
             try:
@@ -277,7 +277,6 @@ class SisterVisuraHandler(StepHandler):
                 if isinstance(output, dict):
                     visura_info['output_keys'] = list(output.keys())
 
-                # Cerca PDF
                 default_name = f"visura_{comune}_{foglio}_{particella}_{subalterno}.pdf"
                 content, ao_file_name, found_in = _extract_pdf(output)
                 file_name = ao_file_name or default_name
@@ -297,7 +296,6 @@ class SisterVisuraHandler(StepHandler):
                             data=content,
                         ))
                     db_session.flush()
-
                     visura_info['file_saved'] = file_name
                     visura_info['file_size'] = len(content)
                     visura_info['file_found_in'] = found_in
@@ -317,10 +315,7 @@ class SisterVisuraHandler(StepHandler):
 
             result['visure'].append(visura_info)
 
-        # Riepilogo
         result['status'] = 'COMPLETED' if all_ok else 'FAILED'
-        result['input'] = base_input  # per display
-        result['combos_count'] = len(combos)
         return result
 
     def get_display_data(self, step_config, step_state):
