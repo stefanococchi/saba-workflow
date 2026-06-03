@@ -229,9 +229,7 @@ def _safe(text):
         return text
     return str(text).replace('\u2014', '-').replace('\u2013', '-').replace(
         '\u2022', '-').replace('\u20ac', 'EUR ').replace(
-        '\u2019', "'").replace('\u201c', '"').replace('\u201d', '"').replace(
-        '\u00e0', 'a').replace('\u00e8', 'e').replace('\u00e9', 'e').replace(
-        '\u00f2', 'o').replace('\u00f9', 'u').replace('\u00ec', 'i')
+        '\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
 
 
 class ReportPDF(FPDF):
@@ -257,6 +255,7 @@ class ReportPDF(FPDF):
     def __init__(self, practice_id=''):
         super().__init__()
         self._practice_id = practice_id
+        self._page_count = 0
         self.set_auto_page_break(auto=True, margin=25)
 
     def cell(self, *args, **kwargs):
@@ -280,24 +279,36 @@ class ReportPDF(FPDF):
         return super().multi_cell(*args, **kwargs)
 
     def header(self):
+        self._page_count += 1
         # Barra top blu
         self.set_fill_color(*self.PRIMARY)
         self.rect(0, 0, 210, 3.5, 'F')
-        # Logo Officina Notarile (a sinistra)
-        logo = os.path.normpath(_LOGO_PATH)
-        if os.path.exists(logo):
-            self.image(logo, x=self.MARGIN, y=7, w=45)
-        # Titolo "Report Pratica" (a destra del logo)
-        self.set_y(10)
-        self.set_font('Helvetica', 'B', 14)
-        self.set_text_color(*self.PRIMARY)
-        self.cell(0, 8, 'Report Pratica', align='R', new_x='LMARGIN', new_y='NEXT')
-        # Linea decorativa
-        self.set_draw_color(*self.ACCENT)
-        self.set_line_width(0.5)
-        y = self.get_y() + 2
-        self.line(self.MARGIN, y, 210 - self.MARGIN, y)
-        self.ln(8)
+        if self._page_count == 1:
+            # Prima pagina: logo grande + titolo
+            logo = os.path.normpath(_LOGO_PATH)
+            if os.path.exists(logo):
+                self.image(logo, x=self.MARGIN, y=7, w=45)
+            self.set_y(10)
+            self.set_font('Helvetica', 'B', 14)
+            self.set_text_color(*self.PRIMARY)
+            self.cell(0, 8, 'Report Pratica', align='R', new_x='LMARGIN', new_y='NEXT')
+            # Linea decorativa
+            self.set_draw_color(*self.ACCENT)
+            self.set_line_width(0.5)
+            y = self.get_y() + 2
+            self.line(self.MARGIN, y, 210 - self.MARGIN, y)
+            self.ln(8)
+        else:
+            # Pagine successive: header compatto
+            self.set_y(7)
+            self.set_font('Helvetica', 'B', 9)
+            self.set_text_color(*self.PRIMARY)
+            self.cell(0, 6, 'Report Pratica', align='R', new_x='LMARGIN', new_y='NEXT')
+            self.set_draw_color(*self.ACCENT)
+            self.set_line_width(0.3)
+            y = self.get_y() + 1
+            self.line(self.MARGIN, y, 210 - self.MARGIN, y)
+            self.ln(4)
 
     def footer(self):
         self.set_y(-16)
@@ -313,6 +324,9 @@ class ReportPDF(FPDF):
     # ── Helpers ──
 
     def section_title(self, title):
+        # Se non c'è spazio per titolo + almeno 2 righe di contenuto, nuova pagina
+        if self.get_y() + 35 > 272:
+            self.add_page()
         self.ln(4)
         self.set_fill_color(*self.TABLE_HEAD_BG)
         self.set_text_color(*self.TABLE_HEAD_FG)
@@ -322,6 +336,9 @@ class ReportPDF(FPDF):
                   new_x='LMARGIN', new_y='NEXT')
 
     def sub_title(self, title):
+        # Evita sottotitolo orfano a fondo pagina
+        if self.get_y() + 25 > 272:
+            self.add_page()
         self.set_font('Helvetica', 'B', 9)
         self.set_text_color(*self.ACCENT)
         self.set_x(self.MARGIN)
