@@ -147,18 +147,33 @@ class SisterIpotecariaHandler(StepHandler):
         costo_totale = 0.0
         all_ok = True
 
+        # Salva progresso in step_states per polling frontend
+        def _save_progress(msg):
+            try:
+                from sqlalchemy.orm.attributes import flag_modified
+                ss = (practice_result.step_states or {})
+                ss[str(step.order)] = ss.get(str(step.order), {})
+                ss[str(step.order)]['progress'] = msg
+                practice_result.step_states = ss
+                flag_modified(practice_result, 'step_states')
+                db_session.flush()
+            except Exception:
+                pass
+
         # ── 5. Una chiamata SISTER per ogni CF ──
-        for cf in codici_fiscali:
+        for idx, cf in enumerate(codici_fiscali):
             isp = {'codiceFiscale': cf}
             sister_input = dict(base_input)
             sister_input['codiceFiscale'] = cf
 
+            _save_progress(f"Ipotecaria {idx+1}/{len(codici_fiscali)}: CF {cf} — invio richiesta a SISTER...")
             logger.info(f"Sister ipotecaria [{cf}] input: {sister_input}")
 
             MAX_RETRIES = 1
             for attempt in range(MAX_RETRIES + 1):
                 try:
                     run_result = ao_service.run_agent(sister_agent_id, sister_input)
+                    _save_progress(f"Ipotecaria {idx+1}/{len(codici_fiscali)}: CF {cf} — in attesa risposta SISTER...")
                     task_result = ao_service.poll_task(run_result['taskId'], max_wait=60.0)
                     output = task_result.get('output', {})
                     status = task_result.get('status', 'unknown')

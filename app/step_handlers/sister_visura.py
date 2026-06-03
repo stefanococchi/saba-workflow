@@ -280,8 +280,21 @@ class SisterVisuraHandler(StepHandler):
 
         logger.info(f"Sister visura: {len(combos)} triplette F/M/S -> {len(combos)} chiamate SISTER")
 
+        # Salva progresso in step_states per polling frontend
+        def _save_progress(msg):
+            try:
+                from sqlalchemy.orm.attributes import flag_modified
+                ss = (practice_result.step_states or {})
+                ss[str(step.order)] = ss.get(str(step.order), {})
+                ss[str(step.order)]['progress'] = msg
+                practice_result.step_states = ss
+                flag_modified(practice_result, 'step_states')
+                db_session.flush()
+            except Exception:
+                pass
+
         # ── 5. Una chiamata SISTER per ogni tripletta F/M/S unica ──
-        for foglio, particella, subalterno in combos:
+        for idx, (foglio, particella, subalterno) in enumerate(combos):
             visura_info = {'foglio': foglio, 'particella': particella, 'subalterno': subalterno}
             sister_input = dict(base_input)
             if foglio:
@@ -292,12 +305,14 @@ class SisterVisuraHandler(StepHandler):
                 sister_input['subalterno'] = subalterno
 
             label = f"{foglio}/{particella}/{subalterno}"
+            _save_progress(f"Visura {idx+1}/{len(combos)}: {label} — invio richiesta a SISTER...")
             logger.info(f"Sister visura [{label}] input: {sister_input}")
 
             MAX_RETRIES = 1
             for attempt in range(MAX_RETRIES + 1):
                 try:
                     run_result = ao_service.run_agent(sister_agent_id, sister_input)
+                    _save_progress(f"Visura {idx+1}/{len(combos)}: {label} — in attesa risposta SISTER...")
                     task_result = ao_service.poll_task(run_result['taskId'], max_wait=60.0)
                     output = task_result.get('output', {})
                     status = task_result.get('status', 'unknown')

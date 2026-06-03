@@ -4638,9 +4638,26 @@ async function completeCurrentStep(action) {
   let statusMsg = action === 'skip' ? 'Salto step...'
     : `<div class="prat-spinner" style="width:24px;height:24px;border-width:3px;margin:0 auto 10px"></div>
        <div style="font-weight:500;font-size:0.85rem">Esecuzione: ${currentStepName || 'step corrente'}...</div>
-       <div style="margin-top:8px;font-size:0.72rem;color:var(--md-on-surface-variant)">Questo può richiedere qualche minuto.</div>`;
+       <div id="stepProgressMsg" style="margin-top:8px;font-size:0.78rem;color:var(--md-on-surface-variant)">Avvio in corso...</div>`;
   if (dataScroll) {
     dataScroll.innerHTML = `<div class="text-center py-5" style="color:var(--md-on-surface-variant)">${statusMsg}</div>`;
+  }
+
+  // Polling progresso ogni 3s durante l'esecuzione
+  let _progressPoll = null;
+  if (action !== 'skip') {
+    const _currentOrder = practiceWorkflow?.current_step_order;
+    _progressPoll = setInterval(async () => {
+      try {
+        const pr = await fetch(`/api/ao/results/${practiceId}`);
+        const pd = await pr.json();
+        const ss = pd.data?.step_states?.[String(_currentOrder)];
+        if (ss?.progress) {
+          const el = document.getElementById('stepProgressMsg');
+          if (el) el.textContent = ss.progress;
+        }
+      } catch(_) {}
+    }, 3000);
   }
 
   try {
@@ -4650,6 +4667,7 @@ async function completeCurrentStep(action) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action }),
     });
+    if (_progressPoll) clearInterval(_progressPoll);
     const data = await r.json();
     if (data.error) {
       if (vbRight) vbRight.innerHTML = prevButtons;
@@ -4675,6 +4693,7 @@ async function completeCurrentStep(action) {
       }
     }
   } catch (e) {
+    if (_progressPoll) clearInterval(_progressPoll);
     alert('Errore: ' + e.message);
   }
 }
