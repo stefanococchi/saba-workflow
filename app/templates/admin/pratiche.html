@@ -4819,7 +4819,7 @@ function openIpotecariaDetail(stepOrder) {
     if (f.repertorio) extras += '<span class="tag">Rep: '+f.repertorio+(f.data_repertorio?' del '+f.data_repertorio:'')+'</span>';
     if (f.registro_generale) extras += '<span class="tag">RG: '+f.registro_generale+'</span>';
     if (f.registro_particolare) extras += '<span class="tag">RP: '+f.registro_particolare+'</span>';
-    if (f.ubicazione) extras += '<span class="tag">Immobili: '+f.ubicazione+'</span>';
+    if (f.ubicazione) extras += '<span class="tag" style="background:#ffebee;color:#c62828;font-weight:600">Immobili: '+f.ubicazione+'</span>';
     if (f.titolo_telematico) extras += '<span class="tag">Titolo Telematico</span>';
 
     var docCorr = '';
