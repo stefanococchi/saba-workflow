@@ -1217,7 +1217,7 @@ def get_practice_workflow_status(practice_id):
             for doc_type, fields in ss['extracted_data'].items():
                 dl = doc_type.lower()
                 # Skip visure/ipotecaria duplicate se non provengono dallo step SISTER
-                if not is_sister and (dl.startswith('visura_') or dl.startswith('ipotecaria_')):
+                if not is_sister and (dl.startswith('visura_') or dl.startswith('visura ')):
                     continue
                 # Evita duplicati: normalizza il doc_type e salta se già visto
                 dt_norm = re.sub(r'[\s_]+', '_', dl.strip())
