@@ -4684,6 +4684,7 @@ function openIpotecariaDetail(stepOrder) {
     .form-card { display: flex; gap: 10px; padding: 10px 12px; margin-bottom: 6px; border-radius: 10px; background: #fff; border: 1px solid #e9ecef; }
     .form-card:hover { background: #f8f9fa; }
     .form-card.cancelled { opacity: 0.5; background: #fff5f5; }
+    .form-card.excluded { opacity: 0.35; background: #f0f0f0; }
     .form-card .cb { display: flex; align-items: flex-start; padding-top: 2px; }
     .form-card .cb input { width: 16px; height: 16px; accent-color: #23488d; cursor: pointer; }
     .form-num { min-width: 32px; height: 32px; border-radius: 50%; background: #23488d; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
@@ -4702,14 +4703,17 @@ function openIpotecariaDetail(stepOrder) {
     <i class="bi bi-list-columns-reverse" style="font-size:1.2rem"></i>
     <h1>Analisi Ispezione Ipotecaria</h1>
     <span class="badge">${ispezioni.length} soggett${ispezioni.length === 1 ? 'o' : 'i'}</span>
+    <span style="flex:1"></span>
+    <button onclick="printFormalita()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 14px;border-radius:8px;font-size:0.78rem;cursor:pointer"><i class="bi bi-printer"></i> Stampa elenco formalità da scaricare</button>
   </div>
   <div class="ipo-tabs" id="ipoTabs"></div>
   <div class="ipo-content" id="ipoContent"></div>
   <div class="sel-bar">
-    <i class="bi bi-check2-square"></i>
-    <span>Selezionate: <span class="count" id="selCount">0</span> formalità</span>
+    <i class="bi bi-funnel"></i>
+    <span>Escluse: <span class="count" id="selCount">0</span></span>
+    <span style="margin-left:12px">Da scaricare: <span class="count" id="activeCount" style="color:#2e7d32">0</span></span>
     <span style="flex:1"></span>
-    <span style="font-size:0.72rem;color:#999">Le formalità selezionate saranno usate per le prossime query SISTER</span>
+    <span style="font-size:0.72rem;color:#999">Spunta le formalità da escludere — le rimanenti verranno scaricate</span>
   </div>
   <scr`+`ipt>
   var _ispezioni = ${JSON.stringify(ispezioni)};
@@ -4844,8 +4848,94 @@ function openIpotecariaDetail(stepOrder) {
   }
 
   function updateSelCount() {
-    var n = document.querySelectorAll('.cb input:checked').length;
-    document.getElementById('selCount').textContent = n;
+    var all = document.querySelectorAll('.cb input');
+    var excluded = 0;
+    all.forEach(function(cb) {
+      var card = cb.closest('.form-card');
+      if (cb.checked) {
+        excluded++;
+        card.classList.add('excluded');
+      } else {
+        card.classList.remove('excluded');
+      }
+    });
+    document.getElementById('selCount').textContent = excluded;
+    document.getElementById('activeCount').textContent = (all.length - excluded);
+  }
+
+  function printFormalita() {
+    // Raccogli tutte le formalità NON escluse da tutti i panel
+    var panels = document.querySelectorAll('.ipo-panel');
+    var pw = window.open('', '_blank');
+    pw.document.write('<html><head><title>Formalità da scaricare</title><style>');
+    pw.document.write('body{font-family:-apple-system,sans-serif;padding:30px;color:#333}');
+    pw.document.write('h1{font-size:16px;color:#23488d;border-bottom:2px solid #1e73be;padding-bottom:8px}');
+    pw.document.write('h2{font-size:13px;color:#666;margin:18px 0 6px;text-transform:uppercase;letter-spacing:0.5px}');
+    pw.document.write('.form{padding:6px 0;border-bottom:1px solid #eee;display:flex;gap:8px}');
+    pw.document.write('.num{min-width:28px;font-weight:700;color:#23488d}');
+    pw.document.write('.info{flex:1;font-size:12px}');
+    pw.document.write('.title{font-weight:600;font-size:13px}');
+    pw.document.write('.meta{color:#666;margin-top:2px}');
+    pw.document.write('.footer{margin-top:24px;font-size:11px;color:#999;border-top:1px solid #ddd;padding-top:8px}');
+    pw.document.write('@media print{body{padding:15px}}');
+    pw.document.write('</style></head><body>');
+    pw.document.write('<h1>Elenco formalità da scaricare</h1>');
+    pw.document.write('<p style="font-size:12px;color:#666">Data: '+new Date().toLocaleDateString('it-IT')+' — Officina Notarile</p>');
+
+    // Per ogni soggetto, raccogli le card non escluse
+    var totalActive = 0;
+    for (var i = 0; i < _ispezioni.length; i++) {
+      var isp = _ispezioni[i];
+      var sogg = (isp.soggetti||[]).map(function(s){return (s.cognome||'')+' '+(s.nome||'');}).join(', ');
+      var label = sogg || isp.codiceFiscale || '?';
+
+      // Usa dati parsati se disponibili
+      var forms = _parsedCache[i] ? _parsedCache[i].formalita : (isp.formalita || []);
+      var activeItems = [];
+      // Controlla quali checkbox sono checked nel DOM (se il panel è renderizzato)
+      var panelEl = document.querySelector('.ipo-panel[data-idx="'+i+'"]');
+      if (panelEl) {
+        var cbs = panelEl.querySelectorAll('.cb input');
+        cbs.forEach(function(cb, idx) {
+          if (!cb.checked && forms[idx]) activeItems.push(forms[idx]);
+        });
+      } else {
+        activeItems = forms; // non ancora renderizzato = tutte attive
+      }
+
+      if (activeItems.length === 0) continue;
+      totalActive += activeItems.length;
+
+      pw.document.write('<h2>'+label+' ('+activeItems.length+' formalità)</h2>');
+      for (var j = 0; j < activeItems.length; j++) {
+        var f = activeItems[j];
+        var desc = f.tipo_formalita || f.descrizione || '?';
+        var dettaglio = f.descrizione && f.tipo_formalita ? f.descrizione : '';
+        var data = f.data || '';
+        var rg = f.registro_generale || f.rg || '';
+        var rp = f.registro_particolare || f.rp || '';
+        var rep = f.repertorio || '';
+        var pubb = f.pubblico_ufficiale || f.pubblicoUfficiale || '';
+        var ubic = f.ubicazione || '';
+
+        pw.document.write('<div class="form"><div class="num">#'+(f.numero||j+1)+'</div><div class="info">');
+        pw.document.write('<div class="title">'+desc+(dettaglio?' — '+dettaglio:'')+'</div>');
+        var meta = [];
+        if (data) meta.push('Data: '+data);
+        if (rg) meta.push('RG: '+rg);
+        if (rp) meta.push('RP: '+rp);
+        if (rep) meta.push('Rep: '+rep);
+        if (pubb) meta.push('Pub. Uff.: '+pubb);
+        if (ubic) meta.push('Immobili: '+ubic);
+        if (meta.length) pw.document.write('<div class="meta">'+meta.join(' · ')+'</div>');
+        pw.document.write('</div></div>');
+      }
+    }
+
+    pw.document.write('<div class="footer">Totale: '+totalActive+' formalità da scaricare — Generato da Saba Workflow</div>');
+    pw.document.write('</body></html>');
+    pw.document.close();
+    setTimeout(function(){ pw.print(); }, 300);
   }
 
   init();
