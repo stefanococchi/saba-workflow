@@ -1198,11 +1198,23 @@ def get_practice_workflow_status(practice_id):
             return s
 
         comparison_fields = {}  # field_key -> [{ value, doc_type }]
+        seen_doc_types = set()
         for s in steps:
             ss = step_states.get(str(s.order), {})
-            if ss.get('status') == 'completed' and ss.get('extracted_data'):
-                accumulated_data.update(ss['extracted_data'])
-                for doc_type, fields in ss['extracted_data'].items():
+            if ss.get('status') not in ('completed', 'in_progress'):
+                continue
+            if not ss.get('extracted_data'):
+                continue
+            # Skip verifica_report — non ha dati da confrontare
+            er = ss.get('exec_result', {})
+            if er.get('type') == 'VERIFICA_REPORT':
+                continue
+            accumulated_data.update(ss['extracted_data'])
+            for doc_type, fields in ss['extracted_data'].items():
+                # Evita duplicati: se lo stesso doc_type è già stato processato, salta
+                if doc_type in seen_doc_types:
+                    continue
+                seen_doc_types.add(doc_type)
                     if not isinstance(fields, dict):
                         continue
                     for field_name, field_value in fields.items():
@@ -1736,14 +1748,6 @@ CHECKS_REGISTRY = [
         'sources': ['titolo', 'visura'],
         'category': 'Soggetti',
     },
-    {
-        'id': 'gravami_attivi',
-        'label': 'Gravami/ipoteche attive',
-        'description': 'Segnala la presenza di formalità ipotecarie non cancellate (ipoteche, pignoramenti, ecc.)',
-        'default_severity': 'warning',
-        'sources': ['ipotecaria'],
-        'category': 'Ipotecaria',
-    },
 ]
 
 CHECKS_BY_ID = {c['id']: c for c in CHECKS_REGISTRY}
@@ -1955,22 +1959,6 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=
                 'val_catasto': str(n_cat) if n_cat else '\u2014',
                 'esito': _severity('num_intestati', raw),
             })
-
-    # ── 9. Gravami/ipoteche attive ──
-    if _is_enabled('gravami_attivi') and ipotecaria_list:
-        attive_desc = []
-        for isp in ipotecaria_list:
-            for f in isp.get('formalita', []):
-                if f.get('flagCancellazione') != '1':
-                    attive_desc.append(f.get('descrizione', '?'))
-        raw = 'ok' if not attive_desc else 'warning'
-        verifiche.append({
-            'check_id': 'gravami_attivi',
-            'label': 'Gravami/ipoteche attive',
-            'val_titolo': '\u2014',
-            'val_catasto': f'{len(attive_desc)} attive' if attive_desc else 'Nessuna',
-            'esito': _severity('gravami_attivi', raw),
-        })
 
     return verifiche
 

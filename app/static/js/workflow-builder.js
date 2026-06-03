@@ -3201,7 +3201,6 @@ var CHECKS_REGISTRY_DATA = [
     {id:'categoria', label:'Categoria catastale', description:'Confronta la categoria catastale tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Immobile'},
     {id:'rendita', label:'Rendita catastale', description:'Confronta la rendita catastale tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Immobile'},
     {id:'num_intestati', label:'N. intestati/acquirenti', description:'Verifica che il numero di intestatari catastali corrisponda al numero di acquirenti nel titolo', default_severity:'error', sources:['titolo','visura'], category:'Soggetti'},
-    {id:'gravami_attivi', label:'Gravami/ipoteche attive', description:'Segnala la presenza di formalità ipotecarie non cancellate', default_severity:'warning', sources:['ipotecaria'], category:'Ipotecaria'},
 ];
 
 function loadChecksRegistry() {
