@@ -1213,9 +1213,13 @@ def get_practice_workflow_status(practice_id):
                 continue
             # Visure/ipotecaria: solo dallo step SISTER originale, non da altri step
             is_sister = er_type in ('SISTER_VISURA', 'SISTER_IPOTECARIA')
-            accumulated_data.update(ss['extracted_data'])
-            logger.info(f"Comparison: step {s.order} ({er_type}): doc_types={list(ss['extracted_data'].keys())}")
-            for doc_type, fields in ss['extracted_data'].items():
+            # Merge extracted_data dallo step + quelli propri dell'handler (exec_result)
+            step_extracted = dict(ss['extracted_data'])
+            handler_extracted = er.get('extracted_data', {})
+            if handler_extracted and isinstance(handler_extracted, dict):
+                step_extracted.update(handler_extracted)
+            accumulated_data.update(step_extracted)
+            for doc_type, fields in step_extracted.items():
                 dl = doc_type.lower()
                 # Skip visure/ipotecaria duplicate se non provengono dallo step SISTER
                 if not is_sister and (dl.startswith('visura_') or dl.startswith('visura ')):
