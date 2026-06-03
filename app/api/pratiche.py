@@ -1214,6 +1214,7 @@ def get_practice_workflow_status(practice_id):
             # Visure/ipotecaria: solo dallo step SISTER originale, non da altri step
             is_sister = er_type in ('SISTER_VISURA', 'SISTER_IPOTECARIA')
             accumulated_data.update(ss['extracted_data'])
+            logger.info(f"Comparison: step {s.order} ({er_type}): doc_types={list(ss['extracted_data'].keys())}")
             for doc_type, fields in ss['extracted_data'].items():
                 dl = doc_type.lower()
                 # Skip visure/ipotecaria duplicate se non provengono dallo step SISTER
