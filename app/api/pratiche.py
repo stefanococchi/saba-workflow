@@ -1567,8 +1567,115 @@ def test_sister_visura():
 
 # ── Report PDF pratica ─────────────────────────────────────────
 
-def _build_verifiche(titolo_fields, visure_list, ipotecaria_list):
-    """Costruisce verifiche incrociando titolo, visure catastali e ipotecaria."""
+# ── Registry verifiche ──────────────────────────────────────────
+CHECKS_REGISTRY = [
+    {
+        'id': 'foglio',
+        'label': 'Foglio',
+        'description': 'Confronta il foglio catastale tra titolo e visura',
+        'default_severity': 'error',
+        'sources': ['titolo', 'visura'],
+        'category': 'Dati catastali',
+    },
+    {
+        'id': 'particella',
+        'label': 'Particella/Mappale',
+        'description': 'Confronta la particella (mappale) tra titolo e visura',
+        'default_severity': 'error',
+        'sources': ['titolo', 'visura'],
+        'category': 'Dati catastali',
+    },
+    {
+        'id': 'subalterno',
+        'label': 'Subalterno',
+        'description': 'Confronta il subalterno tra titolo e visura',
+        'default_severity': 'error',
+        'sources': ['titolo', 'visura'],
+        'category': 'Dati catastali',
+    },
+    {
+        'id': 'cognomi_proprietari',
+        'label': 'Cognomi proprietari',
+        'description': 'Verifica che i cognomi degli intestatari catastali corrispondano agli acquirenti del titolo',
+        'default_severity': 'error',
+        'sources': ['titolo', 'visura'],
+        'category': 'Soggetti',
+    },
+    {
+        'id': 'quote_proprieta',
+        'label': 'Quote proprietà',
+        'description': 'Confronta le quote di proprietà tra titolo e catasto',
+        'default_severity': 'warning',
+        'sources': ['titolo', 'visura'],
+        'category': 'Soggetti',
+    },
+    {
+        'id': 'cf_ipotecaria',
+        'label': 'CF ipotecaria vs titolo',
+        'description': 'Verifica che i codici fiscali dell\'ispezione ipotecaria corrispondano a quelli del titolo',
+        'default_severity': 'error',
+        'sources': ['titolo', 'ipotecaria'],
+        'category': 'Ipotecaria',
+    },
+    {
+        'id': 'formalita_ipotecaria',
+        'label': 'Formalità ipotecaria',
+        'description': 'Conta le formalità attive dall\'ispezione ipotecaria (attenzione se > 0)',
+        'default_severity': 'warning',
+        'sources': ['ipotecaria'],
+        'category': 'Ipotecaria',
+    },
+    {
+        'id': 'indirizzo',
+        'label': 'Indirizzo',
+        'description': 'Confronta l\'indirizzo dell\'immobile tra titolo e visura catastale',
+        'default_severity': 'warning',
+        'sources': ['titolo', 'visura'],
+        'category': 'Immobile',
+    },
+    {
+        'id': 'categoria',
+        'label': 'Categoria catastale',
+        'description': 'Confronta la categoria catastale tra titolo e visura',
+        'default_severity': 'error',
+        'sources': ['titolo', 'visura'],
+        'category': 'Immobile',
+    },
+    {
+        'id': 'rendita',
+        'label': 'Rendita catastale',
+        'description': 'Confronta la rendita catastale tra titolo e visura',
+        'default_severity': 'error',
+        'sources': ['titolo', 'visura'],
+        'category': 'Immobile',
+    },
+    {
+        'id': 'num_intestati',
+        'label': 'N. intestati/acquirenti',
+        'description': 'Verifica che il numero di intestatari catastali corrisponda al numero di acquirenti nel titolo',
+        'default_severity': 'error',
+        'sources': ['titolo', 'visura'],
+        'category': 'Soggetti',
+    },
+    {
+        'id': 'gravami_attivi',
+        'label': 'Gravami/ipoteche attive',
+        'description': 'Segnala la presenza di formalità ipotecarie non cancellate (ipoteche, pignoramenti, ecc.)',
+        'default_severity': 'warning',
+        'sources': ['ipotecaria'],
+        'category': 'Ipotecaria',
+    },
+]
+
+CHECKS_BY_ID = {c['id']: c for c in CHECKS_REGISTRY}
+
+
+def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=None):
+    """Costruisce verifiche incrociando titolo, visure catastali e ipotecaria.
+
+    checks_config: dict {check_id: {'enabled': bool, 'severity': str}} dal workflow.
+    Se None, usa i default del registry.
+    """
     import unicodedata
 
     def _norm(v):
@@ -1586,31 +1693,26 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list):
                 return str(titolo_fields[k][1])
         return ''
 
+    def _is_enabled(check_id):
+        """Verifica se un check è abilitato nella config."""
+        if not checks_config:
+            return True
+        cc = checks_config.get(check_id, {})
+        return cc.get('enabled', True)
+
+    def _severity(check_id, raw_esito):
+        """Applica severity override: se il check è ok resta ok, altrimenti usa la severity configurata."""
+        if raw_esito == 'ok':
+            return 'ok'
+        if not checks_config:
+            return raw_esito
+        cc = checks_config.get(check_id, {})
+        return cc.get('severity', raw_esito)
+
     verifiche = []
     v0 = visure_list[0] if visure_list else {}
 
-    # 1. FMS catasto vs titolo
-    if v0:
-        for field, aliases, label in [
-            ('foglio', [], 'Foglio'),
-            ('particella', ['mappale', 'numero_particella'], 'Particella/Mappale'),
-            ('subalterno', ['sub'], 'Subalterno'),
-        ]:
-            val_t = _tget(field, *aliases)
-            val_c = v0.get(field, v0.get('FOGLIO' if field == 'foglio' else field.upper(), ''))
-            if val_t or val_c:
-                # Supporta valori multipli (es. "46; 66")
-                t_parts = set(_norm(p) for p in str(val_t).split(';') if p.strip())
-                c_norm = _norm(val_c)
-                match = c_norm in t_parts if t_parts and c_norm else not (t_parts and c_norm)
-                verifiche.append({
-                    'label': label,
-                    'val_titolo': val_t or '\u2014',
-                    'val_catasto': val_c or '\u2014',
-                    'esito': 'ok' if match else 'error',
-                })
-
-    # 2. Cognomi proprietari catasto vs acquirenti titolo
+    # ── Dati comuni per più check ──
     catasto_cognomi = []
     for v in visure_list:
         for i in v.get('intestati', []):
@@ -1631,50 +1733,86 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list):
     elif isinstance(titolo_acq_raw, str) and titolo_acq_raw:
         titolo_cognomi = [p.strip().split()[0] for p in titolo_acq_raw.split(';') if p.strip()]
 
-    if catasto_cognomi or titolo_cognomi:
+    # ── 1. Foglio / Particella / Subalterno ──
+    if v0:
+        for check_id, field, aliases, label in [
+            ('foglio', 'foglio', [], 'Foglio'),
+            ('particella', 'particella', ['mappale', 'numero_particella'], 'Particella/Mappale'),
+            ('subalterno', 'subalterno', ['sub'], 'Subalterno'),
+        ]:
+            if not _is_enabled(check_id):
+                continue
+            val_t = _tget(field, *aliases)
+            val_c = v0.get(field, v0.get('FOGLIO' if field == 'foglio' else field.upper(), ''))
+            if val_t or val_c:
+                t_parts = set(_norm(p) for p in str(val_t).split(';') if p.strip())
+                c_norm = _norm(val_c)
+                match = c_norm in t_parts if t_parts and c_norm else not (t_parts and c_norm)
+                raw = 'ok' if match else 'error'
+                verifiche.append({
+                    'check_id': check_id,
+                    'label': label,
+                    'val_titolo': val_t or '\u2014',
+                    'val_catasto': val_c or '\u2014',
+                    'esito': _severity(check_id, raw),
+                })
+
+    # ── 2. Cognomi proprietari ──
+    if _is_enabled('cognomi_proprietari') and (catasto_cognomi or titolo_cognomi):
         cat_set = set(_norm(c) for c in catasto_cognomi)
         tit_set = set(_norm(c) for c in titolo_cognomi)
         match = bool(cat_set & tit_set) if cat_set and tit_set else not (cat_set and tit_set)
+        raw = 'ok' if match else 'error'
         verifiche.append({
+            'check_id': 'cognomi_proprietari',
             'label': 'Cognomi proprietari',
             'val_titolo': ', '.join(titolo_cognomi) or '\u2014',
             'val_catasto': ', '.join(catasto_cognomi) or '\u2014',
-            'esito': 'ok' if match else 'error',
+            'esito': _severity('cognomi_proprietari', raw),
         })
 
-    # 3. Quote catasto vs quote titolo
-    catasto_quote = []
-    for v in visure_list:
-        for i in v.get('intestati', []):
-            if i.get('quota'):
-                catasto_quote.append(i['quota'])
-    val_quote_t = _tget('quote', 'quota', 'quote_proprieta')
-    if catasto_quote or val_quote_t:
-        verifiche.append({
-            'label': 'Quote propriet\u00e0',
-            'val_titolo': val_quote_t or '\u2014',
-            'val_catasto': ', '.join(catasto_quote) or '\u2014',
-            'esito': 'ok' if _norm(val_quote_t) == _norm(', '.join(catasto_quote)) else (
-                'warning' if not val_quote_t or not catasto_quote else 'error'),
-        })
+    # ── 3. Quote proprietà ──
+    if _is_enabled('quote_proprieta'):
+        catasto_quote = []
+        for v in visure_list:
+            for i in v.get('intestati', []):
+                if i.get('quota'):
+                    catasto_quote.append(i['quota'])
+        val_quote_t = _tget('quote', 'quota', 'quote_proprieta')
+        if catasto_quote or val_quote_t:
+            if _norm(val_quote_t) == _norm(', '.join(catasto_quote)):
+                raw = 'ok'
+            elif not val_quote_t or not catasto_quote:
+                raw = 'warning'
+            else:
+                raw = 'error'
+            verifiche.append({
+                'check_id': 'quote_proprieta',
+                'label': 'Quote propriet\u00e0',
+                'val_titolo': val_quote_t or '\u2014',
+                'val_catasto': ', '.join(catasto_quote) or '\u2014',
+                'esito': _severity('quote_proprieta', raw),
+            })
 
-    # 4. CF ipotecaria vs CF proprietari titolo
-    if ipotecaria_list:
+    # ── 4. CF ipotecaria vs titolo ──
+    if _is_enabled('cf_ipotecaria') and ipotecaria_list:
         ipot_cfs = [isp.get('codiceFiscale', '') for isp in ipotecaria_list if isp.get('codiceFiscale')]
         val_cf_t = _tget('cf_acquirenti', 'codice_fiscale', 'cf', 'codici_fiscali')
         titolo_cfs = [p.strip() for p in val_cf_t.split(';') if p.strip()] if val_cf_t else []
         if ipot_cfs:
             tit_set = set(_norm(c) for c in titolo_cfs)
             match = all(_norm(cf) in tit_set for cf in ipot_cfs) if titolo_cfs else True
+            raw = 'ok' if match else 'error'
             verifiche.append({
+                'check_id': 'cf_ipotecaria',
                 'label': 'CF ipotecaria vs titolo',
                 'val_titolo': ', '.join(titolo_cfs) or '\u2014',
                 'val_catasto': ', '.join(ipot_cfs),
-                'esito': 'ok' if match else 'error',
+                'esito': _severity('cf_ipotecaria', raw),
             })
 
-    # 5. Formalità ipotecaria vs titolo
-    if ipotecaria_list:
+    # ── 5. Formalità ipotecaria ──
+    if _is_enabled('formalita_ipotecaria') and ipotecaria_list:
         all_form = []
         attive = 0
         for isp in ipotecaria_list:
@@ -1683,66 +1821,85 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list):
                 if f.get('flagCancellazione') != '1':
                     attive += 1
         if all_form:
+            raw = 'ok' if attive == 0 else 'warning'
             verifiche.append({
+                'check_id': 'formalita_ipotecaria',
                 'label': 'Formalit\u00e0 ipotecaria',
                 'val_titolo': '\u2014',
                 'val_catasto': f'{len(all_form)} formalit\u00e0 ({attive} attive)',
-                'esito': 'ok' if attive == 0 else 'warning',
+                'esito': _severity('formalita_ipotecaria', raw),
             })
 
-    # 6. Indirizzo catasto vs titolo
-    if v0:
+    # ── 6. Indirizzo ──
+    if _is_enabled('indirizzo') and v0:
         val_ind_t = _tget('indirizzo', 'indirizzo_immobile')
         val_ind_c = v0.get('indirizzo', '')
         if val_ind_t or val_ind_c:
             match = _norm(val_ind_t) == _norm(val_ind_c) if val_ind_t and val_ind_c else True
+            raw = 'ok' if match else 'warning'
             verifiche.append({
+                'check_id': 'indirizzo',
                 'label': 'Indirizzo',
                 'val_titolo': val_ind_t or '\u2014',
                 'val_catasto': val_ind_c or '\u2014',
-                'esito': 'ok' if match else 'warning',
+                'esito': _severity('indirizzo', raw),
             })
 
-    # 7. Categoria/rendita catasto vs titolo
+    # ── 7. Categoria / Rendita ──
     if v0:
-        for field, label in [('categoria', 'Categoria'), ('rendita', 'Rendita')]:
+        for check_id, field, label in [('categoria', 'categoria', 'Categoria'), ('rendita', 'rendita', 'Rendita')]:
+            if not _is_enabled(check_id):
+                continue
             val_t = _tget(field)
             val_c = v0.get(field, '')
             if val_t or val_c:
                 match = _norm(val_t) == _norm(val_c) if val_t and val_c else True
+                raw = 'ok' if match else 'error'
                 verifiche.append({
+                    'check_id': check_id,
                     'label': label,
                     'val_titolo': val_t or '\u2014',
                     'val_catasto': val_c or '\u2014',
-                    'esito': 'ok' if match else 'error',
+                    'esito': _severity(check_id, raw),
                 })
 
-    # 8. Numero intestati catasto vs numero acquirenti titolo
-    n_cat = len(catasto_cognomi)
-    n_tit = len(titolo_cognomi)
-    if n_cat > 0 or n_tit > 0:
-        verifiche.append({
-            'label': 'N. intestati/acquirenti',
-            'val_titolo': str(n_tit) if n_tit else '\u2014',
-            'val_catasto': str(n_cat) if n_cat else '\u2014',
-            'esito': 'ok' if n_cat == n_tit else 'error',
-        })
+    # ── 8. Numero intestati vs acquirenti ──
+    if _is_enabled('num_intestati'):
+        n_cat = len(catasto_cognomi)
+        n_tit = len(titolo_cognomi)
+        if n_cat > 0 or n_tit > 0:
+            raw = 'ok' if n_cat == n_tit else 'error'
+            verifiche.append({
+                'check_id': 'num_intestati',
+                'label': 'N. intestati/acquirenti',
+                'val_titolo': str(n_tit) if n_tit else '\u2014',
+                'val_catasto': str(n_cat) if n_cat else '\u2014',
+                'esito': _severity('num_intestati', raw),
+            })
 
-    # 9. Presenza gravami/ipoteche attive
-    if ipotecaria_list:
+    # ── 9. Gravami/ipoteche attive ──
+    if _is_enabled('gravami_attivi') and ipotecaria_list:
         attive_desc = []
         for isp in ipotecaria_list:
             for f in isp.get('formalita', []):
                 if f.get('flagCancellazione') != '1':
                     attive_desc.append(f.get('descrizione', '?'))
+        raw = 'ok' if not attive_desc else 'warning'
         verifiche.append({
+            'check_id': 'gravami_attivi',
             'label': 'Gravami/ipoteche attive',
             'val_titolo': '\u2014',
             'val_catasto': f'{len(attive_desc)} attive' if attive_desc else 'Nessuna',
-            'esito': 'ok' if not attive_desc else 'warning',
+            'esito': _severity('gravami_attivi', raw),
         })
 
     return verifiche
+
+
+@pratiche_bp.route('/checks-registry', methods=['GET'])
+def get_checks_registry():
+    """Restituisce il registry dei check disponibili."""
+    return jsonify(CHECKS_REGISTRY)
 
 
 @pratiche_bp.route('/practice/<practice_id>/report', methods=['GET'])
@@ -1854,7 +2011,12 @@ def generate_practice_report(practice_id):
                 })
 
         # ── 5. Verifiche ──
-        verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list)
+        checks_config = None
+        if pr.workflow_id:
+            wf = db.query(Workflow).get(pr.workflow_id)
+            if wf and wf.config:
+                checks_config = wf.config.get('checks_config')
+        verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config)
 
         # ── 6. Ipotecaria ──
         ipotecaria = []

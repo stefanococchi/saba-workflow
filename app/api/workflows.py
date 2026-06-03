@@ -204,7 +204,9 @@ def update_workflow(workflow_id):
         if 'status' in data:
             workflow.status = WorkflowStatus(data['status'])
         if 'config' in data:
-            workflow.config = data['config']
+            existing_config = workflow.config or {}
+            existing_config.update(data['config'])
+            workflow.config = existing_config
         if 'token_expiration_hours' in data:
             workflow.token_expiration_hours = data['token_expiration_hours']
         if 'sabaform_event_id' in data:

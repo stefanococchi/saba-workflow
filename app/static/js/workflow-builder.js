@@ -2,6 +2,8 @@
 let workflowSteps = [];
 let currentStep = 1;
 let editingStepIndex = null;
+let checksRegistry = [];    // Loaded from backend
+let checksConfig = {};      // {check_id: {enabled: bool, severity: str}}
 
 
 // Canvas theme
@@ -3116,7 +3118,8 @@ function nextStep() {
     const wizardSteps = document.querySelectorAll('.wizard-step');
     const contentSteps = document.querySelectorAll('.wizard-content');
     
-    if (currentStep < 3) {
+    var maxStep = wizardSteps.length;
+    if (currentStep < maxStep) {
         // Validation
         if (currentStep === 1) {
             const name = document.getElementById('workflowName').value;
@@ -3141,8 +3144,12 @@ function nextStep() {
         contentSteps[currentStep - 1].style.display = 'block';
         wizardSteps[currentStep - 1].classList.add('active');
 
-        // Generate review if step 3
+        // Populate checks config when entering step 3
         if (currentStep === 3) {
+            renderChecksConfig();
+        }
+        // Generate review on last step
+        if (currentStep === maxStep) {
             generateReview();
         }
     }
@@ -3164,6 +3171,108 @@ function prevStep() {
 }
 
 // Generate review
+// ── Checks Config ───────────────────────────────────────────────
+
+function loadChecksRegistry() {
+    if (checksRegistry.length > 0) return Promise.resolve();
+    return fetch('/api/checks-registry')
+        .then(r => r.json())
+        .then(data => { checksRegistry = data; });
+}
+
+function getWorkflowStepTypes() {
+    // Returns set of source types available in the current workflow steps
+    var sources = new Set();
+    sources.add('titolo'); // Always available (document extraction)
+    for (var s of workflowSteps) {
+        if (s.type === 'sister_visura') sources.add('visura');
+        if (s.type === 'sister_ipotecaria') sources.add('ipotecaria');
+    }
+    return sources;
+}
+
+function renderChecksConfig() {
+    var container = document.getElementById('checksConfigContainer');
+    if (!container) return;
+
+    loadChecksRegistry().then(function() {
+        var availableSources = getWorkflowStepTypes();
+
+        // Group by category
+        var categories = {};
+        for (var check of checksRegistry) {
+            var cat = check.category || 'Altro';
+            if (!categories[cat]) categories[cat] = [];
+            categories[cat].push(check);
+        }
+
+        var html = '';
+        for (var catName in categories) {
+            html += '<div class="check-category-title">' + catName + '</div>';
+            for (var c of categories[catName]) {
+                var cc = checksConfig[c.id] || {};
+                var enabled = cc.enabled !== undefined ? cc.enabled : true;
+                var severity = cc.severity || c.default_severity;
+                // Check if all required sources are available
+                var available = c.sources.every(function(s) { return availableSources.has(s); });
+                var disabledClass = !available ? ' disabled' : '';
+                var disabledAttr = !available ? ' disabled' : '';
+                var sourcesTags = c.sources.map(function(s) {
+                    var color = s === 'titolo' ? '#e3f2fd' : s === 'visura' ? '#e8f5e9' : '#fff3e0';
+                    return '<span style="background:' + color + '">' + s + '</span>';
+                }).join('');
+
+                html += '<div class="check-card' + disabledClass + '" data-check-id="' + c.id + '">';
+                html += '  <div class="form-check form-switch mb-0">';
+                html += '    <input class="form-check-input check-toggle" type="checkbox" id="chk_' + c.id + '"'
+                         + (enabled && available ? ' checked' : '') + disabledAttr + '>';
+                html += '  </div>';
+                html += '  <div class="check-info">';
+                html += '    <div class="check-label">' + c.label + '</div>';
+                html += '    <div class="check-desc">' + c.description + '</div>';
+                html += '    <div class="check-sources">' + sourcesTags;
+                if (!available) html += ' <span style="background:#ffebee;color:#c62828">step mancante</span>';
+                html += '    </div>';
+                html += '  </div>';
+                html += '  <select class="form-select form-select-sm check-severity" data-check-id="' + c.id + '"' + disabledAttr + '>';
+                html += '    <option value="error"' + (severity === 'error' ? ' selected' : '') + '>Errore</option>';
+                html += '    <option value="warning"' + (severity === 'warning' ? ' selected' : '') + '>Warning</option>';
+                html += '    <option value="info"' + (severity === 'info' ? ' selected' : '') + '>Info</option>';
+                html += '  </select>';
+                html += '</div>';
+            }
+        }
+
+        container.innerHTML = html;
+
+        // Update card opacity on toggle
+        container.querySelectorAll('.check-toggle').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                var card = this.closest('.check-card');
+                if (this.checked) card.classList.remove('disabled');
+                else card.classList.add('disabled');
+            });
+        });
+    });
+}
+
+function collectChecksConfig() {
+    checksConfig = {};
+    document.querySelectorAll('.check-card').forEach(function(card) {
+        var id = card.dataset.checkId;
+        var toggle = card.querySelector('.check-toggle');
+        var select = card.querySelector('.check-severity');
+        if (toggle && !toggle.disabled) {
+            checksConfig[id] = {
+                enabled: toggle.checked,
+                severity: select ? select.value : 'error'
+            };
+        }
+    });
+    return checksConfig;
+}
+
+
 function generateReview() {
     var name = document.getElementById('workflowName').value;
     var description = document.getElementById('workflowDescription').value;
@@ -3362,6 +3471,7 @@ function saveWorkflow() {
         mail_from_name: document.getElementById('mailFromName').value.trim() || null,
         ao_agent_id: document.getElementById('wfAoAgent')?.value || null,
         ao_agent_name: document.getElementById('wfAoAgent')?.selectedOptions?.[0]?.dataset?.name || null,
+        config: { checks_config: collectChecksConfig() },
         participants: importedParticipants,
         steps: workflowSteps.map(step => {
             const stepData = {

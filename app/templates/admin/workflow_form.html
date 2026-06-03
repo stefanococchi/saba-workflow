@@ -514,6 +514,39 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
     color: white;
 }
 
+/* ===== Checks Config ===== */
+.check-category-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6c757d;
+    margin: 1rem 0 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #e9ecef;
+}
+.check-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: #f8f9fa;
+    margin-bottom: 6px;
+    transition: background 0.15s;
+}
+.check-card:hover { background: #e9ecef; }
+.check-card.disabled { opacity: 0.5; }
+.check-card .check-info { flex: 1; min-width: 0; }
+.check-card .check-label { font-weight: 600; font-size: 0.88rem; color: #212529; }
+.check-card .check-desc { font-size: 0.78rem; color: #6c757d; margin-top: 1px; }
+.check-card .check-sources { font-size: 0.7rem; color: #adb5bd; margin-top: 2px; }
+.check-card .check-sources span {
+    background: #e9ecef; border-radius: 4px; padding: 1px 6px; margin-right: 4px;
+}
+.check-card .form-select-sm { width: 130px; font-size: 0.8rem; }
+.check-card .form-check-input { width: 1.2em; height: 1.2em; }
+
 /* ===== Dry Run — Review Tab Styles ===== */
 .review-tabs {
     display: flex; gap: 4px;
@@ -1075,6 +1108,10 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
                 <div><small>{{ t.build_steps }}</small></div>
             </div>
             <div class="wizard-step" data-step="3">
+                <div class="wizard-step-circle"><i class="bi bi-shield-check"></i></div>
+                <div><small>Verifiche</small></div>
+            </div>
+            <div class="wizard-step" data-step="4">
                 <div class="wizard-step-circle"><i class="bi bi-check-circle"></i></div>
                 <div><small>{{ t.review }}</small></div>
             </div>
@@ -1367,8 +1404,26 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
         </div>
     </div>
 
-    <!-- Step 3: Review & Dry Run -->
+    <!-- Step 3: Verifiche -->
     <div class="wizard-content" data-step="3" style="display: none;">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h5 class="mb-1"><i class="bi bi-shield-check text-primary"></i> Configurazione Verifiche</h5>
+                <p class="text-muted small mb-3">
+                    Abilita/disabilita e configura la severità dei controlli incrociati eseguiti nel report pratica.
+                    I check disabilitati non verranno eseguiti né inclusi nel PDF.
+                </p>
+                <div id="checksConfigContainer">
+                    <div class="text-center text-muted py-4">
+                        <div class="spinner-border spinner-border-sm me-2"></div> Caricamento verifiche...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 4: Review & Dry Run -->
+    <div class="wizard-content" data-step="4" style="display: none;">
         <!-- Review tabs -->
         <div class="review-tabs mb-3">
             <button type="button" class="review-tab active" data-tab="review" onclick="switchReviewTab('review')">
@@ -1841,6 +1896,11 @@ try {
             if (sel) sel.value = {{ workflow.sabaform_event_id }};
         }, 1000);
     };
+    {% endif %}
+
+    // Carica checks_config dal workflow
+    {% if workflow.config and workflow.config.get('checks_config') %}
+    checksConfig = {{ workflow.config['checks_config'] | tojson }};
     {% endif %}
 
     console.log('Loaded ' + existingSteps.length + ' steps from DB');
