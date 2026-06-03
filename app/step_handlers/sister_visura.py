@@ -361,6 +361,52 @@ class SisterVisuraHandler(StepHandler):
                         visura_info['file_found_in'] = found_in
                         logger.info(f"Sister visura [{label}]: saved {file_name} ({len(content)} bytes)")
 
+                        # ── Salva subito in result_data con documentId unico ──
+                        try:
+                            import hashlib
+                            from sqlalchemy.orm.attributes import flag_modified
+                            db_session.refresh(practice_result)
+                            rd = dict(practice_result.result_data or {})
+                            if 'files' not in rd:
+                                rd['files'] = {}
+                            fh_key = hashlib.md5(f"sister_{foglio}_{particella}_{subalterno}".encode()).hexdigest()[:16]
+                            doc_id = f"Visura {foglio}/{particella}/{subalterno}"
+                            sister_data = {
+                                'FOGLIO': foglio,
+                                'PARTICELLA': particella,
+                                'SUBALTERNO': subalterno,
+                            }
+                            if visura_info.get('categoria'):
+                                sister_data['CATEGORIA'] = visura_info['categoria']
+                            if visura_info.get('classe'):
+                                sister_data['CLASSE'] = visura_info['classe']
+                            if visura_info.get('consistenza'):
+                                sister_data['CONSISTENZA'] = visura_info['consistenza']
+                            if visura_info.get('rendita'):
+                                sister_data['RENDITA'] = visura_info['rendita']
+                            if visura_info.get('indirizzo'):
+                                sister_data['INDIRIZZO'] = visura_info['indirizzo']
+                            if visura_info.get('superficie_mq'):
+                                sister_data['SUPERFICIE'] = visura_info['superficie_mq']
+                            if visura_info.get('intestati'):
+                                sister_data['INTESTATI'] = [
+                                    {'nominativo': i['nominativo'], 'codiceFiscale': i.get('cf', ''),
+                                     'diritto': i['diritto'], 'quota': i['quota']}
+                                    for i in visura_info['intestati']
+                                ]
+                            rd['files'][fh_key] = {
+                                'fileName': file_name,
+                                'identification': {'documentId': doc_id},
+                                'state': {'identification': 'completed', 'extraction': 'completed'},
+                                'extraction': {'data': sister_data},
+                            }
+                            practice_result.result_data = rd
+                            flag_modified(practice_result, 'result_data')
+                            db_session.flush()
+                            logger.info(f"Sister visura [{label}]: salvato in result_data come '{doc_id}'")
+                        except Exception as rd_err:
+                            logger.error(f"Sister visura [{label}]: errore salvataggio result_data: {rd_err}")
+
                     else:
                         visura_info['note'] = 'Nessun file nella risposta'
                         all_ok = False
