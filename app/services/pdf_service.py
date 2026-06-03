@@ -1,8 +1,12 @@
 """Servizio generazione PDF elegante per sintesi documenti."""
 
+import os
 import re
 from io import BytesIO
 from fpdf import FPDF
+
+_LOGO_PATH = os.path.join(os.path.dirname(__file__), '..', 'static', 'images',
+                          'officina_notarile_logo.svg')
 
 
 class SintesiPDF(FPDF):
@@ -233,15 +237,16 @@ def _safe(text):
 class ReportPDF(FPDF):
     """PDF report riepilogativo per pratica documentale."""
 
-    BROWN = (121, 85, 61)
-    DARK = (45, 45, 45)
-    ACCENT = (166, 124, 82)
-    MUTED = (150, 140, 130)
-    TABLE_HEAD_BG = (121, 85, 61)
+    # Palette Officina Notarile
+    PRIMARY = (35, 72, 141)       # #23488d — blu logo
+    DARK = (50, 55, 60)           # #32373c
+    ACCENT = (30, 115, 190)       # #1e73be — steel blue
+    MUTED = (120, 130, 140)
+    TABLE_HEAD_BG = (0, 56, 112)  # #003870 — blu nav
     TABLE_HEAD_FG = (255, 255, 255)
-    TABLE_ROW_EVEN = (250, 247, 243)
+    TABLE_ROW_EVEN = (241, 245, 250)
     TABLE_ROW_ODD = (255, 255, 255)
-    TABLE_BORDER = (210, 200, 185)
+    TABLE_BORDER = (195, 210, 230)
     GREEN = (46, 125, 50)
     RED = (198, 40, 40)
     ORANGE = (230, 145, 0)
@@ -275,17 +280,24 @@ class ReportPDF(FPDF):
         return super().multi_cell(*args, **kwargs)
 
     def header(self):
-        self.set_fill_color(*self.BROWN)
+        # Barra top blu
+        self.set_fill_color(*self.PRIMARY)
         self.rect(0, 0, 210, 3.5, 'F')
+        # Logo Officina Notarile (a sinistra)
+        logo = os.path.normpath(_LOGO_PATH)
+        if os.path.exists(logo):
+            self.image(logo, x=self.MARGIN, y=7, w=45)
+        # Titolo "Report Pratica" (a destra del logo)
         self.set_y(10)
         self.set_font('Helvetica', 'B', 14)
-        self.set_text_color(*self.BROWN)
-        self.cell(0, 8, 'Report Pratica', align='C', new_x='LMARGIN', new_y='NEXT')
+        self.set_text_color(*self.PRIMARY)
+        self.cell(0, 8, 'Report Pratica', align='R', new_x='LMARGIN', new_y='NEXT')
+        # Linea decorativa
         self.set_draw_color(*self.ACCENT)
         self.set_line_width(0.5)
-        y = self.get_y() + 1
-        self.line(70, y, 140, y)
-        self.ln(6)
+        y = self.get_y() + 2
+        self.line(self.MARGIN, y, 210 - self.MARGIN, y)
+        self.ln(8)
 
     def footer(self):
         self.set_y(-16)
@@ -296,7 +308,7 @@ class ReportPDF(FPDF):
         self.set_font('Helvetica', 'I', 7.5)
         self.set_text_color(*self.MUTED)
         pid = f' {self._practice_id}' if self._practice_id else ''
-        self.cell(0, 8, f'Saba Workflow \u2014 Report Pratica{pid}  |  Pagina {self.page_no()}/{{nb}}', align='C')
+        self.cell(0, 8, f'Officina Notarile - Report Pratica{pid}  |  Pagina {self.page_no()}/{{nb}}', align='C')
 
     # ── Helpers ──
 
@@ -331,7 +343,7 @@ class ReportPDF(FPDF):
             # Key
             self.set_x(self.MARGIN)
             self.set_font('Helvetica', 'B', 9)
-            self.set_text_color(*self.BROWN)
+            self.set_text_color(*self.PRIMARY)
             self.rect(self.MARGIN, y0, key_w, row_h, 'DF')
             self.set_xy(self.MARGIN + 3, y0 + (row_h - 5.5) / 2)
             self.cell(key_w - 6, 5.5, str(key), align='R')
