@@ -2078,6 +2078,7 @@ def generate_practice_report(practice_id):
                 })
 
         # ── 5. Verifiche ──
+        from app.models import Workflow
         checks_config = None
         if pr.workflow_id:
             wf = db.query(Workflow).get(pr.workflow_id)
@@ -2159,5 +2160,5 @@ def generate_practice_report(practice_id):
             headers={'Content-Disposition': f'attachment; filename="report_{practice_id}.pdf"'}
         )
     except Exception as e:
-        logger.error(f"Generate report error: {e}")
+        logger.error(f"Generate report error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
