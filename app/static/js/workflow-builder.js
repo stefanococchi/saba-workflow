@@ -3173,11 +3173,24 @@ function prevStep() {
 // Generate review
 // ── Checks Config ───────────────────────────────────────────────
 
+var CHECKS_REGISTRY_DATA = [
+    {id:'foglio', label:'Foglio', description:'Confronta il foglio catastale tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Dati catastali'},
+    {id:'particella', label:'Particella/Mappale', description:'Confronta la particella (mappale) tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Dati catastali'},
+    {id:'subalterno', label:'Subalterno', description:'Confronta il subalterno tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Dati catastali'},
+    {id:'cognomi_proprietari', label:'Cognomi proprietari', description:'Verifica che i cognomi degli intestatari catastali corrispondano agli acquirenti del titolo', default_severity:'error', sources:['titolo','visura'], category:'Soggetti'},
+    {id:'quote_proprieta', label:'Quote proprietà', description:'Confronta le quote di proprietà tra titolo e catasto', default_severity:'warning', sources:['titolo','visura'], category:'Soggetti'},
+    {id:'cf_ipotecaria', label:'CF ipotecaria vs titolo', description:'Verifica che i codici fiscali dell\'ispezione ipotecaria corrispondano a quelli del titolo', default_severity:'error', sources:['titolo','ipotecaria'], category:'Ipotecaria'},
+    {id:'formalita_ipotecaria', label:'Formalità ipotecaria', description:'Conta le formalità attive dall\'ispezione ipotecaria (attenzione se > 0)', default_severity:'warning', sources:['ipotecaria'], category:'Ipotecaria'},
+    {id:'indirizzo', label:'Indirizzo', description:'Confronta l\'indirizzo dell\'immobile tra titolo e visura catastale', default_severity:'warning', sources:['titolo','visura'], category:'Immobile'},
+    {id:'categoria', label:'Categoria catastale', description:'Confronta la categoria catastale tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Immobile'},
+    {id:'rendita', label:'Rendita catastale', description:'Confronta la rendita catastale tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Immobile'},
+    {id:'num_intestati', label:'N. intestati/acquirenti', description:'Verifica che il numero di intestatari catastali corrisponda al numero di acquirenti nel titolo', default_severity:'error', sources:['titolo','visura'], category:'Soggetti'},
+    {id:'gravami_attivi', label:'Gravami/ipoteche attive', description:'Segnala la presenza di formalità ipotecarie non cancellate', default_severity:'warning', sources:['ipotecaria'], category:'Ipotecaria'},
+];
+
 function loadChecksRegistry() {
-    if (checksRegistry.length > 0) return Promise.resolve();
-    return fetch('/api/checks-registry')
-        .then(r => r.json())
-        .then(data => { checksRegistry = data; });
+    if (checksRegistry.length === 0) checksRegistry = CHECKS_REGISTRY_DATA;
+    return Promise.resolve();
 }
 
 function getWorkflowStepTypes() {
