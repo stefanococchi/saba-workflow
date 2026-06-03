@@ -4652,188 +4652,205 @@ function openIpotecariaDetail(stepOrder) {
   const er = step.state?.exec_result || {};
   const ispezioni = er.ispezioni || [];
   if (ispezioni.length === 0) return alert('Nessuna ispezione ipotecaria trovata');
-
-  // Rimuovi modale precedente
-  document.getElementById('ipotecariaModal')?.remove();
-
-  // Tab per ogni soggetto
-  let tabsHtml = '';
-  let panelsHtml = '';
-  for (let i = 0; i < ispezioni.length; i++) {
-    const isp = ispezioni[i];
-    const cf = isp.codiceFiscale || '?';
-    const soggetti = (isp.soggetti || []).map(s => `${s.cognome || ''} ${s.nome || ''}`).join(', ');
-    const label = soggetti || cf;
-    const active = i === 0 ? ' ipo-tab-active' : '';
-    const display = i === 0 ? '' : 'display:none;';
-    const numForm = (isp.formalita || []).length;
-    const attive = (isp.formalita || []).filter(f => f.flagCancellazione !== '1').length;
-
-    tabsHtml += `<button class="ipo-tab${active}" data-idx="${i}" onclick="_switchIpoTab(${i})">${label} <span class="ipo-tab-badge">${numForm} form.</span></button>`;
-
-    // Intestazione soggetto con dati anagrafici
-    const sogg0 = (isp.soggetti || [])[0] || {};
-    const nascita = sogg0.dataNascita || '';
-    const luogo = sogg0.luogoNascita || sogg0.comuneNascita || '';
-    const prov = sogg0.provinciaNascita || '';
-    const pdfFile = isp.file_saved || '';
-
-    let panelContent = `
-      <div class="ipo-sogg-header">
-        <div class="d-flex align-items-center gap-2">
-          <div class="ipo-sogg-name">${label}</div>
-          ${pdfFile ? `<button class="btn btn-sm btn-outline-primary" style="border-radius:8px;font-size:0.7rem" onclick="_loadIpotecariaPdf('${pdfFile}', ${i})"><i class="bi bi-file-earmark-text"></i> Carica dettagli da PDF</button>` : ''}
-        </div>
-        <div class="ipo-sogg-meta">
-          <span class="ipo-tag">CF: ${cf}</span>
-          ${nascita ? `<span class="ipo-tag">Nascita: ${nascita}</span>` : ''}
-          ${luogo ? `<span class="ipo-tag">${luogo}${prov ? ' ('+prov+')' : ''}</span>` : ''}
-          ${isp.costo ? `<span class="ipo-tag">Costo: € ${isp.costo}</span>` : ''}
-          <span class="ipo-tag">${numForm} formalità (${attive} attive)</span>
-        </div>
-      </div>`;
-
-    // Formalità
-    for (let j = 0; j < (isp.formalita || []).length; j++) {
-      const f = isp.formalita[j];
-      const cancellata = f.flagCancellazione === '1';
-      const cardClass = cancellata ? 'ipo-form-card cancelled' : 'ipo-form-card';
-      const desc = f.descrizione || '?';
-      const tipo = f.specieAtto || f.specie_atto || '';
-      const qual = f.qualifica || '';
-      const tipoQual = f.tipoQualifica || '';
-      const data = f.data || '';
-      const dataTitolo = f.dataTitolo || '';
-      const rep = f.repertorio || '';
-      const rg = f.rg || f.RG || '';
-      const rp = f.rp || f.RP || '';
-      const pubb = f.pubblicoUfficiale || '';
-      const ubicazioni = (f.ubicazioneImmobili || []).map(u => u.descrizione || '').filter(Boolean).join('; ');
-      const cancTag = cancellata ? '<span class="ipo-tag-cancel">CANCELLATA</span>' : '';
-
-      // Dettaglio extra (collassabile)
-      let extraHtml = '';
-      const extras = [];
-      if (dataTitolo) extras.push(`<span class="ipo-tag">Data titolo: ${dataTitolo}</span>`);
-      if (rg) extras.push(`<span class="ipo-tag">RG: ${rg}</span>`);
-      if (rp) extras.push(`<span class="ipo-tag">RP: ${rp}</span>`);
-      if (pubb) extras.push(`<span class="ipo-tag">Pubblico uff.: ${pubb}</span>`);
-      if (ubicazioni) extras.push(`<span class="ipo-tag">Immobili: ${ubicazioni}</span>`);
-      if (extras.length > 0) {
-        extraHtml = `<div class="ipo-form-extra">${extras.join('')}</div>`;
-      }
-
-      panelContent += `
-        <div class="${cardClass}">
-          <div class="ipo-form-num">#${j+1}</div>
-          <div class="ipo-form-body">
-            <div class="ipo-form-title">${desc} ${cancTag}</div>
-            <div class="ipo-form-tags">
-              ${tipo ? `<span class="ipo-tag-tipo">${tipo}</span>` : ''}
-              ${qual ? `<span class="ipo-tag">${tipoQual || qual}</span>` : ''}
-              ${data ? `<span class="ipo-tag">Data: ${data}</span>` : ''}
-              ${rep ? `<span class="ipo-tag">Rep: ${rep}</span>` : ''}
-            </div>
-            ${extraHtml}
-          </div>
-        </div>`;
-    }
-
-    panelsHtml += `<div class="ipo-panel" data-idx="${i}" style="${display}">${panelContent}</div>`;
-  }
-
-  const modalHtml = `
-    <div id="ipotecariaModal" class="ipo-modal-overlay" onclick="if(event.target===this)this.remove()">
-      <div class="ipo-modal">
-        <div class="ipo-modal-header">
-          <h5><i class="bi bi-list-columns-reverse"></i> Analisi Ispezione Ipotecaria</h5>
-          <button onclick="document.getElementById('ipotecariaModal').remove()" class="btn-close"></button>
-        </div>
-        <div class="ipo-tabs">${tabsHtml}</div>
-        <div class="ipo-panels">${panelsHtml}</div>
-      </div>
-    </div>`;
-
-  document.body.insertAdjacentHTML('beforeend', modalHtml);
-}
-
-async function _loadIpotecariaPdf(fileName, panelIdx) {
   const practiceId = window._practiceId;
-  if (!practiceId) return;
-  try {
-    const r = await fetch(`/api/ao/practice-files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}/parse-ipotecaria`);
-    const data = await r.json();
-    if (!data.ok) return alert('Errore: ' + (data.error || 'parsing fallito'));
 
-    const panel = document.querySelector(`.ipo-panel[data-idx="${panelIdx}"]`);
-    if (!panel) return;
+  // Apri finestra indipendente
+  const w = window.open('', 'ipotecaria_detail', 'width=1200,height=800,resizable=yes,scrollbars=yes');
+  if (!w) return alert('Popup bloccato dal browser — abilita i popup per questo sito');
 
-    const parsed = data.data;
-    // Aggiorna header soggetto con dati dal PDF
-    const sogg = parsed.soggetto || {};
-    const header = parsed.header || {};
-    let headerHtml = `
-      <div class="ipo-sogg-header">
-        <div class="ipo-sogg-name">${sogg.nominativo || ''}</div>
-        <div class="ipo-sogg-meta">
-          ${sogg.codice_fiscale ? `<span class="ipo-tag">CF: ${sogg.codice_fiscale}</span>` : ''}
-          ${sogg.data_nascita ? `<span class="ipo-tag">Nascita: ${sogg.data_nascita}</span>` : ''}
-          ${sogg.luogo_nascita ? `<span class="ipo-tag">${sogg.luogo_nascita}</span>` : ''}
-          ${header.periodo_informatizzato ? `<span class="ipo-tag">Periodo: ${header.periodo_informatizzato}</span>` : ''}
-          ${header.direzione ? `<span class="ipo-tag">${header.direzione}</span>` : ''}
-          <span class="ipo-tag">${(parsed.formalita || []).length} formalità (da PDF)</span>
-        </div>
-      </div>`;
+  // CSS e struttura base
+  w.document.write(`<!DOCTYPE html><html><head><title>Ispezione Ipotecaria</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6f8; color: #333; }
+    .ipo-header { background: #23488d; color: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+    .ipo-header h1 { font-size: 1rem; font-weight: 600; }
+    .ipo-header .badge { background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; }
+    .ipo-tabs { display: flex; gap: 4px; padding: 12px 24px; background: #fff; border-bottom: 1px solid #e9ecef; overflow-x: auto; }
+    .ipo-tab { border: none; background: #f1f3f5; color: #495057; padding: 8px 16px; border-radius: 20px; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
+    .ipo-tab:hover { background: #e9ecef; }
+    .ipo-tab.active { background: #23488d; color: #fff; }
+    .ipo-tab .badge { font-size: 0.65rem; opacity: 0.7; margin-left: 4px; }
+    .ipo-content { padding: 16px 24px; }
+    .ipo-panel { display: none; }
+    .ipo-panel.active { display: block; }
+    .sogg-header { margin-bottom: 16px; }
+    .sogg-name { font-size: 1.15rem; font-weight: 700; color: #212529; }
+    .sogg-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+    .tag { font-size: 0.72rem; background: #e9ecef; color: #495057; padding: 2px 8px; border-radius: 4px; }
+    .tag-tipo { font-size: 0.72rem; background: #e3f2fd; color: #1565c0; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+    .tag-cancel { font-size: 0.65rem; background: #ffebee; color: #c62828; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px; }
+    .form-card { display: flex; gap: 10px; padding: 10px 12px; margin-bottom: 6px; border-radius: 10px; background: #fff; border: 1px solid #e9ecef; }
+    .form-card:hover { background: #f8f9fa; }
+    .form-card.cancelled { opacity: 0.5; background: #fff5f5; }
+    .form-card .cb { display: flex; align-items: flex-start; padding-top: 2px; }
+    .form-card .cb input { width: 16px; height: 16px; accent-color: #23488d; cursor: pointer; }
+    .form-num { min-width: 32px; height: 32px; border-radius: 50%; background: #23488d; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
+    .form-card.cancelled .form-num { background: #adb5bd; }
+    .form-body { flex: 1; min-width: 0; }
+    .form-title { font-weight: 600; font-size: 0.85rem; }
+    .form-card.cancelled .form-title { text-decoration: line-through; }
+    .form-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .form-extra { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; padding-top: 4px; border-top: 1px dashed #dee2e6; }
+    .form-doc { font-size: 0.72rem; color: #666; font-style: italic; margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e9ecef; }
+    .sel-bar { position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e9ecef; padding: 10px 24px; display: flex; align-items: center; gap: 12px; font-size: 0.82rem; }
+    .sel-bar .count { font-weight: 600; color: #23488d; }
+    .loading { text-align: center; padding: 40px; color: #999; }
+  </style></head><body>
+  <div class="ipo-header">
+    <i class="bi bi-list-columns-reverse" style="font-size:1.2rem"></i>
+    <h1>Analisi Ispezione Ipotecaria</h1>
+    <span class="badge">${ispezioni.length} soggett${ispezioni.length === 1 ? 'o' : 'i'}</span>
+  </div>
+  <div class="ipo-tabs" id="ipoTabs"></div>
+  <div class="ipo-content" id="ipoContent"></div>
+  <div class="sel-bar">
+    <i class="bi bi-check2-square"></i>
+    <span>Selezionate: <span class="count" id="selCount">0</span> formalità</span>
+    <span style="flex:1"></span>
+    <span style="font-size:0.72rem;color:#999">Le formalità selezionate saranno usate per le prossime query SISTER</span>
+  </div>
+  <script>
+  var _ispezioni = ${JSON.stringify(ispezioni)};
+  var _practiceId = '${practiceId}';
+  var _parsedCache = {};
 
-    // Render formalità dal parser (più complete)
-    let formsHtml = '';
-    for (let j = 0; j < (parsed.formalita || []).length; j++) {
-      const f = parsed.formalita[j];
-      const cancellata = !!f.cancellazione;
-      const cardClass = cancellata ? 'ipo-form-card cancelled' : 'ipo-form-card';
-      const cancTag = cancellata ? `<span class="ipo-tag-cancel">CANCELLATA ${f.cancellazione.data || ''}</span>` : '';
+  function init() {
+    var tabsEl = document.getElementById('ipoTabs');
+    var html = '';
+    for (var i = 0; i < _ispezioni.length; i++) {
+      var isp = _ispezioni[i];
+      var sogg = (isp.soggetti || []).map(function(s) { return (s.cognome||'')+' '+(s.nome||''); }).join(', ');
+      var label = sogg || isp.codiceFiscale || '?';
+      var n = (isp.formalita || []).length;
+      html += '<button class="ipo-tab'+(i===0?' active':'')+'" data-idx="'+i+'" onclick="switchTab('+i+')">'+label+' <span class="badge">'+n+' form.</span></button>';
+    }
+    tabsEl.innerHTML = html;
+    // Carica prima tab
+    switchTab(0);
+  }
 
-      let extras = '';
-      if (f.pubblico_ufficiale) extras += `<span class="ipo-tag">Pub. Uff.: ${f.pubblico_ufficiale}</span>`;
-      if (f.repertorio) extras += `<span class="ipo-tag">Rep: ${f.repertorio}${f.data_repertorio ? ' del ' + f.data_repertorio : ''}</span>`;
-      if (f.registro_generale) extras += `<span class="ipo-tag">RG: ${f.registro_generale}</span>`;
-      if (f.registro_particolare) extras += `<span class="ipo-tag">RP: ${f.registro_particolare}</span>`;
-      if (f.ubicazione) extras += `<span class="ipo-tag">Immobili: ${f.ubicazione}</span>`;
-      if (f.titolo_telematico) extras += `<span class="ipo-tag">Titolo Telematico</span>`;
+  function switchTab(idx) {
+    document.querySelectorAll('.ipo-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelector('.ipo-tab[data-idx="'+idx+'"]').classList.add('active');
+    loadPanel(idx);
+  }
 
-      let docCorr = '';
-      if (f.documenti_correlati) {
-        docCorr = `<div class="ipo-form-extra" style="font-size:0.72rem;color:#666;font-style:italic"><i class="bi bi-link-45deg"></i> ${f.documenti_correlati.replace(/\n/g, ' ')}</div>`;
-      }
+  function loadPanel(idx) {
+    var content = document.getElementById('ipoContent');
+    var isp = _ispezioni[idx];
+    var pdfFile = isp.file_saved || '';
 
-      formsHtml += `
-        <div class="${cardClass}">
-          <div class="ipo-form-num">#${f.numero || j+1}</div>
-          <div class="ipo-form-body">
-            <div class="ipo-form-title">${f.tipo_formalita || ''} ${cancTag}</div>
-            <div class="ipo-form-tags">
-              ${f.specie_atto ? `<span class="ipo-tag-tipo">${f.specie_atto}</span>` : ''}
-              ${f.descrizione ? `<span class="ipo-tag">${f.descrizione}</span>` : ''}
-              ${f.qualifica ? `<span class="ipo-tag">${f.qualifica}</span>` : ''}
-              <span class="ipo-tag">Data: ${f.data || '?'}</span>
-            </div>
-            <div class="ipo-form-extra">${extras}</div>
-            ${docCorr}
-          </div>
-        </div>`;
+    if (_parsedCache[idx]) {
+      renderParsed(idx, _parsedCache[idx]);
+      return;
     }
 
-    panel.innerHTML = headerHtml + formsHtml;
-  } catch (e) {
-    alert('Errore caricamento PDF: ' + e.message);
-  }
-}
+    if (!pdfFile) {
+      renderFallback(idx, isp);
+      return;
+    }
 
-function _switchIpoTab(idx) {
-  document.querySelectorAll('.ipo-tab').forEach(t => t.classList.remove('ipo-tab-active'));
-  document.querySelectorAll('.ipo-panel').forEach(p => p.style.display = 'none');
-  document.querySelector(`.ipo-tab[data-idx="${idx}"]`)?.classList.add('ipo-tab-active');
-  document.querySelector(`.ipo-panel[data-idx="${idx}"]`).style.display = '';
+    content.innerHTML = '<div class="loading"><div style="margin-bottom:8px">Parsing PDF...</div></div>';
+    fetch('/api/ao/practice-files/'+encodeURIComponent(_practiceId)+'/'+encodeURIComponent(pdfFile)+'/parse-ipotecaria')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.ok) {
+          _parsedCache[idx] = data.data;
+          renderParsed(idx, data.data);
+        } else {
+          renderFallback(idx, isp);
+        }
+      })
+      .catch(function() { renderFallback(idx, isp); });
+  }
+
+  function renderParsed(idx, parsed) {
+    var sogg = parsed.soggetto || {};
+    var header = parsed.header || {};
+    var forms = parsed.formalita || [];
+    var html = '<div class="sogg-header">';
+    html += '<div class="sogg-name">'+(sogg.nominativo||'')+'</div>';
+    html += '<div class="sogg-meta">';
+    if (sogg.codice_fiscale) html += '<span class="tag">CF: '+sogg.codice_fiscale+'</span>';
+    if (sogg.data_nascita) html += '<span class="tag">Nascita: '+sogg.data_nascita+'</span>';
+    if (sogg.luogo_nascita) html += '<span class="tag">'+sogg.luogo_nascita+'</span>';
+    if (header.direzione) html += '<span class="tag">'+header.direzione+'</span>';
+    if (header.periodo_informatizzato) html += '<span class="tag">Periodo: '+header.periodo_informatizzato+'</span>';
+    html += '<span class="tag">'+forms.length+' formalità</span>';
+    html += '</div></div>';
+
+    for (var j = 0; j < forms.length; j++) {
+      html += renderFormCard(forms[j], j, idx);
+    }
+    document.getElementById('ipoContent').innerHTML = html;
+    updateSelCount();
+  }
+
+  function renderFallback(idx, isp) {
+    var cf = isp.codiceFiscale || '?';
+    var forms = isp.formalita || [];
+    var html = '<div class="sogg-header"><div class="sogg-name">'+cf+'</div>';
+    html += '<div class="sogg-meta"><span class="tag">'+forms.length+' formalità (dati XML)</span></div></div>';
+    for (var j = 0; j < forms.length; j++) {
+      var f = forms[j];
+      html += '<div class="form-card'+(f.flagCancellazione==='1'?' cancelled':'')+'">';
+      html += '<div class="cb"><input type="checkbox" data-idx="'+idx+'" data-form="'+j+'" onchange="updateSelCount()"></div>';
+      html += '<div class="form-num">#'+(j+1)+'</div>';
+      html += '<div class="form-body"><div class="form-title">'+(f.descrizione||'?')+'</div>';
+      html += '<div class="form-tags">';
+      if (f.specieAtto) html += '<span class="tag-tipo">'+f.specieAtto+'</span>';
+      if (f.qualifica) html += '<span class="tag">'+f.qualifica+'</span>';
+      if (f.data) html += '<span class="tag">Data: '+f.data+'</span>';
+      html += '</div></div></div>';
+    }
+    document.getElementById('ipoContent').innerHTML = html;
+    updateSelCount();
+  }
+
+  function renderFormCard(f, j, panelIdx) {
+    var cancellata = !!f.cancellazione;
+    var cls = 'form-card' + (cancellata ? ' cancelled' : '');
+    var cancTag = cancellata ? '<span class="tag-cancel">CANCELLATA '+(f.cancellazione.data||'')+'</span>' : '';
+
+    var extras = '';
+    if (f.pubblico_ufficiale) extras += '<span class="tag">Pub. Uff.: '+f.pubblico_ufficiale+'</span>';
+    if (f.repertorio) extras += '<span class="tag">Rep: '+f.repertorio+(f.data_repertorio?' del '+f.data_repertorio:'')+'</span>';
+    if (f.registro_generale) extras += '<span class="tag">RG: '+f.registro_generale+'</span>';
+    if (f.registro_particolare) extras += '<span class="tag">RP: '+f.registro_particolare+'</span>';
+    if (f.ubicazione) extras += '<span class="tag">Immobili: '+f.ubicazione+'</span>';
+    if (f.titolo_telematico) extras += '<span class="tag">Titolo Telematico</span>';
+
+    var docCorr = '';
+    if (f.documenti_correlati) {
+      docCorr = '<div class="form-doc"><i class="bi bi-link-45deg"></i> '+f.documenti_correlati.replace(/\\n/g, ' ')+'</div>';
+    }
+
+    return '<div class="'+cls+'">' +
+      '<div class="cb"><input type="checkbox" data-panel="'+panelIdx+'" data-form="'+j+'" onchange="updateSelCount()"></div>' +
+      '<div class="form-num">#'+(f.numero||j+1)+'</div>' +
+      '<div class="form-body">' +
+        '<div class="form-title">'+(f.tipo_formalita||f.descrizione||'?')+' '+cancTag+'</div>' +
+        '<div class="form-tags">' +
+          (f.specie_atto ? '<span class="tag-tipo">'+f.specie_atto+'</span>' : '') +
+          (f.descrizione && f.tipo_formalita ? '<span class="tag">'+f.descrizione+'</span>' : '') +
+          (f.qualifica ? '<span class="tag">'+f.qualifica+'</span>' : '') +
+          '<span class="tag">Data: '+(f.data||'?')+'</span>' +
+        '</div>' +
+        (extras ? '<div class="form-extra">'+extras+'</div>' : '') +
+        docCorr +
+      '</div></div>';
+  }
+
+  function updateSelCount() {
+    var n = document.querySelectorAll('.cb input:checked').length;
+    document.getElementById('selCount').textContent = n;
+  }
+
+  init();
+  </script></body></html>`);
+  w.document.close();
 }
 
 async function validateAndAdvance() {
