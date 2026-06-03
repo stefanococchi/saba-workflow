@@ -314,6 +314,25 @@ class SisterIpotecariaHandler(StepHandler):
             }
         result['extracted_data'] = extracted
 
+        # Salva extracted_data direttamente nello step_states (persistente)
+        try:
+            from sqlalchemy.orm.attributes import flag_modified
+            ss = practice_result.step_states or {}
+            step_ss = ss.get(str(step.order), {})
+            existing_ext = step_ss.get('extracted_data', {})
+            if isinstance(existing_ext, dict):
+                existing_ext.update(extracted)
+            else:
+                existing_ext = extracted
+            step_ss['extracted_data'] = existing_ext
+            ss[str(step.order)] = step_ss
+            practice_result.step_states = ss
+            flag_modified(practice_result, 'step_states')
+            db_session.flush()
+            logger.info(f"Sister ipotecaria: salvato extracted_data nello step_states: {list(extracted.keys())}")
+        except Exception as e:
+            logger.error(f"Sister ipotecaria: errore salvataggio extracted_data: {e}")
+
         return result
 
     def get_display_data(self, step_config, step_state):
