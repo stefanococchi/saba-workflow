@@ -4834,7 +4834,7 @@ function openIpotecariaDetail(stepOrder) {
         '<div class="form-title">'+(f.tipo_formalita||f.descrizione||'?')+' '+cancTag+'</div>' +
         '<div class="form-tags">' +
           (f.specie_atto ? '<span class="tag-tipo">'+f.specie_atto+'</span>' : '') +
-          (f.descrizione && f.tipo_formalita ? '<span class="tag">'+f.descrizione+'</span>' : '') +
+          (f.descrizione && f.tipo_formalita ? '<span class="tag" style="background:#e8f5e9;color:#2e7d32;font-weight:600">'+f.descrizione+'</span>' : '') +
           (f.qualifica ? '<span class="tag">'+f.qualifica+'</span>' : '') +
           '<span class="tag">Data: '+(f.data||'?')+'</span>' +
         '</div>' +
