@@ -1434,7 +1434,12 @@ def complete_practice_step(practice_id):
                     if next_in_chain:
                         pr.current_step_order = next_in_chain.order
                         step_states[str(next_in_chain.order)] = {'status': 'in_progress'}
-                        auto_chain.append(next_in_chain)  # continua catena
+                        # Dopo uno step SISTER: ferma la catena per mostrare i risultati.
+                        # Il frontend auto-triggerà il prossimo step.
+                        if chain_step.type.name in ('SISTER_VISURA', 'SISTER_IPOTECARIA'):
+                            logger.info(f"Auto-chain: pausa dopo {chain_step.type.name} step {chain_step.order}")
+                        else:
+                            auto_chain.append(next_in_chain)  # continua catena
                     else:
                         pr.current_step_order = None
                 except Exception as e:

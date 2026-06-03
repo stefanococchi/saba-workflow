@@ -4465,19 +4465,12 @@ async function completeCurrentStep(action) {
   const prevButtons = vbRight ? vbRight.innerHTML : '';
   if (vbRight) vbRight.innerHTML = '<span class="prat-spinner" style="width:14px;height:14px;border-width:2px"></span>';
 
-  // Costruisci lista step che verranno auto-eseguiti
-  const steps = practiceWorkflow?.steps || [];
-  const currentOrder = practiceWorkflow?.current_step_order;
-  const nextSteps = steps.filter(s => s.order > currentOrder).map(s => s.name);
-  let statusMsg = action === 'skip' ? 'Salto step...' : 'Completamento step...';
-  if (nextSteps.length > 0) {
-    statusMsg = `<div class="prat-spinner" style="width:24px;height:24px;border-width:3px;margin:0 auto 10px"></div>
-      <div style="font-weight:500;font-size:0.85rem">Esecuzione in corso...</div>
-      <div style="margin-top:8px;font-size:0.78rem;color:var(--md-on-surface-variant)">
-        Step in coda: ${nextSteps.map((n, i) => `<div style="padding:3px 0"><span class="prat-spinner" style="width:10px;height:10px;border-width:2px;margin-right:6px;vertical-align:middle"></span>${n}</div>`).join('')}
-      </div>
-      <div style="margin-top:10px;font-size:0.72rem;color:var(--md-on-surface-variant)">Gli step automatici vengono eseguiti in sequenza.<br>Questo può richiedere qualche minuto.</div>`;
-  }
+  // Mostra stato di avanzamento per lo step corrente
+  const currentStepName = practiceWorkflow?.steps?.find(s => s.order === practiceWorkflow?.current_step_order)?.name || '';
+  let statusMsg = action === 'skip' ? 'Salto step...'
+    : `<div class="prat-spinner" style="width:24px;height:24px;border-width:3px;margin:0 auto 10px"></div>
+       <div style="font-weight:500;font-size:0.85rem">Esecuzione: ${currentStepName || 'step corrente'}...</div>
+       <div style="margin-top:8px;font-size:0.72rem;color:var(--md-on-surface-variant)">Questo può richiedere qualche minuto.</div>`;
   if (dataScroll) {
     dataScroll.innerHTML = `<div class="text-center py-5" style="color:var(--md-on-surface-variant)">${statusMsg}</div>`;
   }
@@ -4500,6 +4493,16 @@ async function completeCurrentStep(action) {
     const cached = await loadPracticeFromDb(practiceId);
     if (cached?.result_data) {
       await showPracticeResult({ output: { info: cached.result_data } }, practiceId);
+    }
+
+    // 3. Auto-trigger: se il prossimo step è auto-eseguibile, lancialo dopo un delay
+    // (il backend ferma la catena dopo step SISTER per mostrare i risultati)
+    if (practiceWorkflow?.current_step_order && !data.workflow_completed) {
+      const nextStep = practiceWorkflow.steps?.find(s => s.order === practiceWorkflow.current_step_order);
+      const isAutoStep = nextStep && ['SISTER_VISURA', 'SISTER_IPOTECARIA'].includes(nextStep.type);
+      if (isAutoStep) {
+        setTimeout(() => executeAndAdvance(), 1500);
+      }
     }
   } catch (e) {
     alert('Errore: ' + e.message);
