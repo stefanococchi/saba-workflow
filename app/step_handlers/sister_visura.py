@@ -59,6 +59,23 @@ def _split_multi(val):
     return parts if parts else ['']
 
 
+def _build_sister_filename(foglio, particella, subalterno, cognomi, prefix='catastale'):
+    """Costruisce nome file SISTER: catastale_F_M_S_COGNOME1_COGNOME2.pdf
+    cognomi: lista di cognomi. Usa max i primi 2.
+    """
+    parts = [prefix, foglio or '0', particella or '0', subalterno or '0']
+    # Prendi max 2 cognomi, pulisci
+    clean = []
+    for c in (cognomi or []):
+        c = re.sub(r'[^A-Za-z]', '', str(c).split()[0] if c else '').upper()
+        if c and c not in clean:
+            clean.append(c)
+        if len(clean) >= 2:
+            break
+    parts.extend(clean)
+    return '_'.join(parts) + '.pdf'
+
+
 def _extract_pdf(output):
     """Cerca e restituisce (content_bytes, file_name, found_in) dall'output AO."""
     file_data = None
@@ -340,9 +357,10 @@ class SisterVisuraHandler(StepHandler):
                             visura_info['total_results'] = sr.get('totalResults', len(immobili))
                             logger.info(f"Sister visura [{label}]: {len(immobili)} immobili, categoria={visura_info.get('categoria')}")
 
-                    default_name = f"visura_{comune}_{foglio}_{particella}_{subalterno}.pdf"
+                    # Costruisci nome file con cognomi intestati
+                    cognomi_list = [i.get('nominativo', '').split()[0] for i in visura_info.get('intestati', []) if i.get('nominativo')]
+                    file_name = _build_sister_filename(foglio, particella, subalterno, cognomi_list)
                     content, ao_file_name, found_in = _extract_pdf(output)
-                    file_name = ao_file_name or default_name
 
                     if content:
                         existing = db_session.query(PracticeFile).filter_by(

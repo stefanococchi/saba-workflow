@@ -3840,6 +3840,24 @@ async function downloadSintesiPdf() {
   }
 }
 
+async function downloadReport() {
+  const practiceId = selectedPracticeId || getPracticeId();
+  if (!practiceId) return alert('Nessuna pratica selezionata');
+  const user = {{ session.get('username', '')|tojson }};
+  try {
+    const r = await fetch(`/api/ao/practice/${encodeURIComponent(practiceId)}/report?user=${encodeURIComponent(user)}`);
+    if (!r.ok) throw new Error('Errore generazione report');
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `report_${practiceId}.pdf`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    alert('Errore report: ' + e.message);
+  }
+}
+
 async function assistPrompt() {
   const sintesiAgent = agents.find(a => (a.name || '').toLowerCase().includes('sintesi'));
   if (!sintesiAgent) return alert('Agente post-stipula-sintesi non trovato');
@@ -4192,7 +4210,8 @@ function updateValidateBarForWorkflow(wf) {
     // Workflow completato — mostra riepilogo step completati
     document.getElementById('validateInfo').innerHTML = '<i class="bi bi-check-circle-fill" style="color:var(--md-success)"></i> Workflow completato';
     document.querySelector('.validate-bar .vb-right').innerHTML =
-      `<button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem" onclick="goBackWorkflowStep()" title="Torna allo step precedente"><i class="bi bi-arrow-left"></i> Indietro</button>`;
+      `<button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem" onclick="goBackWorkflowStep()" title="Torna allo step precedente"><i class="bi bi-arrow-left"></i> Indietro</button>` +
+      `<button class="btn btn-sm btn-outline-primary" style="border-radius:10px;font-size:0.8rem;margin-left:6px" onclick="downloadReport()"><i class="bi bi-file-earmark-pdf"></i> Scarica Report</button>`;
     infoVal.innerHTML = '<span class="badge-ok"><i class="bi bi-check-circle-fill"></i> Completato</span>';
     _renderStepSummaries(wf);
     return;

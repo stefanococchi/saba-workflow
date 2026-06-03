@@ -1498,11 +1498,12 @@ def go_back_practice_step(practice_id):
         if not prev_step:
             return jsonify({"error": "Sei già al primo step"}), 400
 
-        # Resetta lo step precedente a in_progress e rimuovi lo stato corrente
+        # Resetta lo step target a in_progress e rimuovi tutti gli step successivi
         step_states = dict(pr.step_states or {})
         step_states[str(prev_step.order)] = {'status': 'in_progress'}
-        if current_order is not None:
-            step_states.pop(str(current_order), None)
+        for s in steps:
+            if s.order > prev_step.order:
+                step_states.pop(str(s.order), None)
 
         pr.current_step_order = prev_step.order
         pr.step_states = step_states
@@ -1562,3 +1563,355 @@ def test_sister_visura():
 
 
 ## _execute_sister_visura rimossa — logica spostata in app/step_handlers/sister_visura.py
+
+
+# ── Report PDF pratica ─────────────────────────────────────────
+
+def _build_verifiche(titolo_fields, visure_list, ipotecaria_list):
+    """Costruisce verifiche incrociando titolo, visure catastali e ipotecaria."""
+    import unicodedata
+
+    def _norm(v):
+        if v is None:
+            return ''
+        s = str(v).strip().lower()
+        s = unicodedata.normalize('NFD', s)
+        s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+        return re.sub(r'\s+', ' ', s)
+
+    def _tget(field, *aliases):
+        """Cerca un campo nel titolo con alias multipli."""
+        for k in (field, *aliases):
+            if k in titolo_fields:
+                return str(titolo_fields[k][1])
+        return ''
+
+    verifiche = []
+    v0 = visure_list[0] if visure_list else {}
+
+    # 1. FMS catasto vs titolo
+    if v0:
+        for field, aliases, label in [
+            ('foglio', [], 'Foglio'),
+            ('particella', ['mappale', 'numero_particella'], 'Particella/Mappale'),
+            ('subalterno', ['sub'], 'Subalterno'),
+        ]:
+            val_t = _tget(field, *aliases)
+            val_c = v0.get(field, v0.get('FOGLIO' if field == 'foglio' else field.upper(), ''))
+            if val_t or val_c:
+                # Supporta valori multipli (es. "46; 66")
+                t_parts = set(_norm(p) for p in str(val_t).split(';') if p.strip())
+                c_norm = _norm(val_c)
+                match = c_norm in t_parts if t_parts and c_norm else not (t_parts and c_norm)
+                verifiche.append({
+                    'label': label,
+                    'val_titolo': val_t or '\u2014',
+                    'val_catasto': val_c or '\u2014',
+                    'esito': 'ok' if match else 'error',
+                })
+
+    # 2. Cognomi proprietari catasto vs acquirenti titolo
+    catasto_cognomi = []
+    for v in visure_list:
+        for i in v.get('intestati', []):
+            nom = i.get('nominativo', '')
+            if nom:
+                catasto_cognomi.append(nom.split()[0])
+
+    titolo_acq_raw = titolo_fields.get('acquirenti', titolo_fields.get('parti_acquirenti', (None, None)))[1]
+    titolo_cognomi = []
+    if isinstance(titolo_acq_raw, list):
+        for a in titolo_acq_raw:
+            if isinstance(a, dict):
+                n = a.get('cognome', a.get('nominativo', str(a)))
+                titolo_cognomi.append(str(n).split()[0])
+            else:
+                titolo_cognomi.append(str(a).split()[0])
+    elif isinstance(titolo_acq_raw, str) and titolo_acq_raw:
+        titolo_cognomi = [p.strip().split()[0] for p in titolo_acq_raw.split(';') if p.strip()]
+
+    if catasto_cognomi or titolo_cognomi:
+        cat_set = set(_norm(c) for c in catasto_cognomi)
+        tit_set = set(_norm(c) for c in titolo_cognomi)
+        match = bool(cat_set & tit_set) if cat_set and tit_set else not (cat_set and tit_set)
+        verifiche.append({
+            'label': 'Cognomi proprietari',
+            'val_titolo': ', '.join(titolo_cognomi) or '\u2014',
+            'val_catasto': ', '.join(catasto_cognomi) or '\u2014',
+            'esito': 'ok' if match else 'error',
+        })
+
+    # 3. Quote catasto vs quote titolo
+    catasto_quote = []
+    for v in visure_list:
+        for i in v.get('intestati', []):
+            if i.get('quota'):
+                catasto_quote.append(i['quota'])
+    val_quote_t = _tget('quote', 'quota', 'quote_proprieta')
+    if catasto_quote or val_quote_t:
+        verifiche.append({
+            'label': 'Quote propriet\u00e0',
+            'val_titolo': val_quote_t or '\u2014',
+            'val_catasto': ', '.join(catasto_quote) or '\u2014',
+            'esito': 'ok' if _norm(val_quote_t) == _norm(', '.join(catasto_quote)) else (
+                'warning' if not val_quote_t or not catasto_quote else 'error'),
+        })
+
+    # 4. CF ipotecaria vs CF proprietari titolo
+    if ipotecaria_list:
+        ipot_cfs = [isp.get('codiceFiscale', '') for isp in ipotecaria_list if isp.get('codiceFiscale')]
+        val_cf_t = _tget('cf_acquirenti', 'codice_fiscale', 'cf', 'codici_fiscali')
+        titolo_cfs = [p.strip() for p in val_cf_t.split(';') if p.strip()] if val_cf_t else []
+        if ipot_cfs:
+            tit_set = set(_norm(c) for c in titolo_cfs)
+            match = all(_norm(cf) in tit_set for cf in ipot_cfs) if titolo_cfs else True
+            verifiche.append({
+                'label': 'CF ipotecaria vs titolo',
+                'val_titolo': ', '.join(titolo_cfs) or '\u2014',
+                'val_catasto': ', '.join(ipot_cfs),
+                'esito': 'ok' if match else 'error',
+            })
+
+    # 5. Formalità ipotecaria vs titolo
+    if ipotecaria_list:
+        all_form = []
+        attive = 0
+        for isp in ipotecaria_list:
+            for f in isp.get('formalita', []):
+                all_form.append(f)
+                if f.get('flagCancellazione') != '1':
+                    attive += 1
+        if all_form:
+            verifiche.append({
+                'label': 'Formalit\u00e0 ipotecaria',
+                'val_titolo': '\u2014',
+                'val_catasto': f'{len(all_form)} formalit\u00e0 ({attive} attive)',
+                'esito': 'ok' if attive == 0 else 'warning',
+            })
+
+    # 6. Indirizzo catasto vs titolo
+    if v0:
+        val_ind_t = _tget('indirizzo', 'indirizzo_immobile')
+        val_ind_c = v0.get('indirizzo', '')
+        if val_ind_t or val_ind_c:
+            match = _norm(val_ind_t) == _norm(val_ind_c) if val_ind_t and val_ind_c else True
+            verifiche.append({
+                'label': 'Indirizzo',
+                'val_titolo': val_ind_t or '\u2014',
+                'val_catasto': val_ind_c or '\u2014',
+                'esito': 'ok' if match else 'warning',
+            })
+
+    # 7. Categoria/rendita catasto vs titolo
+    if v0:
+        for field, label in [('categoria', 'Categoria'), ('rendita', 'Rendita')]:
+            val_t = _tget(field)
+            val_c = v0.get(field, '')
+            if val_t or val_c:
+                match = _norm(val_t) == _norm(val_c) if val_t and val_c else True
+                verifiche.append({
+                    'label': label,
+                    'val_titolo': val_t or '\u2014',
+                    'val_catasto': val_c or '\u2014',
+                    'esito': 'ok' if match else 'error',
+                })
+
+    # 8. Numero intestati catasto vs numero acquirenti titolo
+    n_cat = len(catasto_cognomi)
+    n_tit = len(titolo_cognomi)
+    if n_cat > 0 or n_tit > 0:
+        verifiche.append({
+            'label': 'N. intestati/acquirenti',
+            'val_titolo': str(n_tit) if n_tit else '\u2014',
+            'val_catasto': str(n_cat) if n_cat else '\u2014',
+            'esito': 'ok' if n_cat == n_tit else 'error',
+        })
+
+    # 9. Presenza gravami/ipoteche attive
+    if ipotecaria_list:
+        attive_desc = []
+        for isp in ipotecaria_list:
+            for f in isp.get('formalita', []):
+                if f.get('flagCancellazione') != '1':
+                    attive_desc.append(f.get('descrizione', '?'))
+        verifiche.append({
+            'label': 'Gravami/ipoteche attive',
+            'val_titolo': '\u2014',
+            'val_catasto': f'{len(attive_desc)} attive' if attive_desc else 'Nessuna',
+            'esito': 'ok' if not attive_desc else 'warning',
+        })
+
+    return verifiche
+
+
+@pratiche_bp.route('/practice/<practice_id>/report', methods=['GET'])
+def generate_practice_report(practice_id):
+    """Genera report PDF riepilogativo della pratica."""
+    try:
+        user = request.args.get('user', '')
+
+        pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if not pr:
+            return jsonify({"error": "Pratica non trovata"}), 404
+
+        result_data = pr.result_data or {}
+        step_states = pr.step_states or {}
+        files_data = result_data.get('files', {})
+
+        # ── Classifica documenti ──
+        titolo_fields = {}   # key_lower -> (original_key, value)
+        acquirenti_docs = {}
+        visure_list = []
+        ipotecaria_list = []
+
+        for fhash, fdata in files_data.items():
+            doc_id = (fdata.get('identification', {}).get('documentId', '') or fhash).strip()
+            extraction = fdata.get('extraction', {}).get('data', {})
+            if not extraction or not isinstance(extraction, dict):
+                continue
+            dl = doc_id.lower()
+            if dl.startswith('visura') or dl.startswith('ipotecaria'):
+                continue
+            elif any(x in dl for x in ['carta', 'identit', 'patente', 'passaporto',
+                                        'codice fiscale', 'tessera sanitaria', 'tessera_sanitaria']):
+                acquirenti_docs[doc_id] = extraction
+            else:
+                for k, v in extraction.items():
+                    kl = k.lower()
+                    if v and kl not in titolo_fields:
+                        titolo_fields[kl] = (k, v)
+
+        # Visure/ipotecaria da step exec_result
+        for order, ss in step_states.items():
+            if ss.get('status') != 'completed':
+                continue
+            er = ss.get('exec_result', {})
+            if er.get('type') == 'SISTER_VISURA':
+                visure_list.extend(er.get('visure', []))
+            elif er.get('type') == 'SISTER_IPOTECARIA':
+                ipotecaria_list.extend(er.get('ispezioni', []))
+
+        # ── 1. Immobile ──
+        IMMOBILE_KEYS = ['comune', 'provincia', 'indirizzo', 'foglio', 'particella', 'mappale', 'subalterno']
+        immobile = []
+        seen_imm = set()
+        for ik in IMMOBILE_KEYS:
+            if ik in titolo_fields:
+                label = titolo_fields[ik][0].replace('_', ' ').title()
+                immobile.append((label, str(titolo_fields[ik][1])))
+                seen_imm.add(ik)
+        # Fallback da visura
+        if visure_list and 'indirizzo' not in seen_imm:
+            ind = visure_list[0].get('indirizzo', '')
+            if ind:
+                immobile.append(('Indirizzo', ind))
+
+        # ── 2. Dati dal titolo ──
+        EXCLUDE = set(IMMOBILE_KEYS + ['acquirenti', 'venditori', 'intestati', 'parti',
+                                         'soggetti', 'parti_acquirenti'])
+        titolo = []
+        for kl, (label, val) in titolo_fields.items():
+            if kl in EXCLUDE:
+                continue
+            if isinstance(val, list):
+                if val and isinstance(val[0], dict):
+                    val = '; '.join(
+                        ', '.join(f'{dk}: {dv}' for dk, dv in item.items() if dv)
+                        for item in val
+                    )
+                else:
+                    val = '; '.join(str(x) for x in val)
+            elif isinstance(val, dict):
+                val = ', '.join(f'{dk}: {dv}' for dk, dv in val.items() if dv)
+            titolo.append((label.replace('_', ' ').title(), str(val)))
+
+        # ── 3. Venditori (intestati catasto) ──
+        venditori = []
+        seen_v = set()
+        for v in visure_list:
+            for i in v.get('intestati', []):
+                nom = i.get('nominativo', '')
+                if nom and nom not in seen_v:
+                    seen_v.add(nom)
+                    venditori.append({
+                        'nominativo': nom,
+                        'cf': i.get('cf', ''),
+                        'diritto': i.get('diritto', ''),
+                        'quota': i.get('quota', ''),
+                    })
+
+        # ── 4. Acquirenti (da CI/CF) ──
+        acquirenti = []
+        for doc_id, fields in acquirenti_docs.items():
+            nome = fields.get('nome', fields.get('NOME', ''))
+            cognome = fields.get('cognome', fields.get('COGNOME', ''))
+            cf = fields.get('codice_fiscale', fields.get('CODICE_FISCALE', fields.get('cf', '')))
+            if nome or cognome:
+                acquirenti.append({
+                    'nominativo': f'{cognome} {nome}'.strip(),
+                    'cf': cf or '',
+                })
+
+        # ── 5. Verifiche ──
+        verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list)
+
+        # ── 6. Ipotecaria ──
+        ipotecaria = []
+        for isp in ipotecaria_list:
+            sogg = ', '.join(
+                f"{s.get('cognome', '')} {s.get('nome', '')}" for s in isp.get('soggetti', [])
+            )
+            formalita = []
+            for f in isp.get('formalita', []):
+                formalita.append({
+                    'descrizione': f.get('descrizione', '?'),
+                    'data': f.get('data', ''),
+                    'qualifica': f.get('qualifica', ''),
+                    'specie_atto': f.get('specieAtto', ''),
+                    'cancellata': f.get('flagCancellazione') == '1',
+                })
+            ipotecaria.append({
+                'nominativo': sogg or isp.get('codiceFiscale', '?'),
+                'cf': isp.get('codiceFiscale', ''),
+                'num_formalita': isp.get('num_formalita', 0),
+                'formalita': formalita,
+                'costo': isp.get('costo'),
+            })
+
+        # ── 7. Riepilogo ──
+        total = len(verifiche)
+        ok_n = sum(1 for v in verifiche if v['esito'] == 'ok')
+        err_n = sum(1 for v in verifiche if v['esito'] == 'error')
+        warn_n = sum(1 for v in verifiche if v['esito'] == 'warning')
+        criticita = [v['label'] for v in verifiche if v['esito'] == 'error']
+
+        report_data = {
+            'practice_id': practice_id,
+            'date': pr.created_at.strftime('%d/%m/%Y') if pr.created_at else '',
+            'user': user,
+            'immobile': immobile,
+            'titolo': titolo,
+            'venditori': venditori,
+            'acquirenti': acquirenti,
+            'verifiche': verifiche,
+            'ipotecaria': ipotecaria,
+            'riepilogo': {
+                'total': total,
+                'ok': ok_n,
+                'errors': err_n,
+                'warnings': warn_n,
+                'criticita': criticita,
+            },
+        }
+
+        from app.services.pdf_service import generate_report_pdf
+        pdf_bytes = generate_report_pdf(report_data)
+
+        return Response(
+            pdf_bytes,
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="report_{practice_id}.pdf"'}
+        )
+    except Exception as e:
+        logger.error(f"Generate report error: {e}")
+        return jsonify({"error": str(e)}), 500

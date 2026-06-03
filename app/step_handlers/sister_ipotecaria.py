@@ -9,7 +9,7 @@ import logging
 import re
 from app.step_handlers import register
 from app.step_handlers.base import StepHandler
-from app.step_handlers.sister_visura import _extract_pdf, FIELD_ALIASES, _find_field
+from app.step_handlers.sister_visura import _extract_pdf, _build_sister_filename, FIELD_ALIASES, _find_field
 
 logger = logging.getLogger(__name__)
 
@@ -193,9 +193,13 @@ class SisterIpotecariaHandler(StepHandler):
                         logger.info(f"Sister ipotecaria [{cf}]: costo={isp['costo']}, formalità={isp['num_formalita']}")
 
                     # Salva PDF
-                    default_name = f"ipotecaria_{cf}.pdf"
+                    sogg_cognome = ''
+                    for s in isp.get('soggetti', []):
+                        if s.get('cognome'):
+                            sogg_cognome = re.sub(r'[^A-Za-z]', '', s['cognome']).upper()
+                            break
+                    file_name = f"ipotecaria_{sogg_cognome}.pdf" if sogg_cognome else f"ipotecaria_{cf}.pdf"
                     content, ao_file_name, found_in = _extract_pdf(output)
-                    file_name = ao_file_name or default_name
 
                     if content:
                         existing = db_session.query(PracticeFile).filter_by(
