@@ -25,3 +25,4 @@ from app.step_handlers.whatsapp_handler import WhatsAppHandler  # noqa: F401,E40
 from app.step_handlers.sister_visura import SisterVisuraHandler  # noqa: F401,E402
 from app.step_handlers.sister_ipotecaria import SisterIpotecariaHandler  # noqa: F401,E402
 from app.step_handlers.document_processing import DocumentProcessingHandler  # noqa: F401,E402
+from app.step_handlers.verifica_report import VerificaReportHandler  # noqa: F401,E402

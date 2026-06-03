@@ -827,6 +827,8 @@ function renderNodeSubtitle(step) {
             return 'SISTER · ' + (step.config.operation || 'visuraStorica') + ' · ' + (step.config.tipo_catasto || 'F');
         case 'sister_ipotecaria':
             return 'SISTER · Ispezione Ipotecaria per CF';
+        case 'verifica_report':
+            return 'Verifica Report — Controlli Incrociati';
         default:
             return capitalize(step.type);
     }
@@ -1831,6 +1833,20 @@ function _renderStepEditFormInner(step, index, common) {
                     2. Per ogni CF, chiama SISTER per l'ispezione ipotecaria<br>
                     3. Salva i PDF delle ispezioni nella pratica<br>
                     4. Serve anche il comune o la provincia per identificare la conservatoria
+                    </small>
+                </div>
+            `;
+        }
+        case 'verifica_report': {
+            return common + `
+                <div class="alert alert-info">
+                    <small><i class="bi bi-info-circle"></i>
+                    <strong>Verifica Report — Controlli Incrociati</strong><br>
+                    1. Calcola automaticamente le verifiche incrociate tra titolo, visure e ipotecaria<br>
+                    2. Mostra il cruscotto di review al notaio<br>
+                    3. Il notaio può modificare gli esiti (OK/Warning/Errore) e aggiungere note<br>
+                    4. Il workflow avanza solo dopo la conferma manuale<br><br>
+                    <em>I check disponibili si configurano nello step "Verifiche" del wizard workflow.</em>
                     </small>
                 </div>
             `;
@@ -4190,7 +4206,8 @@ var DR_TYPE_ICONS = {
     document_processing: 'bi-file-earmark-check-fill',
     document_check: 'bi-file-earmark-ruled-fill',
     sister_visura: 'bi-building-fill',
-    sister_ipotecaria: 'bi-person-badge-fill'
+    sister_ipotecaria: 'bi-person-badge-fill',
+    verifica_report: 'bi-shield-check'
 };
 
 var DR_TYPE_COLORS = {
@@ -4201,7 +4218,8 @@ var DR_TYPE_COLORS = {
     document_processing: '#1565C0',
     document_check: '#6A1B9A',
     sister_visura: '#00695C',
-    sister_ipotecaria: '#4527A0'
+    sister_ipotecaria: '#4527A0',
+    verifica_report: '#1565C0'
 };
 
 function switchReviewTab(tab) {

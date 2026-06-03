@@ -1286,6 +1286,80 @@ def get_practice_workflow_status(practice_id):
         return jsonify({"error": str(e)}), 500
 
 
+@pratiche_bp.route('/practice/<practice_id>/verifica-override', methods=['POST'])
+def verifica_override(practice_id):
+    """Salva override manuale su un check della verifica report."""
+    try:
+        body = request.get_json() or {}
+        check_id = body.get('check_id')
+        new_esito = body.get('esito')  # 'ok', 'warning', 'error'
+        nota = body.get('nota', '')
+
+        if not check_id or new_esito not in ('ok', 'warning', 'error'):
+            return jsonify({"error": "check_id e esito (ok/warning/error) richiesti"}), 400
+
+        pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if not pr:
+            return jsonify({"error": "Pratica non trovata"}), 404
+
+        # Trova lo step verifica_report corrente
+        step_states = pr.step_states or {}
+        vr_order = None
+        for order, ss in step_states.items():
+            er = ss.get('exec_result', {})
+            if er.get('type') == 'VERIFICA_REPORT':
+                vr_order = order
+                break
+
+        if not vr_order:
+            return jsonify({"error": "Nessuno step verifica_report trovato"}), 404
+
+        ss = step_states[vr_order]
+        overrides = ss.get('overrides', {})
+        overrides[check_id] = {
+            'esito': new_esito,
+            'nota': nota,
+            'timestamp': datetime.utcnow().isoformat(),
+        }
+        ss['overrides'] = overrides
+
+        # Ricalcola stats con override
+        verifiche = ss.get('exec_result', {}).get('verifiche', [])
+        total = len(verifiche)
+        ok_n = 0
+        err_n = 0
+        warn_n = 0
+        for v in verifiche:
+            cid = v.get('check_id', '')
+            esito = overrides[cid]['esito'] if cid in overrides else v['esito']
+            if esito == 'ok':
+                ok_n += 1
+            elif esito == 'error':
+                err_n += 1
+            elif esito == 'warning':
+                warn_n += 1
+        ss['exec_result']['stats'] = {
+            'total': total, 'ok': ok_n, 'errors': err_n, 'warnings': warn_n,
+        }
+
+        from sqlalchemy.orm.attributes import flag_modified
+        pr.step_states = step_states
+        flag_modified(pr, 'step_states')
+        db.commit()
+
+        return jsonify({
+            "ok": True,
+            "check_id": check_id,
+            "esito": new_esito,
+            "stats": ss['exec_result']['stats'],
+            "overrides": overrides,
+        })
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Verifica override error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @pratiche_bp.route('/practice/<practice_id>/complete-step', methods=['POST'])
 def complete_practice_step(practice_id):
     """Completa lo step corrente e avanza al prossimo. Salva tutto atomicamente nel DB."""
@@ -1436,7 +1510,12 @@ def complete_practice_step(practice_id):
                         step_states[str(next_in_chain.order)] = {'status': 'in_progress'}
                         # Dopo uno step SISTER: ferma la catena per mostrare i risultati.
                         # Il frontend auto-triggerà il prossimo step.
-                        if chain_step.type.name in ('SISTER_VISURA', 'SISTER_IPOTECARIA'):
+                        # Verifica report: esegui calcolo ma resta in_progress per review manuale.
+                        if chain_step.type.name == 'VERIFICA_REPORT':
+                            step_states[str(chain_step.order)]['status'] = 'in_progress'
+                            del step_states[str(chain_step.order)]['completed_at']
+                            logger.info(f"Auto-chain: verifica_report step {chain_step.order} in attesa di review")
+                        elif chain_step.type.name in ('SISTER_VISURA', 'SISTER_IPOTECARIA'):
                             logger.info(f"Auto-chain: pausa dopo {chain_step.type.name} step {chain_step.order}")
                         else:
                             auto_chain.append(next_in_chain)  # continua catena
@@ -2017,6 +2096,22 @@ def generate_practice_report(practice_id):
             if wf and wf.config:
                 checks_config = wf.config.get('checks_config')
         verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config)
+
+        # Applica override manuali dallo step verifica_report (se confermato)
+        vr_overrides = {}
+        for order, ss in step_states.items():
+            er = ss.get('exec_result', {})
+            if er.get('type') == 'VERIFICA_REPORT' and ss.get('overrides'):
+                vr_overrides = ss['overrides']
+                break
+        if vr_overrides:
+            for v in verifiche:
+                cid = v.get('check_id', '')
+                if cid in vr_overrides:
+                    v['esito'] = vr_overrides[cid]['esito']
+                    nota = vr_overrides[cid].get('nota', '')
+                    if nota:
+                        v['nota_override'] = nota
 
         # ── 6. Ipotecaria ──
         ipotecaria = []

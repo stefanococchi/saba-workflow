@@ -318,6 +318,30 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 .wf-step-connector { width: 16px; height: 2px; background: var(--md-outline-variant); flex-shrink: 0; }
 .wf-step-connector.done { background: var(--md-success, #386A20); }
 
+/* ── Cruscotto Verifiche ── */
+.verifica-cruscotto { margin: 12px 0; }
+.vc-panel { background: var(--md-surface-container-low, #f8f9fa); border-radius: 16px; overflow: hidden; border: 1px solid var(--md-outline-variant, #e0e0e0); }
+.vc-header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--md-outline-variant, #e0e0e0); }
+.vc-header h6 { margin: 0; font-size: 0.95rem; color: var(--md-on-surface, #1a1a1a); }
+.vc-stats-bar { font-size: 0.82rem; color: var(--md-on-surface-variant, #555); }
+.vc-body { padding: 6px 0; }
+.vc-row { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid rgba(0,0,0,0.04); transition: background 0.15s; }
+.vc-row:hover { background: rgba(0,0,0,0.03); }
+.vc-row:last-child { border-bottom: none; }
+.vc-esito { min-width: 140px; font-weight: 700; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; }
+.vc-ok .vc-esito { color: #2e7d32; }
+.vc-warning .vc-esito { color: #e69100; }
+.vc-error .vc-esito { color: #c62828; }
+.vc-info { flex: 1; min-width: 0; }
+.vc-label { font-weight: 600; font-size: 0.88rem; color: var(--md-on-surface, #1a1a1a); }
+.vc-values { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 2px; }
+.vc-val { font-size: 0.78rem; color: var(--md-on-surface-variant, #666); }
+.vc-val small { color: #999; margin-right: 2px; }
+.vc-nota { font-size: 0.75rem; color: var(--md-primary, #23488d); margin-top: 3px; font-style: italic; }
+.vc-override-badge { font-size: 0.65rem; background: #fff3e0; color: #e65100; padding: 1px 6px; border-radius: 4px; font-weight: 600; margin-left: 4px; }
+.vc-actions { min-width: 120px; }
+.vc-esito-select { width: 120px; font-size: 0.78rem; border-radius: 8px; }
+
 /* Slide-in animation */
 @keyframes detailSlideIn {
   from { opacity: 0; transform: translateY(10px); }
@@ -959,7 +983,7 @@ function startNewPractice() {
   const _ee = document.getElementById('elaboraEmpty'); if (_ee) _ee.style.display = 'none';
   const _pr = document.getElementById('practiceResults'); if (_pr) _pr.style.display = 'none';
   const _dz = document.getElementById('dropZoneContainer'); if (_dz) _dz.style.display = '';
-  document.querySelectorAll('.step-summary-banner, .comparison-panel').forEach(el => el.remove());
+  document.querySelectorAll('.step-summary-banner, .comparison-panel, .verifica-cruscotto').forEach(el => el.remove());
   practiceWorkflow = null;
   stagedFiles = [];
   renderStagedFiles();
@@ -1333,7 +1357,7 @@ async function processAllFilesBackground() {
   _hide('validationContainer');
   _hide('workflowStepperBar');
   _hide('workflowSelector');
-  document.querySelectorAll('.step-summary-banner, .comparison-panel').forEach(el => el.remove());
+  document.querySelectorAll('.step-summary-banner, .comparison-panel, .verifica-cruscotto').forEach(el => el.remove());
   practiceWorkflow = null;
 
   const dataScroll = _s('dataScroll');
@@ -1965,7 +1989,7 @@ function resetPractice() {
   document.getElementById('elaboraEmpty').style.display = 'flex';
   const vc = document.getElementById('validationContainer');
   if (vc) vc.style.display = 'none';
-  document.querySelectorAll('.step-summary-banner, .comparison-panel').forEach(el => el.remove());
+  document.querySelectorAll('.step-summary-banner, .comparison-panel, .verifica-cruscotto').forEach(el => el.remove());
   practiceWorkflow = null;
   stagedFiles = [];
   processedFileBlobs = {};
@@ -4261,6 +4285,131 @@ function updateValidateBarForWorkflow(wf) {
 
   // Mostra pannello confronto dati estratti
   _renderComparisonPanel(wf);
+
+  // Cruscotto verifiche se lo step è verifica_report
+  if (dd.render_mode === 'verifica_report') {
+    _renderVerificaCruscotto(currentStep, dd);
+  }
+}
+
+// ── Cruscotto Verifiche ─────────────────────────────────────────
+function _renderVerificaCruscotto(step, dd) {
+  // Rimuovi precedente
+  document.querySelectorAll('.verifica-cruscotto').forEach(el => el.remove());
+
+  const verifiche = dd.verifiche || [];
+  const overrides = dd.overrides || {};
+  const stats = dd.summary_fields?.[0]?.value || '';
+
+  if (verifiche.length === 0) return;
+
+  const container = document.createElement('div');
+  container.className = 'verifica-cruscotto';
+
+  // Header stats
+  const statsBar = dd.summary_fields?.[0];
+  let statsHtml = '';
+  if (statsBar) {
+    const s = step.display_data?.summary_fields?.[0] || statsBar;
+    statsHtml = `<div class="vc-stats-bar">
+      <i class="bi bi-shield-check"></i> <strong>${s.value}</strong>
+    </div>`;
+  }
+
+  // Rows
+  let rowsHtml = '';
+  for (const v of verifiche) {
+    const cid = v.check_id || '';
+    const ov = overrides[cid];
+    const esito = ov ? ov.esito : v.esito;
+    const isOverridden = !!ov;
+
+    const esitoClass = esito === 'ok' ? 'vc-ok' : esito === 'warning' ? 'vc-warning' : 'vc-error';
+    const esitoLabel = esito === 'ok' ? 'OK' : esito === 'warning' ? 'ATTENZIONE' : 'DISCORDANZA';
+    const esitoIcon = esito === 'ok' ? 'bi-check-circle-fill' : esito === 'warning' ? 'bi-exclamation-triangle-fill' : 'bi-x-circle-fill';
+
+    const overrideBadge = isOverridden ? ' <span class="vc-override-badge">modificato</span>' : '';
+    const nota = ov?.nota ? `<div class="vc-nota"><i class="bi bi-chat-left-text"></i> ${ov.nota}</div>` : '';
+
+    const valTitolo = v.val_titolo && v.val_titolo !== '\u2014' ? v.val_titolo : '';
+    const valCatasto = v.val_catasto && v.val_catasto !== '\u2014' ? v.val_catasto : '';
+
+    rowsHtml += `
+      <div class="vc-row ${esitoClass}" data-check-id="${cid}">
+        <div class="vc-esito"><i class="bi ${esitoIcon}"></i> ${esitoLabel}${overrideBadge}</div>
+        <div class="vc-info">
+          <div class="vc-label">${v.label}</div>
+          <div class="vc-values">
+            ${valTitolo ? `<span class="vc-val"><small>Titolo:</small> ${valTitolo}</span>` : ''}
+            ${valCatasto ? `<span class="vc-val"><small>Catasto:</small> ${valCatasto}</span>` : ''}
+          </div>
+          ${nota}
+        </div>
+        <div class="vc-actions">
+          <select class="form-select form-select-sm vc-esito-select" data-check-id="${cid}" onchange="_onVerificaOverride(this)">
+            <option value="ok"${esito === 'ok' ? ' selected' : ''}>OK</option>
+            <option value="warning"${esito === 'warning' ? ' selected' : ''}>Warning</option>
+            <option value="error"${esito === 'error' ? ' selected' : ''}>Errore</option>
+          </select>
+        </div>
+      </div>`;
+  }
+
+  container.innerHTML = `
+    <div class="vc-panel">
+      <div class="vc-header">
+        <h6><i class="bi bi-shield-check"></i> Verifica Incrociata</h6>
+        ${statsHtml}
+      </div>
+      <div class="vc-body">${rowsHtml}</div>
+    </div>`;
+
+  // Inserisci dopo stepper bar
+  const stepperBar = document.getElementById('workflowStepperBar');
+  if (stepperBar) {
+    stepperBar.parentNode.insertBefore(container, stepperBar.nextSibling);
+  }
+}
+
+function _onVerificaOverride(selectEl) {
+  const checkId = selectEl.dataset.checkId;
+  const newEsito = selectEl.value;
+  const practiceId = currentPracticeId;
+
+  // Chiedi nota opzionale per discordanze
+  let nota = '';
+  if (newEsito === 'ok') {
+    nota = prompt('Nota (opzionale) — motivazione override:') || '';
+  }
+
+  fetch(`/api/ao/practice/${practiceId}/verifica-override`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ check_id: checkId, esito: newEsito, nota: nota })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      // Aggiorna la riga visivamente
+      const row = selectEl.closest('.vc-row');
+      row.className = 'vc-row vc-' + newEsito;
+      const esitoDiv = row.querySelector('.vc-esito');
+      const icon = newEsito === 'ok' ? 'bi-check-circle-fill' : newEsito === 'warning' ? 'bi-exclamation-triangle-fill' : 'bi-x-circle-fill';
+      const label = newEsito === 'ok' ? 'OK' : newEsito === 'warning' ? 'ATTENZIONE' : 'DISCORDANZA';
+      esitoDiv.innerHTML = `<i class="bi ${icon}"></i> ${label} <span class="vc-override-badge">modificato</span>`;
+
+      // Aggiorna stats bar
+      if (data.stats) {
+        const statsBar = document.querySelector('.vc-stats-bar strong');
+        if (statsBar) {
+          statsBar.textContent = `${data.stats.total} verifiche: ${data.stats.ok} OK, ${data.stats.warnings} warning, ${data.stats.errors} errori`;
+        }
+      }
+    } else {
+      alert('Errore: ' + (data.error || 'sconosciuto'));
+    }
+  })
+  .catch(err => alert('Errore di rete: ' + err));
 }
 
 function _renderComparisonPanel(wf) {
