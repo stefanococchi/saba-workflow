@@ -219,6 +219,17 @@ def generate_sintesi_pdf(title, text):
 # ── Report Pratica ──────────────────────────────────────────────
 
 
+def _safe(text):
+    """Sostituisce caratteri Unicode non supportati da Helvetica."""
+    if not text:
+        return text
+    return str(text).replace('\u2014', '-').replace('\u2013', '-').replace(
+        '\u2022', '-').replace('\u20ac', 'EUR ').replace(
+        '\u2019', "'").replace('\u201c', '"').replace('\u201d', '"').replace(
+        '\u00e0', 'a').replace('\u00e8', 'e').replace('\u00e9', 'e').replace(
+        '\u00f2', 'o').replace('\u00f9', 'u').replace('\u00ec', 'i')
+
+
 class ReportPDF(FPDF):
     """PDF report riepilogativo per pratica documentale."""
 
@@ -242,6 +253,26 @@ class ReportPDF(FPDF):
         super().__init__()
         self._practice_id = practice_id
         self.set_auto_page_break(auto=True, margin=25)
+
+    def cell(self, *args, **kwargs):
+        if args and isinstance(args[2] if len(args) > 2 else kwargs.get('text'), str):
+            args = list(args)
+            if len(args) > 2:
+                args[2] = _safe(args[2])
+            args = tuple(args)
+        if 'text' in kwargs:
+            kwargs['text'] = _safe(kwargs['text'])
+        return super().cell(*args, **kwargs)
+
+    def multi_cell(self, *args, **kwargs):
+        if args and isinstance(args[2] if len(args) > 2 else kwargs.get('text'), str):
+            args = list(args)
+            if len(args) > 2:
+                args[2] = _safe(args[2])
+            args = tuple(args)
+        if 'text' in kwargs:
+            kwargs['text'] = _safe(kwargs['text'])
+        return super().multi_cell(*args, **kwargs)
 
     def header(self):
         self.set_fill_color(*self.BROWN)

@@ -1618,7 +1618,8 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list):
             if nom:
                 catasto_cognomi.append(nom.split()[0])
 
-    titolo_acq_raw = titolo_fields.get('acquirenti', titolo_fields.get('parti_acquirenti', (None, None)))[1]
+    _acq_tuple = titolo_fields.get('acquirenti') or titolo_fields.get('parti_acquirenti') or (None, None)
+    titolo_acq_raw = _acq_tuple[1]
     titolo_cognomi = []
     if isinstance(titolo_acq_raw, list):
         for a in titolo_acq_raw:
