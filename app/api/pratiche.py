@@ -1538,8 +1538,13 @@ def complete_practice_step(practice_id):
                         # Il frontend auto-triggerà il prossimo step.
                         # Verifica report: esegui calcolo ma resta in_progress per review manuale.
                         if chain_step.type.name == 'VERIFICA_REPORT':
+                            # Verifica report resta lo step corrente per review manuale
+                            pr.current_step_order = chain_step.order
                             step_states[str(chain_step.order)]['status'] = 'in_progress'
-                            del step_states[str(chain_step.order)]['completed_at']
+                            if 'completed_at' in step_states[str(chain_step.order)]:
+                                del step_states[str(chain_step.order)]['completed_at']
+                            # Annulla l'avanzamento al prossimo step
+                            step_states.pop(str(next_in_chain.order), None)
                             logger.info(f"Auto-chain: verifica_report step {chain_step.order} in attesa di review")
                         elif chain_step.type.name in ('SISTER_VISURA', 'SISTER_IPOTECARIA'):
                             logger.info(f"Auto-chain: pausa dopo {chain_step.type.name} step {chain_step.order}")
@@ -1811,10 +1816,12 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=
 
     # ── Dati comuni per più check ──
     catasto_cognomi = []
+    _seen_nominativi = set()
     for v in visure_list:
         for i in v.get('intestati', []):
             nom = i.get('nominativo', '')
-            if nom:
+            if nom and nom not in _seen_nominativi:
+                _seen_nominativi.add(nom)
                 catasto_cognomi.append(nom.split()[0])
 
     _acq_tuple = titolo_fields.get('acquirenti') or titolo_fields.get('parti_acquirenti') or (None, None)
@@ -1871,10 +1878,14 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=
     # ── 3. Quote proprietà ──
     if _is_enabled('quote_proprieta'):
         catasto_quote = []
+        _seen_quote = set()
         for v in visure_list:
             for i in v.get('intestati', []):
                 if i.get('quota'):
-                    catasto_quote.append(i['quota'])
+                    key = (i.get('nominativo', ''), i['quota'])
+                    if key not in _seen_quote:
+                        _seen_quote.add(key)
+                        catasto_quote.append(i['quota'])
         val_quote_t = _tget('quote', 'quota', 'quote_proprieta')
         if catasto_quote or val_quote_t:
             if _norm(val_quote_t) == _norm(', '.join(catasto_quote)):
