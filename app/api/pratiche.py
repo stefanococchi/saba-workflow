@@ -1445,7 +1445,9 @@ def complete_practice_step(practice_id):
                 logger.info(f"  doc_type={dt}: {list(fields.keys()) if isinstance(fields, dict) else type(fields)}")
 
         # ── 2. Salva lo step corrente come completato (atomico) ──
+        # Preserva exec_result e overrides da auto-execute precedente
         step_type = current_step.type.name
+        existing_ss = step_states.get(str(current_order), {})
         step_states[str(current_order)] = {
             'status': 'skipped' if action == 'skip' else 'completed',
             'completed_at': datetime.utcnow().isoformat(),
@@ -1453,6 +1455,11 @@ def complete_practice_step(practice_id):
             'extracted_data': extracted_data,
             'validated_files': validated_files,
         }
+        # Ripristina exec_result e overrides se lo step era già stato eseguito
+        if existing_ss.get('exec_result'):
+            step_states[str(current_order)]['exec_result'] = existing_ss['exec_result']
+        if existing_ss.get('overrides'):
+            step_states[str(current_order)]['overrides'] = existing_ss['overrides']
 
         # Esegui azioni automatiche dello step corrente (via handler registry)
         from app.step_handlers import get_handler
