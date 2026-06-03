@@ -2434,6 +2434,48 @@ async function switchFileTab(hash) {
     return;
   }
 
+  // Se il file è una visura e ci sono dati SISTER nel workflow, usali.
+  // I dati SISTER sono certi (dall'input della query, non da OCR).
+  // L'indice della visura si determina dalla posizione del file tra i
+  // file visura in result_data (stesso ordine dei tab).
+  if (docType && docType.toLowerCase().includes('visura') && practiceWorkflow?.steps) {
+    const sisterStep = practiceWorkflow.steps.find(s => s.type === 'SISTER_VISURA' && s.state?.status === 'completed');
+    const visure = sisterStep?.state?.exec_result?.visure || [];
+    if (visure.length > 0) {
+      // Conta quanti file visura ci sono PRIMA di questo nei tab
+      const allFiles = window._practiceFiles || {};
+      let visuraIdx = 0;
+      for (const [fh, fd] of Object.entries(allFiles)) {
+        const dt = (fd.identification?.documentId || '').toLowerCase();
+        if (fh === hash) break;  // trovato il file corrente
+        if (dt.includes('visura')) visuraIdx++;
+      }
+      const visura = visure[visuraIdx];
+      if (visura && !visura.error) {
+        const sisterData = {};
+        if (visura.foglio) sisterData['FOGLIO'] = visura.foglio;
+        if (visura.particella) sisterData['PARTICELLA'] = visura.particella;
+        if (visura.subalterno) sisterData['SUBALTERNO'] = visura.subalterno;
+        if (visura.categoria) sisterData['CATEGORIA'] = visura.categoria;
+        if (visura.classe) sisterData['CLASSE'] = visura.classe;
+        if (visura.consistenza) sisterData['CONSISTENZA'] = visura.consistenza;
+        if (visura.rendita) sisterData['RENDITA'] = visura.rendita;
+        if (visura.indirizzo) sisterData['INDIRIZZO'] = visura.indirizzo;
+        if (visura.superficie_mq) sisterData['SUPERFICIE'] = visura.superficie_mq;
+        if (visura.intestati) sisterData['INTESTATI'] = visura.intestati;
+        // Rimuovi campi catastali Document AI (garbled), mantieni il resto
+        const catastaliPatterns = ['foglio', 'mappale', 'particella', 'subalterno',
+          'csub', 'categoria', 'classe', 'consistenza', 'rendita', 'indirizzo', 'superficie'];
+        for (const k of Object.keys(data)) {
+          if (catastaliPatterns.some(p => k.toLowerCase().replace(/\s/g, '').includes(p))) {
+            delete data[k];
+          }
+        }
+        Object.assign(data, sisterData);
+      }
+    }
+  }
+
   // Assicura catalogo caricato per ordine campi
   await ensureCatalogLoaded();
 

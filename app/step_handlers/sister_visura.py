@@ -260,21 +260,6 @@ class SisterVisuraHandler(StepHandler):
 
         logger.info(f"Sister visura: {len(combos)} triplette F/M/S -> {len(combos)} chiamate SISTER")
 
-        # Prepara result_data per iniezione dati SISTER (letto una volta, aggiornato in-place)
-        import hashlib
-        _rd = dict(practice_result.result_data or {})
-        if 'files' not in _rd:
-            _rd['files'] = {}
-        # Rimuovi file visura Document AI esistenti (dati catastali inaffidabili)
-        # Verranno sostituiti con entry SISTER con dati certi
-        _visura_hashes_to_remove = [
-            fh for fh, fd in _rd['files'].items()
-            if 'visura' in (fd.get('identification', {}).get('documentId', '') or '').lower()
-        ]
-        for fh in _visura_hashes_to_remove:
-            del _rd['files'][fh]
-            logger.info(f"Sister visura: rimosso file Document AI {fh[:12]} da result_data")
-
         # ── 5. Una chiamata SISTER per ogni tripletta F/M/S unica ──
         for foglio, particella, subalterno in combos:
             visura_info = {'foglio': foglio, 'particella': particella, 'subalterno': subalterno}
@@ -376,45 +361,6 @@ class SisterVisuraHandler(StepHandler):
                         visura_info['file_found_in'] = found_in
                         logger.info(f"Sister visura [{label}]: saved {file_name} ({len(content)} bytes)")
 
-                        # ── Inietta dati SISTER in _rd con chiave deterministica ──
-                        # Chiave = hash della tripletta → nessuna ambiguità di matching.
-                        try:
-                            sister_fields = {
-                                'FOGLIO': foglio,
-                                'PARTICELLA': particella,
-                                'SUBALTERNO': subalterno,
-                                '_source': 'SISTER',
-                            }
-                            if visura_info.get('categoria'):
-                                sister_fields['CATEGORIA'] = visura_info['categoria']
-                            if visura_info.get('classe'):
-                                sister_fields['CLASSE'] = visura_info['classe']
-                            if visura_info.get('consistenza'):
-                                sister_fields['CONSISTENZA'] = visura_info['consistenza']
-                            if visura_info.get('rendita'):
-                                sister_fields['RENDITA'] = visura_info['rendita']
-                            if visura_info.get('indirizzo'):
-                                sister_fields['INDIRIZZO'] = visura_info['indirizzo']
-                            if visura_info.get('superficie_mq'):
-                                sister_fields['SUPERFICIE'] = visura_info['superficie_mq']
-                            if visura_info.get('intestati'):
-                                sister_fields['INTESTATI'] = [
-                                    {'nominativo': i['nominativo'], 'codiceFiscale': i.get('cf', ''),
-                                     'diritto': i['diritto'], 'quota': i['quota']}
-                                    for i in visura_info['intestati']
-                                ]
-
-                            # Chiave deterministica dalla tripletta
-                            fh_key = hashlib.md5(f"sister_{foglio}_{particella}_{subalterno}".encode()).hexdigest()[:16]
-                            _rd['files'][fh_key] = {
-                                'fileName': file_name,
-                                'identification': {'documentId': 'Visura Storica Sintetica'},
-                                'state': {'identification': 'completed', 'extraction': 'completed'},
-                                'extraction': {'data': sister_fields},
-                            }
-                            logger.info(f"Sister visura [{label}]: aggiunto in result_data key={fh_key} (F={foglio}/P={particella}/S={subalterno})")
-                        except Exception as inject_err:
-                            logger.error(f"Sister visura [{label}]: errore iniezione result_data: {inject_err}")
                     else:
                         visura_info['note'] = 'Nessun file nella risposta'
                         all_ok = False
@@ -469,16 +415,6 @@ class SisterVisuraHandler(StepHandler):
                 )
             extracted[key] = data
         result['extracted_data'] = extracted
-
-        # ── 7. Salva result_data aggiornato (accumulato durante il loop) ──
-        try:
-            practice_result.result_data = _rd
-            from sqlalchemy.orm.attributes import flag_modified
-            flag_modified(practice_result, 'result_data')
-            db_session.flush()
-            logger.info(f"Sister visura: result_data salvato ({len(_rd.get('files', {}))} file)")
-        except Exception as e:
-            logger.error(f"Sister visura: errore salvataggio result_data: {e}")
 
         return result
 
