@@ -1199,6 +1199,7 @@ def get_practice_workflow_status(practice_id):
 
         comparison_fields = {}  # field_key -> [{ value, doc_type }]
         seen_doc_types = set()
+        # Raccogli doc_type da tutti gli step, preferendo i primi (SISTER > document_processing)
         for s in steps:
             ss = step_states.get(str(s.order), {})
             if ss.get('status') not in ('completed', 'in_progress'):
@@ -1207,14 +1208,22 @@ def get_practice_workflow_status(practice_id):
                 continue
             # Skip verifica_report — non ha dati da confrontare
             er = ss.get('exec_result', {})
-            if er.get('type') == 'VERIFICA_REPORT':
+            er_type = er.get('type', '')
+            if er_type == 'VERIFICA_REPORT':
                 continue
+            # Visure/ipotecaria: solo dallo step SISTER originale, non da altri step
+            is_sister = er_type in ('SISTER_VISURA', 'SISTER_IPOTECARIA')
             accumulated_data.update(ss['extracted_data'])
             for doc_type, fields in ss['extracted_data'].items():
-                # Evita duplicati: se lo stesso doc_type è già stato processato, salta
-                if doc_type in seen_doc_types:
+                dl = doc_type.lower()
+                # Skip visure/ipotecaria duplicate se non provengono dallo step SISTER
+                if not is_sister and (dl.startswith('visura_') or dl.startswith('ipotecaria_')):
                     continue
-                seen_doc_types.add(doc_type)
+                # Evita duplicati: normalizza il doc_type e salta se già visto
+                dt_norm = re.sub(r'[\s_]+', '_', dl.strip())
+                if dt_norm in seen_doc_types:
+                    continue
+                seen_doc_types.add(dt_norm)
                 if not isinstance(fields, dict):
                     continue
                 for field_name, field_value in fields.items():
