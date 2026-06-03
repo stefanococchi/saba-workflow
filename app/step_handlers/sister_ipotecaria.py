@@ -129,6 +129,8 @@ class SisterIpotecariaHandler(StepHandler):
         # ── 4. Dati comuni ──
         provincia = _find_field(flat, 'provincia', 'provincia', config)
         comune = _find_field(flat, 'comune', 'comune', config).upper()
+        # Rimuovi provincia tra parentesi se presente (es. "CINISELLO BALSAMO (MI)" → "CINISELLO BALSAMO")
+        comune = re.sub(r'\s*\([A-Z]{2}\)\s*$', '', comune).strip()
 
         base_input = {'operation': 'ispezioneIpotecaria'}
         if provincia:
