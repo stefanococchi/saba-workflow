@@ -1415,16 +1415,38 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
     <div class="wizard-content" data-step="3" style="display: none;">
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body">
-                <h5 class="mb-1"><i class="bi bi-shield-check text-primary"></i> Configurazione Verifiche</h5>
-                <p class="text-muted small mb-3">
-                    Abilita/disabilita e configura la severità dei controlli incrociati eseguiti nel report pratica.
-                    I check disabilitati non verranno eseguiti né inclusi nel PDF.
-                </p>
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h5 class="mb-1"><i class="bi bi-shield-check text-primary"></i> Configurazione Verifiche</h5>
+                        <p class="text-muted small mb-0">
+                            Configura i controlli incrociati che verranno eseguiti automaticamente nello step
+                            <strong>Verifica Report</strong> del workflow. Per ogni controllo puoi scegliere il livello
+                            di severità (Errore blocca la validazione, Warning segnala ma non blocca, Info solo informativo).
+                            I controlli disabilitati non verranno eseguiti né inclusi nel report PDF.
+                        </p>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-3" onclick="printChecksConfig()" title="Stampa configurazione verifiche">
+                        <i class="bi bi-printer"></i> Stampa
+                    </button>
+                </div>
                 <div id="checksConfigContainer">
                     <div class="text-center text-muted py-4">
                         <div class="spinner-border spinner-border-sm me-2"></div> Caricamento verifiche...
                     </div>
                 </div>
+            </div>
+        </div>
+        <div class="mt-3 d-flex justify-content-between">
+            <button type="button" class="btn btn-outline-secondary" onclick="prevStep()">
+                <i class="bi bi-arrow-left"></i> {{ t.back }}
+            </button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-success" onclick="saveWorkflow()">
+                    <i class="bi bi-save"></i> {{ t.save }}
+                </button>
+                <button type="button" class="btn btn-primary" onclick="nextStep()">
+                    {{ t.next }}: {{ t.review }} <i class="bi bi-arrow-right"></i>
+                </button>
             </div>
         </div>
     </div>

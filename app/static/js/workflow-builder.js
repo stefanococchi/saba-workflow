@@ -3190,17 +3190,17 @@ function prevStep() {
 // ── Checks Config ───────────────────────────────────────────────
 
 var CHECKS_REGISTRY_DATA = [
-    {id:'foglio', label:'Foglio', description:'Confronta il foglio catastale tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Dati catastali'},
-    {id:'particella', label:'Particella/Mappale', description:'Confronta la particella (mappale) tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Dati catastali'},
-    {id:'subalterno', label:'Subalterno', description:'Confronta il subalterno tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Dati catastali'},
-    {id:'cognomi_proprietari', label:'Cognomi proprietari', description:'Verifica che i cognomi degli intestatari catastali corrispondano agli acquirenti del titolo', default_severity:'error', sources:['titolo','visura'], category:'Soggetti'},
-    {id:'quote_proprieta', label:'Quote proprietà', description:'Confronta le quote di proprietà tra titolo e catasto', default_severity:'warning', sources:['titolo','visura'], category:'Soggetti'},
-    {id:'cf_ipotecaria', label:'CF ipotecaria vs titolo', description:'Verifica che i codici fiscali dell\'ispezione ipotecaria corrispondano a quelli del titolo', default_severity:'error', sources:['titolo','ipotecaria'], category:'Ipotecaria'},
-    {id:'formalita_ipotecaria', label:'Formalità ipotecaria', description:'Conta le formalità attive dall\'ispezione ipotecaria (attenzione se > 0)', default_severity:'warning', sources:['ipotecaria'], category:'Ipotecaria'},
-    {id:'indirizzo', label:'Indirizzo', description:'Confronta l\'indirizzo dell\'immobile tra titolo e visura catastale', default_severity:'warning', sources:['titolo','visura'], category:'Immobile'},
-    {id:'categoria', label:'Categoria catastale', description:'Confronta la categoria catastale tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Immobile'},
-    {id:'rendita', label:'Rendita catastale', description:'Confronta la rendita catastale tra titolo e visura', default_severity:'error', sources:['titolo','visura'], category:'Immobile'},
-    {id:'num_intestati', label:'N. intestati/acquirenti', description:'Verifica che il numero di intestatari catastali corrisponda al numero di acquirenti nel titolo', default_severity:'error', sources:['titolo','visura'], category:'Soggetti'},
+    {id:'foglio', label:'Foglio', description:'Verifica che il numero di foglio catastale indicato nel titolo di provenienza corrisponda a quello risultante dalla visura catastale SISTER. Una discordanza può indicare un errore nella trascrizione dei dati catastali nell\'atto.', default_severity:'error', sources:['titolo','visura'], category:'Dati catastali'},
+    {id:'particella', label:'Particella/Mappale', description:'Verifica che il numero di particella (mappale) indicato nel titolo corrisponda a quello della visura catastale. La particella identifica univocamente il terreno o il fabbricato all\'interno del foglio.', default_severity:'error', sources:['titolo','visura'], category:'Dati catastali'},
+    {id:'subalterno', label:'Subalterno', description:'Verifica che il subalterno indicato nel titolo corrisponda a quello della visura. Il subalterno identifica la singola unità immobiliare all\'interno della particella (es. appartamento, cantina, box).', default_severity:'error', sources:['titolo','visura'], category:'Dati catastali'},
+    {id:'cognomi_proprietari', label:'Cognomi proprietari', description:'Confronta i cognomi dei soggetti intestatari risultanti dalla visura catastale con quelli degli acquirenti/venditori indicati nel titolo di provenienza. Serve a verificare la continuità delle trascrizioni.', default_severity:'error', sources:['titolo','visura'], category:'Soggetti'},
+    {id:'quote_proprieta', label:'Quote proprietà', description:'Confronta le quote di proprietà (es. 1/2, 1/1) risultanti dal catasto con quelle dichiarate nel titolo. Una discordanza può indicare trasferimenti parziali non aggiornati o errori nell\'atto.', default_severity:'warning', sources:['titolo','visura'], category:'Soggetti'},
+    {id:'cf_ipotecaria', label:'CF ipotecaria vs titolo', description:'Verifica che i codici fiscali dei soggetti ispezionati nell\'ispezione ipotecaria corrispondano a quelli degli acquirenti indicati nel titolo. Garantisce che l\'ispezione sia stata eseguita sulle persone corrette.', default_severity:'error', sources:['titolo','ipotecaria'], category:'Ipotecaria'},
+    {id:'formalita_ipotecaria', label:'Formalità ipotecaria', description:'Conta le formalità (trascrizioni, iscrizioni, annotazioni) risultanti dall\'ispezione ipotecaria e segnala quante sono ancora attive (non cancellate). Formalità attive possono indicare ipoteche, pignoramenti o altri gravami sull\'immobile.', default_severity:'warning', sources:['ipotecaria'], category:'Ipotecaria'},
+    {id:'indirizzo', label:'Indirizzo', description:'Confronta l\'indirizzo dell\'immobile indicato nel titolo con quello risultante dalla visura catastale. Differenze minime (es. abbreviazioni, numeri civici) sono normali e generano un avviso, non un errore.', default_severity:'warning', sources:['titolo','visura'], category:'Immobile'},
+    {id:'categoria', label:'Categoria catastale', description:'Confronta la categoria catastale (es. A/2 abitazione, C/6 box) tra titolo e visura. Una discordanza può indicare una variazione catastale non aggiornata o un errore nella descrizione dell\'immobile nell\'atto.', default_severity:'error', sources:['titolo','visura'], category:'Immobile'},
+    {id:'rendita', label:'Rendita catastale', description:'Confronta la rendita catastale tra titolo e visura. La rendita è la base per il calcolo delle imposte. Una discordanza può influire sulla correttezza fiscale dell\'atto.', default_severity:'error', sources:['titolo','visura'], category:'Immobile'},
+    {id:'num_intestati', label:'N. intestati/acquirenti', description:'Verifica che il numero di soggetti intestatari risultanti dalla visura catastale corrisponda al numero di acquirenti indicati nel titolo. Una discordanza può indicare trasferimenti parziali, comproprietari mancanti o errori nell\'atto.', default_severity:'error', sources:['titolo','visura'], category:'Soggetti'},
 ];
 
 function loadChecksRegistry() {
@@ -3298,6 +3298,61 @@ function collectChecksConfig() {
         }
     });
     return checksConfig;
+}
+
+function printChecksConfig() {
+    var container = document.getElementById('checksConfigContainer');
+    if (!container) return;
+    var wfName = document.getElementById('workflowName')?.value || 'Workflow';
+    var printWin = window.open('', '_blank');
+    printWin.document.write(`<!DOCTYPE html><html><head><title>Verifiche - ${wfName}</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 30px; color: #333; }
+      h1 { font-size: 18px; color: #23488d; border-bottom: 2px solid #1e73be; padding-bottom: 8px; }
+      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin: 20px 0 8px; }
+      .check { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid #eee; }
+      .check-name { font-weight: 600; font-size: 13px; min-width: 180px; }
+      .check-desc { font-size: 12px; color: #555; flex: 1; }
+      .check-sev { font-size: 12px; font-weight: 600; min-width: 80px; text-align: right; }
+      .sev-error { color: #c62828; }
+      .sev-warning { color: #e69100; }
+      .sev-info { color: #1565c0; }
+      .disabled { opacity: 0.4; text-decoration: line-through; }
+      .footer { margin-top: 30px; font-size: 11px; color: #999; border-top: 1px solid #ddd; padding-top: 8px; }
+      @media print { body { padding: 15px; } }
+    </style></head><body>
+    <h1>Configurazione Verifiche — ${wfName}</h1>
+    <p style="font-size:12px;color:#666">Data: ${new Date().toLocaleDateString('it-IT')} — Officina Notarile</p>`);
+
+    // Raggruppa per categoria
+    var categories = {};
+    for (var c of checksRegistry) {
+        var cat = c.category || 'Altro';
+        if (!categories[cat]) categories[cat] = [];
+        categories[cat].push(c);
+    }
+    for (var catName in categories) {
+        printWin.document.write('<h2>' + catName + '</h2>');
+        for (var c of categories[catName]) {
+            var cc = checksConfig[c.id] || {};
+            var enabled = cc.enabled !== undefined ? cc.enabled : true;
+            var severity = cc.severity || c.default_severity;
+            var sevLabel = severity === 'error' ? 'Errore' : severity === 'warning' ? 'Warning' : 'Info';
+            var sevClass = 'sev-' + severity;
+            var disClass = enabled ? '' : ' disabled';
+            printWin.document.write(
+                '<div class="check' + disClass + '">' +
+                '<div class="check-name">' + c.label + (enabled ? '' : ' (disabilitato)') + '</div>' +
+                '<div class="check-desc">' + c.description + '</div>' +
+                '<div class="check-sev ' + sevClass + '">' + sevLabel + '</div>' +
+                '</div>'
+            );
+        }
+    }
+    printWin.document.write('<div class="footer">Generato da Saba Workflow — Configurazione verifiche incrociate</div>');
+    printWin.document.write('</body></html>');
+    printWin.document.close();
+    setTimeout(function() { printWin.print(); }, 300);
 }
 
 
