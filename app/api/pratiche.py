@@ -1215,9 +1215,11 @@ def get_practice_workflow_status(practice_id):
             if handler_extracted and isinstance(handler_extracted, dict):
                 step_extracted.update(handler_extracted)
             if not step_extracted:
+                logger.info(f"Comparison: step {s.order} ({er_type}): SKIP - no extracted_data after merge (ss_keys={list((ss.get('extracted_data') or {}).keys())}, er_keys={list((er.get('extracted_data') or {}).keys())})")
                 continue
             # Visure/ipotecaria: solo dallo step SISTER originale, non da altri step
             is_sister = er_type in ('SISTER_VISURA', 'SISTER_IPOTECARIA')
+            logger.info(f"Comparison: step {s.order} ({er_type}): {len(step_extracted)} doc_types: {list(step_extracted.keys())}")
             accumulated_data.update(step_extracted)
             for doc_type, fields in step_extracted.items():
                 dl = doc_type.lower()
