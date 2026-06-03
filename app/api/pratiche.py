@@ -1204,20 +1204,20 @@ def get_practice_workflow_status(practice_id):
             ss = step_states.get(str(s.order), {})
             if ss.get('status') not in ('completed', 'in_progress'):
                 continue
-            if not ss.get('extracted_data'):
-                continue
             # Skip verifica_report — non ha dati da confrontare
             er = ss.get('exec_result', {})
             er_type = er.get('type', '')
             if er_type == 'VERIFICA_REPORT':
                 continue
-            # Visure/ipotecaria: solo dallo step SISTER originale, non da altri step
-            is_sister = er_type in ('SISTER_VISURA', 'SISTER_IPOTECARIA')
             # Merge extracted_data dallo step + quelli propri dell'handler (exec_result)
-            step_extracted = dict(ss['extracted_data'])
+            step_extracted = dict(ss.get('extracted_data') or {})
             handler_extracted = er.get('extracted_data', {})
             if handler_extracted and isinstance(handler_extracted, dict):
                 step_extracted.update(handler_extracted)
+            if not step_extracted:
+                continue
+            # Visure/ipotecaria: solo dallo step SISTER originale, non da altri step
+            is_sister = er_type in ('SISTER_VISURA', 'SISTER_IPOTECARIA')
             accumulated_data.update(step_extracted)
             for doc_type, fields in step_extracted.items():
                 dl = doc_type.lower()
