@@ -4486,7 +4486,7 @@ function _renderComparisonPanel(wf) {
     ? `${totalFields} campi estratti — <strong style="color:var(--md-error)">${mismatchCount} discordanz${mismatchCount === 1 ? 'a' : 'e'}</strong>`
     : `${totalFields} campi estratti — tutti concordi`;
 
-  const tableHtml = `<table style="width:100%;border-collapse:collapse">
+  const tableHtml = `<table style="min-width:100%;border-collapse:collapse">
     <thead><tr>
       <th style="padding:6px 10px;width:24px"></th>
       <th style="padding:6px 10px;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:var(--md-on-surface-variant)">Campo</th>
@@ -4502,7 +4502,7 @@ function _renderComparisonPanel(wf) {
       <span style="flex:1;font-size:0.82rem">${summaryText}</span>
       <i class="bi bi-chevron-right chevron" style="font-size:0.7rem;color:var(--md-on-surface-variant)"></i>
     </div>
-    <div id="comparisonBody" style="display:none;padding:0;max-height:400px;overflow:auto">${tableHtml}</div>
+    <div id="comparisonBody" style="display:none;padding:0;max-height:400px;overflow:auto"><div style="overflow-x:auto">${tableHtml}</div></div>
   </div>`;
 
   stepperBar.insertAdjacentHTML('afterend', panelHtml);
