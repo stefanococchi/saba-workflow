@@ -1,5 +1,6 @@
 """Blueprint API per Pratiche Documentali (proxy verso Agent Orchestrator)."""
 from datetime import datetime
+from io import BytesIO
 from flask import Blueprint, request, jsonify, Response
 from app.services import ao_service
 from app import db_session as db
@@ -123,6 +124,32 @@ def ao_practice_list_files(practice_id):
         ]})
     except Exception as e:
         logger.error(f"List practice files: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@pratiche_bp.route('/practice-files/<practice_id>/zip', methods=['GET'])
+def ao_practice_files_zip(practice_id):
+    """Scarica tutti i PDF della pratica come ZIP."""
+    import zipfile
+    try:
+        files = db.query(PracticeFile).filter_by(practice_id=practice_id).all()
+        if not files:
+            return jsonify({"error": "Nessun file trovato"}), 404
+
+        buf = BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for f in files:
+                if f.data:
+                    zf.writestr(f.file_name, f.data)
+        buf.seek(0)
+
+        return Response(
+            buf.getvalue(),
+            mimetype='application/zip',
+            headers={'Content-Disposition': f'attachment; filename="documenti_{practice_id}.zip"'}
+        )
+    except Exception as e:
+        logger.error(f"ZIP practice files: {e}")
         return jsonify({"error": str(e)}), 500
 
 
