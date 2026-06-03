@@ -344,7 +344,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 
 /* ── Modale Ipotecaria ── */
 .ipo-modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center; }
-.ipo-modal { background:#fff;border-radius:16px;width:90vw;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+.ipo-modal { background:#fff;border-radius:16px;width:95vw;max-width:1400px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3); }
 .ipo-modal-header { display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e9ecef; }
 .ipo-modal-header h5 { margin:0;font-size:1rem;color:#23488d; }
 .ipo-tabs { display:flex;gap:4px;padding:10px 20px;border-bottom:1px solid #e9ecef;overflow-x:auto; }
@@ -368,6 +368,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
 .ipo-form-title { font-weight:600;font-size:0.85rem;color:#212529; }
 .ipo-form-card.cancelled .ipo-form-title { text-decoration:line-through; }
 .ipo-form-tags { display:flex;gap:6px;flex-wrap:wrap;margin-top:4px; }
+.ipo-form-extra { display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;padding-top:4px;border-top:1px dashed #dee2e6; }
 
 /* Slide-in animation */
 @keyframes detailSlideIn {
@@ -4670,12 +4671,19 @@ function openIpotecariaDetail(stepOrder) {
 
     tabsHtml += `<button class="ipo-tab${active}" data-idx="${i}" onclick="_switchIpoTab(${i})">${label} <span class="ipo-tab-badge">${numForm} form.</span></button>`;
 
-    // Intestazione soggetto
+    // Intestazione soggetto con dati anagrafici
+    const sogg0 = (isp.soggetti || [])[0] || {};
+    const nascita = sogg0.dataNascita || '';
+    const luogo = sogg0.luogoNascita || sogg0.comuneNascita || '';
+    const prov = sogg0.provinciaNascita || '';
+
     let panelContent = `
       <div class="ipo-sogg-header">
         <div class="ipo-sogg-name">${label}</div>
         <div class="ipo-sogg-meta">
           <span class="ipo-tag">CF: ${cf}</span>
+          ${nascita ? `<span class="ipo-tag">Nascita: ${nascita}</span>` : ''}
+          ${luogo ? `<span class="ipo-tag">${luogo}${prov ? ' ('+prov+')' : ''}</span>` : ''}
           ${isp.costo ? `<span class="ipo-tag">Costo: € ${isp.costo}</span>` : ''}
           <span class="ipo-tag">${numForm} formalità (${attive} attive)</span>
         </div>
@@ -4689,9 +4697,27 @@ function openIpotecariaDetail(stepOrder) {
       const desc = f.descrizione || '?';
       const tipo = f.specieAtto || f.specie_atto || '';
       const qual = f.qualifica || '';
+      const tipoQual = f.tipoQualifica || '';
       const data = f.data || '';
+      const dataTitolo = f.dataTitolo || '';
       const rep = f.repertorio || '';
+      const rg = f.rg || f.RG || '';
+      const rp = f.rp || f.RP || '';
+      const pubb = f.pubblicoUfficiale || '';
+      const ubicazioni = (f.ubicazioneImmobili || []).map(u => u.descrizione || '').filter(Boolean).join('; ');
       const cancTag = cancellata ? '<span class="ipo-tag-cancel">CANCELLATA</span>' : '';
+
+      // Dettaglio extra (collassabile)
+      let extraHtml = '';
+      const extras = [];
+      if (dataTitolo) extras.push(`<span class="ipo-tag">Data titolo: ${dataTitolo}</span>`);
+      if (rg) extras.push(`<span class="ipo-tag">RG: ${rg}</span>`);
+      if (rp) extras.push(`<span class="ipo-tag">RP: ${rp}</span>`);
+      if (pubb) extras.push(`<span class="ipo-tag">Pubblico uff.: ${pubb}</span>`);
+      if (ubicazioni) extras.push(`<span class="ipo-tag">Immobili: ${ubicazioni}</span>`);
+      if (extras.length > 0) {
+        extraHtml = `<div class="ipo-form-extra">${extras.join('')}</div>`;
+      }
 
       panelContent += `
         <div class="${cardClass}">
@@ -4700,10 +4726,11 @@ function openIpotecariaDetail(stepOrder) {
             <div class="ipo-form-title">${desc} ${cancTag}</div>
             <div class="ipo-form-tags">
               ${tipo ? `<span class="ipo-tag-tipo">${tipo}</span>` : ''}
-              ${qual ? `<span class="ipo-tag">${qual}</span>` : ''}
+              ${qual ? `<span class="ipo-tag">${tipoQual || qual}</span>` : ''}
               ${data ? `<span class="ipo-tag">Data: ${data}</span>` : ''}
               ${rep ? `<span class="ipo-tag">Rep: ${rep}</span>` : ''}
             </div>
+            ${extraHtml}
           </div>
         </div>`;
     }
