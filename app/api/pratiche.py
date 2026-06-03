@@ -1215,21 +1215,21 @@ def get_practice_workflow_status(practice_id):
                 if doc_type in seen_doc_types:
                     continue
                 seen_doc_types.add(doc_type)
-                    if not isinstance(fields, dict):
+                if not isinstance(fields, dict):
+                    continue
+                for field_name, field_value in fields.items():
+                    if field_value is None or str(field_value).strip() == '':
                         continue
-                    for field_name, field_value in fields.items():
-                        if field_value is None or str(field_value).strip() == '':
-                            continue
-                        field_key = field_name.lower().replace(' ', '_')
-                        # Alias: mappale e particella sono la stessa cosa
-                        if field_key == 'mappale':
-                            field_key = 'particella'
-                        if field_key not in comparison_fields:
-                            comparison_fields[field_key] = []
-                        comparison_fields[field_key].append({
-                            'value': field_value,
-                            'doc_type': doc_type,
-                        })
+                    field_key = field_name.lower().replace(' ', '_')
+                    # Alias: mappale e particella sono la stessa cosa
+                    if field_key == 'mappale':
+                        field_key = 'particella'
+                    if field_key not in comparison_fields:
+                        comparison_fields[field_key] = []
+                    comparison_fields[field_key].append({
+                        'value': field_value,
+                        'doc_type': doc_type,
+                    })
 
         # Confronto: il titolo di provenienza è il riferimento.
         # I valori delle visure/altri documenti vengono confrontati contro il titolo.
