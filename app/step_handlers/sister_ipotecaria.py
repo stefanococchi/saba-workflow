@@ -155,21 +155,20 @@ class SisterIpotecariaHandler(StepHandler):
 
             logger.info(f"Sister ipotecaria [{cf}] input: {sister_input}")
 
-            MAX_RETRIES = 2
+            MAX_RETRIES = 1
             for attempt in range(MAX_RETRIES + 1):
                 try:
                     run_result = ao_service.run_agent(sister_agent_id, sister_input)
-                    task_result = ao_service.poll_task(run_result['taskId'], max_wait=120.0)
+                    task_result = ao_service.poll_task(run_result['taskId'], max_wait=60.0)
                     output = task_result.get('output', {})
                     status = task_result.get('status', 'unknown')
                     error_msg = task_result.get('error', '') or ''
 
-                    # Retry su timeout SISTER
+                    # Retry su timeout SISTER (max 1 retry)
                     if status != 'COMPLETED' and 'timeout' in error_msg.lower() and attempt < MAX_RETRIES:
                         import time
-                        wait = 5 * (attempt + 1)
-                        logger.warning(f"Sister ipotecaria [{cf}] timeout (tentativo {attempt + 1}/{MAX_RETRIES + 1}), retry tra {wait}s...")
-                        time.sleep(wait)
+                        logger.warning(f"Sister ipotecaria [{cf}] timeout (tentativo {attempt + 1}/{MAX_RETRIES + 1}), retry tra 3s...")
+                        time.sleep(3)
                         continue
 
                     isp['status'] = status
@@ -271,9 +270,8 @@ class SisterIpotecariaHandler(StepHandler):
                 except Exception as e:
                     if 'timeout' in str(e).lower() and attempt < MAX_RETRIES:
                         import time
-                        wait = 5 * (attempt + 1)
-                        logger.warning(f"Sister ipotecaria [{cf}] exception timeout (tentativo {attempt + 1}), retry tra {wait}s...")
-                        time.sleep(wait)
+                        logger.warning(f"Sister ipotecaria [{cf}] exception timeout (tentativo {attempt + 1}), retry tra 3s...")
+                        time.sleep(3)
                         continue
                     isp['error'] = str(e)
                     all_ok = False

@@ -4665,10 +4665,12 @@ async function completeCurrentStep(action) {
 
     // 3. Auto-trigger: se il prossimo step è auto-eseguibile, lancialo dopo un delay
     // (il backend ferma la catena dopo step SISTER per mostrare i risultati)
+    // NON ri-triggerare se lo step ha già un exec_result (evita loop su errori)
     if (practiceWorkflow?.current_step_order && !data.workflow_completed) {
       const nextStep = practiceWorkflow.steps?.find(s => s.order === practiceWorkflow.current_step_order);
       const isAutoStep = nextStep && ['SISTER_VISURA', 'SISTER_IPOTECARIA'].includes(nextStep.type);
-      if (isAutoStep) {
+      const alreadyExecuted = nextStep?.state?.exec_result;
+      if (isAutoStep && !alreadyExecuted) {
         setTimeout(() => executeAndAdvance(), 1500);
       }
     }
