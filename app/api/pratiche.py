@@ -127,6 +127,21 @@ def ao_practice_list_files(practice_id):
         return jsonify({"error": str(e)}), 500
 
 
+@pratiche_bp.route('/practice-files/<practice_id>/<file_name>/parse-ipotecaria', methods=['GET'])
+def ao_parse_ipotecaria(practice_id, file_name):
+    """Parsa un PDF ipotecaria SISTER e restituisce dati strutturati."""
+    try:
+        from app.services.ipotecaria_parser import parse_ipotecaria_pdf
+        pf = db.query(PracticeFile).filter_by(practice_id=practice_id, file_name=file_name).first()
+        if not pf or not pf.data:
+            return jsonify({"error": "File non trovato"}), 404
+        data = parse_ipotecaria_pdf(pf.data)
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        logger.error(f"Parse ipotecaria error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @pratiche_bp.route('/practice-files/<practice_id>/zip', methods=['GET'])
 def ao_practice_files_zip(practice_id):
     """Scarica tutti i PDF della pratica come ZIP."""

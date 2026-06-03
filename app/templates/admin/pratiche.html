@@ -4676,10 +4676,14 @@ function openIpotecariaDetail(stepOrder) {
     const nascita = sogg0.dataNascita || '';
     const luogo = sogg0.luogoNascita || sogg0.comuneNascita || '';
     const prov = sogg0.provinciaNascita || '';
+    const pdfFile = isp.file_saved || '';
 
     let panelContent = `
       <div class="ipo-sogg-header">
-        <div class="ipo-sogg-name">${label}</div>
+        <div class="d-flex align-items-center gap-2">
+          <div class="ipo-sogg-name">${label}</div>
+          ${pdfFile ? `<button class="btn btn-sm btn-outline-primary" style="border-radius:8px;font-size:0.7rem" onclick="_loadIpotecariaPdf('${pdfFile}', ${i})"><i class="bi bi-file-earmark-text"></i> Carica dettagli da PDF</button>` : ''}
+        </div>
         <div class="ipo-sogg-meta">
           <span class="ipo-tag">CF: ${cf}</span>
           ${nascita ? `<span class="ipo-tag">Nascita: ${nascita}</span>` : ''}
@@ -4751,6 +4755,78 @@ function openIpotecariaDetail(stepOrder) {
     </div>`;
 
   document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+async function _loadIpotecariaPdf(fileName, panelIdx) {
+  const practiceId = window._practiceId;
+  if (!practiceId) return;
+  try {
+    const r = await fetch(`/api/ao/practice-files/${encodeURIComponent(practiceId)}/${encodeURIComponent(fileName)}/parse-ipotecaria`);
+    const data = await r.json();
+    if (!data.ok) return alert('Errore: ' + (data.error || 'parsing fallito'));
+
+    const panel = document.querySelector(`.ipo-panel[data-idx="${panelIdx}"]`);
+    if (!panel) return;
+
+    const parsed = data.data;
+    // Aggiorna header soggetto con dati dal PDF
+    const sogg = parsed.soggetto || {};
+    const header = parsed.header || {};
+    let headerHtml = `
+      <div class="ipo-sogg-header">
+        <div class="ipo-sogg-name">${sogg.nominativo || ''}</div>
+        <div class="ipo-sogg-meta">
+          ${sogg.codice_fiscale ? `<span class="ipo-tag">CF: ${sogg.codice_fiscale}</span>` : ''}
+          ${sogg.data_nascita ? `<span class="ipo-tag">Nascita: ${sogg.data_nascita}</span>` : ''}
+          ${sogg.luogo_nascita ? `<span class="ipo-tag">${sogg.luogo_nascita}</span>` : ''}
+          ${header.periodo_informatizzato ? `<span class="ipo-tag">Periodo: ${header.periodo_informatizzato}</span>` : ''}
+          ${header.direzione ? `<span class="ipo-tag">${header.direzione}</span>` : ''}
+          <span class="ipo-tag">${(parsed.formalita || []).length} formalità (da PDF)</span>
+        </div>
+      </div>`;
+
+    // Render formalità dal parser (più complete)
+    let formsHtml = '';
+    for (let j = 0; j < (parsed.formalita || []).length; j++) {
+      const f = parsed.formalita[j];
+      const cancellata = !!f.cancellazione;
+      const cardClass = cancellata ? 'ipo-form-card cancelled' : 'ipo-form-card';
+      const cancTag = cancellata ? `<span class="ipo-tag-cancel">CANCELLATA ${f.cancellazione.data || ''}</span>` : '';
+
+      let extras = '';
+      if (f.pubblico_ufficiale) extras += `<span class="ipo-tag">Pub. Uff.: ${f.pubblico_ufficiale}</span>`;
+      if (f.repertorio) extras += `<span class="ipo-tag">Rep: ${f.repertorio}${f.data_repertorio ? ' del ' + f.data_repertorio : ''}</span>`;
+      if (f.registro_generale) extras += `<span class="ipo-tag">RG: ${f.registro_generale}</span>`;
+      if (f.registro_particolare) extras += `<span class="ipo-tag">RP: ${f.registro_particolare}</span>`;
+      if (f.ubicazione) extras += `<span class="ipo-tag">Immobili: ${f.ubicazione}</span>`;
+      if (f.titolo_telematico) extras += `<span class="ipo-tag">Titolo Telematico</span>`;
+
+      let docCorr = '';
+      if (f.documenti_correlati) {
+        docCorr = `<div class="ipo-form-extra" style="font-size:0.72rem;color:#666;font-style:italic"><i class="bi bi-link-45deg"></i> ${f.documenti_correlati.replace(/\n/g, ' ')}</div>`;
+      }
+
+      formsHtml += `
+        <div class="${cardClass}">
+          <div class="ipo-form-num">#${f.numero || j+1}</div>
+          <div class="ipo-form-body">
+            <div class="ipo-form-title">${f.tipo_formalita || ''} ${cancTag}</div>
+            <div class="ipo-form-tags">
+              ${f.specie_atto ? `<span class="ipo-tag-tipo">${f.specie_atto}</span>` : ''}
+              ${f.descrizione ? `<span class="ipo-tag">${f.descrizione}</span>` : ''}
+              ${f.qualifica ? `<span class="ipo-tag">${f.qualifica}</span>` : ''}
+              <span class="ipo-tag">Data: ${f.data || '?'}</span>
+            </div>
+            <div class="ipo-form-extra">${extras}</div>
+            ${docCorr}
+          </div>
+        </div>`;
+    }
+
+    panel.innerHTML = headerHtml + formsHtml;
+  } catch (e) {
+    alert('Errore caricamento PDF: ' + e.message);
+  }
 }
 
 function _switchIpoTab(idx) {
