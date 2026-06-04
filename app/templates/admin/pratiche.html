@@ -4344,6 +4344,7 @@ function updateValidateBarForWorkflow(wf) {
       `<button class="btn btn-sm btn-outline-secondary" style="border-radius:10px;font-size:0.8rem;margin-left:6px" onclick="downloadAllPdf()"><i class="bi bi-file-earmark-zip"></i> Scarica tutti i PDF</button>`;
     infoVal.innerHTML = '<span class="badge-ok"><i class="bi bi-check-circle-fill"></i> Completato</span>';
     _renderStepSummaries(wf);
+    _renderComparisonPanel(wf);
     return;
   }
 
