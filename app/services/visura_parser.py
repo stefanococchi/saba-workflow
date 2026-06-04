@@ -127,5 +127,22 @@ def parse_visura_text(text):
         result['superficie'] = m_class.group(4).strip()
         result['rendita'] = f"€ {m_class.group(5)}"
 
+    # ── Variazioni rilevate (info, non cambiano F/M/S) ──
+    _INFO_VARIATIONS = [
+        ('variazione toponomastica', 'Variazione toponomastica'),
+        ('variazione di classamento', 'Variazione di classamento'),
+        ('variazione di consistenza', 'Variazione di consistenza'),
+        ('variazione della rendita', 'Variazione della rendita'),
+        ('variazione colturale', 'Variazione colturale'),
+        ('ultimazione di fabbricato', 'Ultimazione di fabbricato urbano'),
+    ]
+    text_lower = text_norm.lower()
+    variazioni = []
+    for pattern, label in _INFO_VARIATIONS:
+        if pattern in text_lower:
+            variazioni.append(label)
+    if variazioni:
+        result['variazioni_non_rilevanti'] = '; '.join(variazioni)
+
     logger.info(f"Visura parser: estratti {len(result)} campi: {list(result.keys())}")
     return result

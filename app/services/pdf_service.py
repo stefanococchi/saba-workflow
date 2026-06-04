@@ -528,6 +528,7 @@ def generate_report_pdf(data):
             'consistenza': 'Consistenza',
             'superficie': 'Superficie',
             'rendita': 'Rendita',
+            'variazioni_non_rilevanti': 'Variazioni (non cambiano F/M/S)',
         }
         for ac in data['analisi_catastali']:
             file_name = ac.get('_file_name', 'Visura')
