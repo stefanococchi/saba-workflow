@@ -128,18 +128,26 @@ def parse_visura_text(text):
         result['rendita'] = f"€ {m_class.group(5)}"
 
     # ── Variazioni rilevate (info, non cambiano F/M/S) ──
+    # Ogni entry: (lista di pattern alternativi, label da mostrare)
     _INFO_VARIATIONS = [
-        ('variazione toponomastica', 'Variazione toponomastica'),
-        ('variazione di classamento', 'Variazione di classamento'),
-        ('variazione di consistenza', 'Variazione di consistenza'),
-        ('variazione della rendita', 'Variazione della rendita'),
-        ('variazione colturale', 'Variazione colturale'),
-        ('ultimazione di fabbricato', 'Ultimazione di fabbricato urbano'),
+        (['variazione toponomastica', 'variazione di toponomastica', 'aggiornamento toponomastic'],
+         'Variazione toponomastica'),
+        (['variazione di classamento', 'aggiornamento di classamento', 'aggiornamento classamento',
+          'variazione classamento'],
+         'Variazione di classamento'),
+        (['variazione di consistenza', 'aggiornamento di consistenza', 'variazione consistenza'],
+         'Variazione di consistenza'),
+        (['variazione della rendita', 'variazione rendita', 'quadro tariffario'],
+         'Variazione della rendita'),
+        (['variazione colturale', 'aggiornamento colturale'],
+         'Variazione colturale'),
+        (['ultimazione di fabbricato', 'ultimazione fabbricato'],
+         'Ultimazione di fabbricato urbano'),
     ]
     text_lower = text_norm.lower()
     variazioni = []
-    for pattern, label in _INFO_VARIATIONS:
-        if pattern in text_lower:
+    for patterns, label in _INFO_VARIATIONS:
+        if any(p in text_lower for p in patterns):
             variazioni.append(label)
     if variazioni:
         result['variazioni_non_rilevanti'] = '; '.join(variazioni)
