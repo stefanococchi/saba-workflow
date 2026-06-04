@@ -1343,6 +1343,42 @@ def get_practice_workflow_status(practice_id):
                         'doc_type': doc_type,
                     })
 
+        # ── Arricchisci da result_data.files (include dati iniettati dal parser visura) ──
+        files_data = (pr.result_data or {}).get('files', {})
+        for fhash, fdata in files_data.items():
+            doc_id = (fdata.get('identification', {}).get('documentId', '') or '').strip()
+            if not doc_id:
+                continue
+            dt_norm = re.sub(r'[\s_]+', '_', doc_id.lower().strip())
+            if dt_norm in seen_doc_types:
+                # doc_type già noto dallo step → integra solo campi mancanti
+                pass
+            ext_data = fdata.get('extraction', {}).get('data', {})
+            if not ext_data or not isinstance(ext_data, dict):
+                continue
+            for field_name, field_value in ext_data.items():
+                if field_value is None or str(field_value).strip() == '':
+                    continue
+                field_key = field_name.lower().replace(' ', '_')
+                _FIELD_ALIASES = {
+                    'mappale': 'particella',
+                    'intestati': 'acquirenti',
+                    'parti_acquirenti': 'acquirenti',
+                    'intestatario': 'acquirenti',
+                    'codice_fiscale_intestatario': 'cf_acquirenti',
+                }
+                field_key = _FIELD_ALIASES.get(field_key, field_key)
+                # Controlla se questo doc_type ha già un valore per questo campo
+                existing = comparison_fields.get(field_key, [])
+                already_has = any(e['doc_type'] == doc_id for e in existing)
+                if not already_has:
+                    if field_key not in comparison_fields:
+                        comparison_fields[field_key] = []
+                    comparison_fields[field_key].append({
+                        'value': field_value,
+                        'doc_type': doc_id,
+                    })
+
         # Confronto: il titolo di provenienza è il riferimento.
         # I valori delle visure/altri documenti vengono confrontati contro il titolo.
         # Se il titolo ha valori multipli separati da ";" (es. subalterno "13; 61"),
