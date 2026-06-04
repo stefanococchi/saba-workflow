@@ -4745,6 +4745,17 @@ function openIpotecariaDetail(stepOrder) {
       }
     }
   }
+  // Fallback: estrai provincia dalla prima ubicazione disponibile nelle formalità, es. "MILANO(MI)" → "MI"
+  if (!provinciaImmobile) {
+    for (const isp of ispezioni) {
+      for (const f of (isp.formalita || [])) {
+        const ubic = f.ubicazione || '';
+        const m = ubic.match(/\(([A-Z]{2})\)/);
+        if (m) { provinciaImmobile = m[1]; break; }
+      }
+      if (provinciaImmobile) break;
+    }
+  }
 
   // Apri finestra indipendente
   const w = window.open('', 'ipotecaria_detail', 'width=1200,height=800,resizable=yes,scrollbars=yes');
