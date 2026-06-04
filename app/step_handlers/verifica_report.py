@@ -63,34 +63,69 @@ class VerificaReportHandler(StepHandler):
             if wf and wf.config:
                 checks_config = wf.config.get('checks_config')
 
-        # ── Estrai testo visure per check mutazioni ──
+        # ── Estrai testo visure + parsing dati strutturati ──
         visura_texts = []
         try:
             from app.models import PracticeFile
+            from app.services.visura_parser import parse_visura_text
+
             visura_files = db_session.query(PracticeFile).filter_by(
                 practice_id=practice_result.practice_id
             ).all()
+            rd = dict(practice_result.result_data or {})
+            rd_files = rd.get('files', {})
+            rd_modified = False
+
             for pf in visura_files:
                 fn = (pf.file_name or '').lower()
                 if 'catastale' not in fn and 'visura' not in fn:
                     continue
-                # 1) OCR text se disponibile
+
+                # Estrai testo dal PDF
+                text = ''
                 if pf.ocr_text:
-                    visura_texts.append(pf.ocr_text)
-                    continue
-                # 2) Estrai testo dal PDF con pypdf
-                if pf.data and pf.mime_type and 'pdf' in pf.mime_type:
+                    text = pf.ocr_text
+                elif pf.data and pf.mime_type and 'pdf' in pf.mime_type:
                     try:
                         import pypdf
                         from io import BytesIO
                         reader = pypdf.PdfReader(BytesIO(bytes(pf.data)))
                         text = '\n'.join(page.extract_text() or '' for page in reader.pages)
-                        if text.strip():
-                            visura_texts.append(text)
                     except Exception as e:
                         logger.warning(f"Estrazione testo visura {pf.file_name}: {e}")
+
+                if text.strip():
+                    visura_texts.append(text)
+
+                    # Parsing strutturato e iniezione nel JSON del file
+                    parsed = parse_visura_text(text)
+                    if parsed:
+                        # Trova il file in result_data.files (match per fileName)
+                        for fhash, fdata in rd_files.items():
+                            if fdata.get('fileName') == pf.file_name:
+                                ext_data = fdata.get('extraction', {}).get('data', {})
+                                if not isinstance(ext_data, dict):
+                                    ext_data = {}
+                                # Inietta i campi parsati (senza sovrascrivere quelli esistenti)
+                                for k, v in parsed.items():
+                                    if k not in ext_data or not ext_data[k]:
+                                        ext_data[k] = v
+                                fdata.setdefault('extraction', {})['data'] = ext_data
+                                fdata.setdefault('state', {})['extraction'] = 'completed'
+                                rd_modified = True
+                                logger.info(f"Visura parser: iniettati {len(parsed)} campi in {pf.file_name}")
+                                break
+
+            # Salva le modifiche nel DB se abbiamo arricchito i dati
+            if rd_modified:
+                rd['files'] = rd_files
+                practice_result.result_data = rd
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(practice_result, 'result_data')
+                db_session.flush()
+
         except Exception as e:
-            logger.warning(f"Caricamento file visura per mutazioni: {e}")
+            logger.warning(f"Caricamento/parsing file visura: {e}")
 
         # ── Esegui verifiche ──
         verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config,
