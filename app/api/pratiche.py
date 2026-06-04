@@ -1329,9 +1329,13 @@ def get_practice_workflow_status(practice_id):
                     if field_value is None or str(field_value).strip() == '':
                         continue
                     field_key = field_name.lower().replace(' ', '_')
-                    # Alias: mappale e particella sono la stessa cosa
-                    if field_key == 'mappale':
-                        field_key = 'particella'
+                    # Alias: campi con nomi diversi che rappresentano lo stesso dato
+                    _FIELD_ALIASES = {
+                        'mappale': 'particella',
+                        'intestati': 'acquirenti',
+                        'parti_acquirenti': 'acquirenti',
+                    }
+                    field_key = _FIELD_ALIASES.get(field_key, field_key)
                     if field_key not in comparison_fields:
                         comparison_fields[field_key] = []
                     comparison_fields[field_key].append({
