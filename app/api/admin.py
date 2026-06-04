@@ -158,7 +158,8 @@ def dashboard_engagement():
 
         rows = db.query(
             Participant.id,
-            Participant.full_name,
+            Participant.first_name,
+            Participant.last_name,
             Participant.email,
             Participant.status,
             Participant.workflow_id,
@@ -209,7 +210,7 @@ def dashboard_engagement():
 
             participants.append({
                 'id': row.id,
-                'name': row.full_name or row.email or f'#{row.id}',
+                'name': ' '.join(p for p in [row.first_name or '', row.last_name or ''] if p).strip() or row.email or f'#{row.id}',
                 'email': row.email or '',
                 'status': row.status.value,
                 'workflow_id': row.workflow_id,
