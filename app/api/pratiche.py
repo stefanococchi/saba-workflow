@@ -1023,6 +1023,24 @@ def delete_practice_result(practice_id):
         return jsonify({"error": str(e)}), 500
 
 
+@pratiche_bp.route('/results/<practice_id>/rename', methods=['PUT'])
+def rename_practice(practice_id):
+    """Rinomina una pratica (campo name)."""
+    try:
+        data = request.get_json(force=True)
+        new_name = (data.get('name') or '').strip()
+        pr = db.query(PracticeResult).filter_by(practice_id=practice_id).first()
+        if not pr:
+            return jsonify({"error": "Pratica non trovata"}), 404
+        pr.name = new_name or None
+        db.commit()
+        return jsonify({"ok": True, "name": pr.name})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Rename practice: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @pratiche_bp.route('/files/<practice_id>/<file_name>', methods=['GET'])
 def get_practice_file(practice_id, file_name):
     """Serve un file PDF/immagine salvato per una pratica."""

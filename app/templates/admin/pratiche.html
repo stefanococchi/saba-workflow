@@ -963,10 +963,13 @@ async function loadElaboraPractices(agentId) {
       const isActive = pr.practice_id === selectedPracticeId;
       const isPolling = !!_activePolls[pr.practice_id];
       const spinnerHtml = isPolling ? '<span class="prat-spinner" style="width:10px;height:10px;border-width:2px;vertical-align:middle;margin-left:4px"></span>' : '';
+      const displayName = pr.name || pr.practice_id;
+      const idHint = pr.name ? `<span style="opacity:0.5;font-size:0.68rem">${pr.practice_id}</span>` : '';
       list.innerHTML += `
         <div class="practice-row ${isActive ? 'active' : ''}" onclick="selectPractice('${pr.practice_id}')">
-          <div class="pr-id" title="${pr.practice_id}">${pr.practice_id}${spinnerHtml}</div>
+          <div class="pr-id" title="Doppio clic per rinominare" data-practice-id="${pr.practice_id}" ondblclick="startRenamePractice(event, '${pr.practice_id}', this)">${displayName}${spinnerHtml}</div>
           <div class="pr-meta">
+            ${idHint}
             <span>${fileCount} file</span>
             <span>${date}</span>
           </div>
@@ -2007,6 +2010,49 @@ async function stopProcessing(practiceId) {
   } catch (e) {
     alert('Errore: ' + e.message);
   }
+}
+
+function startRenamePractice(event, practiceId, el) {
+  event.stopPropagation();
+  const currentName = el.textContent.trim();
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = currentName;
+  input.className = 'form-control form-control-sm';
+  input.style.cssText = 'font-size:0.82rem;font-weight:600;padding:1px 4px;height:auto;border-radius:6px';
+  el.textContent = '';
+  el.appendChild(input);
+  input.focus();
+  input.select();
+
+  async function commitRename() {
+    const newName = input.value.trim();
+    el.textContent = newName || practiceId;
+    if (newName && newName !== practiceId) {
+      try {
+        await fetch(`/api/ao/results/${practiceId}/rename`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name: newName})
+        });
+      } catch (e) { console.error('Rename failed:', e); }
+    } else if (!newName || newName === practiceId) {
+      // Reset to default (remove custom name)
+      try {
+        await fetch(`/api/ao/results/${practiceId}/rename`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name: ''})
+        });
+      } catch (e) { /* ignore */ }
+      el.textContent = practiceId;
+    }
+  }
+  input.addEventListener('blur', commitRename);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { el.textContent = currentName; }
+  });
 }
 
 function resetPractice() {

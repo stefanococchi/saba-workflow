@@ -415,6 +415,7 @@ class PracticeResult(Base):
 
     id = Column(Integer, primary_key=True)
     practice_id = Column(String(255), nullable=False, index=True, unique=True)
+    name = Column(String(255), nullable=True)  # nome personalizzato (editabile dall'utente)
     agent_id = Column(String(255), nullable=False)
     agent_name = Column(String(255), nullable=True)
     result_data = Column(JSON, nullable=True)  # info completo da AO (files, validation, etc.)
@@ -434,6 +435,7 @@ class PracticeResult(Base):
         return {
             'id': self.id,
             'practice_id': self.practice_id,
+            'name': self.name,
             'agent_id': self.agent_id,
             'agent_name': self.agent_name,
             'result_data': self.result_data,
