@@ -522,6 +522,7 @@ textarea.prat-textarea:focus { outline: 3px solid rgba(139,105,20,0.2); border-c
             <span><strong>Creata:</strong> <span id="infoCreated">-</span></span>
             <span><strong>Aggiornata:</strong> <span id="infoUpdated">-</span></span>
             <span><strong>Validazione:</strong> <span id="infoValidation">-</span></span>
+            <button class="btn btn-sm btn-outline-danger" id="btnStopProcessing" style="display:none;border-radius:6px;font-size:0.7rem;padding:2px 8px" onclick="stopProcessing(selectedPracticeId)"><i class="bi bi-stop-fill"></i> Interrompi</button>
             <div style="margin-left:auto;display:flex;gap:5px">
               <button class="btn btn-sm btn-outline-secondary" onclick="toggleAskPanel()" style="border-radius:6px;font-size:0.7rem;padding:2px 8px" id="btnAskToggle"><i class="bi bi-question-circle"></i> Chiedi</button>
               <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('addFileInput').click()" style="border-radius:6px;font-size:0.7rem;padding:2px 8px"><i class="bi bi-plus-lg"></i> Aggiungi file</button>
@@ -1086,10 +1087,11 @@ function _generatePracticeId() {
   const prefix = `${_USERNAME}-${dd}${mmm}${yy}`;
 
   // Conta pratiche esistenti con stesso prefisso per il progressivo
+  // Usa data-practice-id (ID reale) perché textContent potrebbe essere il nome rinominato
   const existing = document.querySelectorAll('#elaboraPracticesList .pr-id');
   let maxN = 0;
   existing.forEach(el => {
-    const txt = (el.title || el.textContent || '').trim();
+    const txt = (el.dataset.practiceId || el.textContent || '').trim();
     if (txt.startsWith(prefix)) {
       const tail = txt.slice(prefix.length);
       if (!tail) maxN = Math.max(maxN, 1);
@@ -1479,6 +1481,9 @@ function pollProcessingStatus(practiceId, agentId) {
           const fileInProgress = job.progress + 1;
           document.getElementById('infoValidation').innerHTML =
             `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${fileInProgress}/${job.total}</span>`;
+          // Mostra bottone stop nella barra info
+          const _btnStop = document.getElementById('btnStopProcessing');
+          if (_btnStop) { _btnStop.style.display = ''; _btnStop.disabled = false; _btnStop.innerHTML = '<i class="bi bi-stop-fill"></i> Interrompi'; }
 
           // Aggiorna activity log
           const logEl = document.getElementById('bgActivityLog');
@@ -1525,6 +1530,8 @@ function pollProcessingStatus(practiceId, agentId) {
         delete _activePolls[practiceId];
         delete _lastPollProgress[practiceId];
         delete window._processingPreviewFile;
+        const _btnStop = document.getElementById('btnStopProcessing');
+        if (_btnStop) _btnStop.style.display = 'none';
         // Ricarica la pratica solo se l'utente la sta ancora guardando
         if (isVisible) {
           try {
@@ -1607,6 +1614,8 @@ async function checkOngoingProcessing(practiceId) {
           </button>
         </div>`;
       document.getElementById('infoValidation').innerHTML = `<span class="badge-processing"><span class="prat-spinner" style="width:12px;height:12px;border-width:2px;vertical-align:middle"></span> ${job.progress}/${job.total}</span>`;
+      const _btnStop = document.getElementById('btnStopProcessing');
+      if (_btnStop) { _btnStop.style.display = ''; _btnStop.disabled = false; _btnStop.innerHTML = '<i class="bi bi-stop-fill"></i> Interrompi'; }
 
       // Mostra anteprima del file in corso di elaborazione
       window._practiceId = practiceId;
