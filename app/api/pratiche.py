@@ -450,10 +450,31 @@ def _start_background_processing(agent_id, practice_id, pr=None):
 
                             _log(f"⏳ AO processLocal in corso...")
                             files = {f"file_0": (data, mt, fn)}
-                            result = ao_service.practice_process(agent_id, practice_id, files=files)
+                            # run + poll separati per poter interrompere il poll
+                            import base64 as _b64
+                            from pathlib import Path as _Path
+                            _ext = _Path(fn).suffix.lstrip(".")
+                            _binary = {"file_0": {
+                                "data": _b64.b64encode(data).decode(),
+                                "mimeType": mt, "fileName": fn, "fileExtension": _ext,
+                            }}
+                            _run = ao_service.run_agent(
+                                agent_id,
+                                {"type": "processLocal", "practiceId": practice_id},
+                                binary=_binary,
+                            )
+                            _task_id = _run.get('taskId', '')
+                            # Traccia taskId corrente nel job (per cancel dall'esterno)
+                            job = _processing_jobs.get(practice_id, {})
+                            job['current_ao_task_id'] = _task_id
+                            result = ao_service.poll_task(_task_id, max_wait=180.0, stop_event=stop_event)
+                            job.pop('current_ao_task_id', None)
 
-                            # Controlla se il task AO è fallito o in timeout
+                            # Controlla se il task AO è fallito, in timeout o cancellato
                             ao_status = result.get('status', '')
+                            if ao_status == 'CANCELLED':
+                                _log("⏹ Task AO interrotto dall'utente")
+                                break
                             if ao_status in ('TIMEOUT', 'FAILED'):
                                 raise Exception(f"AO task {ao_status}: {result.get('error', 'unknown')}")
 
@@ -633,7 +654,20 @@ def ao_practice_process_stop(practice_id):
 
     stop_event.set()
     logger.info(f"Stop requested for practice {practice_id}")
-    return jsonify({"ok": True, "message": "Stop richiesto — l'elaborazione si fermerà dopo il file corrente"})
+
+    # Tenta di cancellare il task AO corrente (se in polling)
+    ao_cancelled = False
+    job = _processing_jobs.get(practice_id, {})
+    current_task = job.get('current_ao_task_id')
+    if current_task:
+        try:
+            ao_cancelled = ao_service.cancel_task(current_task)
+            logger.info(f"AO task {current_task} cancel: {'ok' if ao_cancelled else 'failed/unsupported'}")
+        except Exception as e:
+            logger.warning(f"AO task cancel error: {e}")
+
+    return jsonify({"ok": True, "ao_cancelled": ao_cancelled,
+                     "message": "Stop richiesto — il task AO verrà interrotto"})
 
 
 @pratiche_bp.route('/practice/<agent_id>/<practice_id>/process-stream', methods=['POST'])

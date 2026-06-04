@@ -1009,11 +1009,13 @@ async function selectPractice(practiceId) {
 
 function startNewPractice() {
   selectedPracticeId = null;
+  window._practiceId = null;
   const _pidInput = document.getElementById('practiceIdInput');
   if (_pidInput) _pidInput.value = '';
   const _ee = document.getElementById('elaboraEmpty'); if (_ee) _ee.style.display = 'none';
   const _pr = document.getElementById('practiceResults'); if (_pr) _pr.style.display = 'none';
   const _dz = document.getElementById('dropZoneContainer'); if (_dz) _dz.style.display = '';
+  const _pid = document.getElementById('infoPracticeId'); if (_pid) _pid.textContent = '-';
   document.querySelectorAll('.step-summary-banner, .comparison-panel, .verifica-cruscotto').forEach(el => el.remove());
   practiceWorkflow = null;
   stagedFiles = [];
@@ -1523,11 +1525,13 @@ function pollProcessingStatus(practiceId, agentId) {
         delete _activePolls[practiceId];
         delete _lastPollProgress[practiceId];
         delete window._processingPreviewFile;
-        // Ricarica la pratica come se l'utente cliccasse sulla lista
-        try {
-          await selectPractice(practiceId);
-        } catch (selErr) {
-          console.error('Poll completion selectPractice failed:', selErr);
+        // Ricarica la pratica solo se l'utente la sta ancora guardando
+        if (isVisible) {
+          try {
+            await selectPractice(practiceId);
+          } catch (selErr) {
+            console.error('Poll completion selectPractice failed:', selErr);
+          }
         }
         loadElaboraPractices(selectedElaboraAgentId);
       }
@@ -2002,11 +2006,12 @@ async function stopProcessing(practiceId) {
   try {
     const r = await fetch(`/api/ao/practice/${practiceId}/process-stop`, { method: 'POST' });
     const data = await r.json();
-    // UI si aggiorna da sola tramite il polling che rileva status='stopped'
     const msg = document.getElementById('bgProcessMsg');
-    if (msg) msg.textContent = 'Interruzione in corso...';
+    if (msg) msg.textContent = data.ao_cancelled
+      ? 'Interruzione task AO in corso...'
+      : 'Interruzione in corso...';
     const btn = document.querySelector(`[onclick="stopProcessing('${practiceId}')"]`);
-    if (btn) { btn.disabled = true; btn.textContent = 'Interruzione...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Interruzione...'; }
   } catch (e) {
     alert('Errore: ' + e.message);
   }
@@ -4700,18 +4705,34 @@ function openIpotecariaDetail(stepOrder) {
   if (ispezioni.length === 0) return alert('Nessuna ispezione ipotecaria trovata');
   const practiceId = window._practiceId;
 
-  // Cerca comune immobile: prima dall'input della richiesta SISTER, poi dai dati accumulati
+  // Cerca comune e provincia immobile dall'input SISTER o dai dati accumulati
   let comuneImmobile = '';
+  let provinciaImmobile = '';
   const inputComune = (er.input && er.input.comune) ? er.input.comune : '';
+  const inputProvincia = (er.input && er.input.provincia) ? er.input.provincia : '';
   if (inputComune) {
     comuneImmobile = inputComune.toString().toUpperCase().replace(/\s*\(.*\)/, '').trim();
-  } else {
+  }
+  if (inputProvincia) {
+    provinciaImmobile = inputProvincia.toString().toUpperCase().trim();
+  }
+  if (!comuneImmobile) {
     const acc = practiceWorkflow.accumulated_data || {};
     for (const docType in acc) {
       const fields = acc[docType];
       if (fields && typeof fields === 'object') {
         const c = fields.comune || fields.comune_immobile || fields.comune_catastale || '';
         if (c) { comuneImmobile = c.toString().toUpperCase().replace(/\s*\(.*\)/, '').trim(); break; }
+      }
+    }
+  }
+  if (!provinciaImmobile) {
+    const acc = practiceWorkflow.accumulated_data || {};
+    for (const docType in acc) {
+      const fields = acc[docType];
+      if (fields && typeof fields === 'object') {
+        const p = fields.provincia || fields.sigla_provincia || '';
+        if (p) { provinciaImmobile = p.toString().toUpperCase().trim(); break; }
       }
     }
   }
@@ -4779,7 +4800,7 @@ function openIpotecariaDetail(stepOrder) {
     <ul>
       <li>Formalità <b>cancellate</b> → escluse di default</li>
       <li>Formalità <b>a favore</b> → escluse di default</li>
-      <li>Formalità <b>contro con comune diverso</b> da <span class="comune-val" id="comuneLabel">${comuneImmobile || '(non disponibile)'}</span> → escluse di default</li>
+      <li>Formalità <b>contro fuori provincia</b> <span class="comune-val" id="comuneLabel">${provinciaImmobile ? '(' + provinciaImmobile + ')' : '(non disponibile)'}</span> → escluse di default</li>
     </ul>
     <div style="margin-top:4px;font-size:0.75rem;color:#888">Puoi modificare manualmente ogni selezione spuntando/despuntando la checkbox</div>
   </div>
@@ -4795,6 +4816,7 @@ function openIpotecariaDetail(stepOrder) {
   var _ispezioni = ${JSON.stringify(ispezioni)};
   var _practiceId = '${practiceId}';
   var _comuneImmobile = '${comuneImmobile.replace(/'/g, "\\'")}';
+  var _provinciaImmobile = '${provinciaImmobile.replace(/'/g, "\\'")}';
   var _parsedCache = {};
 
   function shouldAutoExclude(f) {
@@ -4803,10 +4825,13 @@ function openIpotecariaDetail(stepOrder) {
     var tipo = (f.tipo_formalita || f.descrizione || '').toUpperCase();
     // 2) A favore (puro, non "A FAVORE E CONTRO")
     if (tipo.indexOf('A FAVORE') !== -1 && tipo.indexOf('A FAVORE E CONTRO') === -1) return true;
-    // 3) Contro con comune diverso (include "A FAVORE E CONTRO")
-    if (tipo.indexOf('CONTRO') !== -1 && _comuneImmobile) {
-      var ubic = (f.ubicazione || '').toUpperCase().replace(/\\s*\\(.*\\)/, '').trim();
-      if (ubic && ubic.indexOf(_comuneImmobile) === -1) return true;
+    // 3) Contro fuori provincia (include "A FAVORE E CONTRO")
+    if (tipo.indexOf('CONTRO') !== -1 && _provinciaImmobile) {
+      var ubic = (f.ubicazione || '').toUpperCase();
+      // Estrai la sigla provincia tra parentesi, es. "FORNO CANAVESE(TO)" → "TO"
+      var m = ubic.match(/\\(([A-Z]{2})\\)/);
+      var provUbic = m ? m[1] : '';
+      if (provUbic && provUbic !== _provinciaImmobile) return true;
     }
     return false;
   }

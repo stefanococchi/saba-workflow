@@ -181,12 +181,32 @@ def get_task_status(task_id):
         raise
 
 
-def poll_task(task_id, interval=2.0, max_wait=120.0):
-    """Polling di un task fino a completamento o timeout."""
+def cancel_task(task_id):
+    """Tenta di cancellare un task AO in esecuzione."""
+    cfg = _get_config()
+    url = f"{cfg['base_url']}/v1/task/{task_id}/cancel"
+    try:
+        r = requests.post(url, headers=_headers(), timeout=10)
+        logger.info(f"AO cancel_task: taskId={task_id} status_code={r.status_code}")
+        return r.status_code < 400
+    except Exception as e:
+        logger.warning(f"AO cancel_task: taskId={task_id} failed: {e}")
+        return False
+
+
+def poll_task(task_id, interval=2.0, max_wait=120.0, stop_event=None):
+    """Polling di un task fino a completamento o timeout.
+    Se stop_event è fornito e viene settato, interrompe il polling immediatamente.
+    """
     elapsed = 0.0
     poll_errors = 0
     logger.info(f"AO poll_task: taskId={task_id} max_wait={max_wait}s")
     while elapsed < max_wait:
+        # Check stop_event prima di ogni poll
+        if stop_event and stop_event.is_set():
+            logger.info(f"AO poll_task: taskId={task_id} CANCELLED by stop_event after {elapsed:.0f}s")
+            cancel_task(task_id)
+            return {"status": "CANCELLED", "error": "Interrotto dall'utente"}
         try:
             result = get_task_status(task_id)
             poll_errors = 0  # reset su successo
@@ -203,7 +223,13 @@ def poll_task(task_id, interval=2.0, max_wait=120.0):
                 logger.error(f"AO poll_task: taskId={task_id} | {poll_errors} consecutive poll errors, aborting | last={e}")
                 raise
             logger.warning(f"AO poll_task: taskId={task_id} | poll error {poll_errors}/3 (will retry) | {e}")
-        time.sleep(interval)
+        # Sleep breve frazionato per reagire subito allo stop_event
+        _slept = 0.0
+        while _slept < interval:
+            if stop_event and stop_event.is_set():
+                break
+            time.sleep(min(0.5, interval - _slept))
+            _slept += 0.5
         elapsed += interval
     logger.error(f"AO poll_task: taskId={task_id} TIMEOUT after {max_wait}s")
     return {"status": "TIMEOUT", "error": f"Task {task_id} non completato entro {max_wait}s"}
