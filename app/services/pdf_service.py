@@ -506,6 +506,40 @@ def generate_report_pdf(data):
                 rows.append((f'#{i+1}', val))
             pdf.kv_table(rows, key_w=20)
 
+    # ── Analisi Visure Catastali ──
+    if data.get('analisi_catastali'):
+        pdf.section_title('Analisi Visure Catastali')
+        _VISURA_LABELS = {
+            'stato_immobile': 'Stato immobile',
+            'intestatario': 'Intestatario',
+            'codice_fiscale_intestatario': 'CF Intestatario',
+            'diritto': 'Diritto',
+            'quota': 'Quota',
+            'luogo_nascita_intestatario': 'Luogo nascita',
+            'data_nascita_intestatario': 'Data nascita',
+            'dati_derivanti_da': 'Dati derivanti da',
+            'data_atto_provenienza': 'Data atto provenienza',
+            'notaio_provenienza': 'Notaio provenienza',
+            'repertorio_provenienza': 'Repertorio',
+            'tipo_atto_provenienza': 'Tipo atto',
+            'indirizzo': 'Indirizzo',
+            'categoria': 'Categoria',
+            'classe': 'Classe',
+            'consistenza': 'Consistenza',
+            'superficie': 'Superficie',
+            'rendita': 'Rendita',
+        }
+        for ac in data['analisi_catastali']:
+            file_name = ac.get('_file_name', 'Visura')
+            pdf.sub_title(file_name)
+            rows = []
+            for key, label in _VISURA_LABELS.items():
+                val = ac.get(key)
+                if val:
+                    rows.append((label, str(val)))
+            if rows:
+                pdf.kv_table(rows)
+
     # ── Esito Verifiche ──
     if data.get('verifiche'):
         pdf.section_title('Esito Verifiche')

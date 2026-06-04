@@ -2366,14 +2366,45 @@ def generate_practice_report(practice_id):
                     'cf': cf or '',
                 })
 
-        # ── 5. Verifiche ──
+        # ── 5. Analisi visure catastali (parsing PDF) ──
+        visura_texts = []
+        analisi_catastali = []
+        try:
+            from app.services.visura_parser import parse_visura_text
+            visura_pfiles = db.query(PracticeFile).filter_by(practice_id=practice_id).all()
+            for pf in visura_pfiles:
+                fn = (pf.file_name or '').lower()
+                if 'catastale' not in fn and 'visura' not in fn:
+                    continue
+                text = ''
+                if pf.ocr_text:
+                    text = pf.ocr_text
+                elif pf.data and pf.mime_type and 'pdf' in pf.mime_type:
+                    try:
+                        import pypdf
+                        from io import BytesIO as _BytesIO
+                        reader = pypdf.PdfReader(_BytesIO(bytes(pf.data)))
+                        text = '\n'.join(page.extract_text() or '' for page in reader.pages)
+                    except Exception:
+                        pass
+                if text.strip():
+                    visura_texts.append(text)
+                    parsed = parse_visura_text(text)
+                    if parsed:
+                        parsed['_file_name'] = pf.file_name
+                        analisi_catastali.append(parsed)
+        except Exception as e:
+            logger.warning(f"Report: parsing visure catastali: {e}")
+
+        # ── 6. Verifiche ──
         from app.models import Workflow
         checks_config = None
         if pr.workflow_id:
             wf = db.query(Workflow).get(pr.workflow_id)
             if wf and wf.config:
                 checks_config = wf.config.get('checks_config')
-        verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config)
+        verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config,
+                                     visura_texts=visura_texts)
 
         # Applica override manuali dallo step verifica_report (se confermato)
         vr_overrides = {}
@@ -2431,6 +2462,7 @@ def generate_practice_report(practice_id):
             'acquirenti': acquirenti,
             'verifiche': verifiche,
             'ipotecaria': ipotecaria,
+            'analisi_catastali': analisi_catastali,
             'riepilogo': {
                 'total': total,
                 'ok': ok_n,
