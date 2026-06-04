@@ -63,8 +63,38 @@ class VerificaReportHandler(StepHandler):
             if wf and wf.config:
                 checks_config = wf.config.get('checks_config')
 
+        # ── Estrai testo visure per check mutazioni ──
+        visura_texts = []
+        try:
+            from app.models import PracticeFile
+            visura_files = db_session.query(PracticeFile).filter_by(
+                practice_id=practice_result.practice_id
+            ).all()
+            for pf in visura_files:
+                fn = (pf.file_name or '').lower()
+                if 'catastale' not in fn and 'visura' not in fn:
+                    continue
+                # 1) OCR text se disponibile
+                if pf.ocr_text:
+                    visura_texts.append(pf.ocr_text)
+                    continue
+                # 2) Estrai testo dal PDF con pypdf
+                if pf.data and pf.mime_type and 'pdf' in pf.mime_type:
+                    try:
+                        import pypdf
+                        from io import BytesIO
+                        reader = pypdf.PdfReader(BytesIO(bytes(pf.data)))
+                        text = '\n'.join(page.extract_text() or '' for page in reader.pages)
+                        if text.strip():
+                            visura_texts.append(text)
+                    except Exception as e:
+                        logger.warning(f"Estrazione testo visura {pf.file_name}: {e}")
+        except Exception as e:
+            logger.warning(f"Caricamento file visura per mutazioni: {e}")
+
         # ── Esegui verifiche ──
-        verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config)
+        verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config,
+                                     visura_texts=visura_texts)
 
         result['verifiche'] = verifiche
         result['status'] = 'REVIEW_PENDING'

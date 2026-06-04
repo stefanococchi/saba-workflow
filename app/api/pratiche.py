@@ -1897,16 +1897,25 @@ CHECKS_REGISTRY = [
         'sources': ['titolo', 'visura'],
         'category': 'Soggetti',
     },
+    {
+        'id': 'mutazioni_visura',
+        'label': 'Mutazioni visura',
+        'description': 'Segnala variazioni catastali rilevanti (soppressioni, frazionamenti, fusioni, ecc.) nel testo della visura',
+        'default_severity': 'warning',
+        'sources': ['visura'],
+        'category': 'Dati catastali',
+    },
 ]
 
 CHECKS_BY_ID = {c['id']: c for c in CHECKS_REGISTRY}
 
 
-def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=None):
+def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=None, visura_texts=None):
     """Costruisce verifiche incrociando titolo, visure catastali e ipotecaria.
 
     checks_config: dict {check_id: {'enabled': bool, 'severity': str}} dal workflow.
     Se None, usa i default del registry.
+    visura_texts: lista di stringhe con il testo estratto dai PDF delle visure catastali.
     """
     import unicodedata
 
@@ -2124,6 +2133,84 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=
                 'val_titolo': str(n_tit) if n_tit else '\u2014',
                 'val_catasto': str(n_cat) if n_cat else '\u2014',
                 'esito': _severity('num_intestati', raw),
+            })
+
+    # ── 9. Mutazioni visura ──
+    if _is_enabled('mutazioni_visura') and visura_texts:
+        full_text = '\n'.join(visura_texts).lower()
+        # Normalizza accenti per matching robusto
+        full_text_norm = unicodedata.normalize('NFD', full_text)
+        full_text_norm = ''.join(c for c in full_text_norm if unicodedata.category(c) != 'Mn')
+
+        # Pattern per severità (ordine: alta → bassa). Cerca radici.
+        _TRIGGERS = [
+            # (severità, radici da cercare, messaggio)
+            ('error', ['soppress', 'identificativ'],
+             'Identificativo variato o soppresso: F/M/S potrebbero non essere più validi. Controlla i nuovi identificativi.'),
+            ('error', ['frazionament', 'fusione', 'accorpamento', 'tipo mappale'],
+             'Particella frazionata/fusa o cambiata di natura: confini e consistenza possono essere cambiati.'),
+            ('warning', ['allineamento mappe', 'riordino fondiario'],
+             'Foglio/subalterno modificati per operazione cartografica (non compravendita): stesso immobile, identificativi diversi.'),
+            ('warning', ['costituzion'],
+             'Nuovo identificativo costituito: verifica che corrisponda all\'immobile cercato.'),
+        ]
+        # Parole "variazione di X" innocue — NON sono trigger
+        _SAFE_VARIATIONS = [
+            'variazione toponomastica', 'variazione di classamento',
+            'variazione di consistenza', 'variazione della rendita',
+            'variazione colturale',
+        ]
+
+        best_severity = None
+        best_msg = ''
+        severity_rank = {'error': 3, 'warning': 2, 'ok': 0}
+
+        for severity, stems, msg in _TRIGGERS:
+            for stem in stems:
+                if stem in full_text_norm:
+                    if severity_rank.get(severity, 0) > severity_rank.get(best_severity, 0):
+                        best_severity = severity
+                        best_msg = msg
+                    break
+
+        # Estrai nuovi identificativi se soppressione/variazione identificativo
+        extra_info = ''
+        if best_severity == 'error' and ('soppress' in full_text_norm or 'identificativ' in full_text_norm):
+            # Cerca sezione dopo "ha originato e/o variato i seguenti immobili"
+            marker = 'ha originato'
+            idx = full_text_norm.find(marker)
+            if idx >= 0:
+                # Prendi tutto fino alla prossima sezione "Situazione" o fine testo
+                after = full_text_norm[idx:]
+                end = after.find('situazione dell')
+                if end > 0:
+                    after = after[:end]
+                # Cerca pattern "Foglio X Particella Y Subalterno Z"
+                id_matches = re.findall(
+                    r'foglio\s+(\d+)\s+particella\s+(\d+)\s+subalterno\s+(\d+)',
+                    after, re.IGNORECASE)
+                if id_matches:
+                    # Raggruppa per Foglio/Particella, riassumi subalterni
+                    from collections import defaultdict
+                    groups = defaultdict(list)
+                    for f, p, s in id_matches:
+                        groups[(f, p)].append(int(s))
+                    parts = []
+                    for (f, p), subs in sorted(groups.items()):
+                        subs.sort()
+                        if len(subs) > 3:
+                            parts.append(f"F.{f} P.{p} Sub.{subs[0]}-{subs[-1]} ({len(subs)})")
+                        else:
+                            parts.append(f"F.{f} P.{p} Sub.{','.join(str(s) for s in subs)}")
+                    extra_info = ' Nuovi identificativi: ' + '; '.join(parts)
+
+        if best_severity:
+            verifiche.append({
+                'check_id': 'mutazioni_visura',
+                'label': 'Mutazioni visura',
+                'val_titolo': '\u2014',
+                'val_catasto': best_msg + extra_info,
+                'esito': _severity('mutazioni_visura', best_severity),
             })
 
     return verifiche

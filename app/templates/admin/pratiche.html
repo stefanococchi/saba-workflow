@@ -2802,20 +2802,6 @@ async function loadPreview(fileName, hash) {
   }
 }
 
-function _detectPageRotation(pageIdx, pdfVp) {
-  // Confronta aspect ratio PDF.js vs Document AI per rilevare rotazione
-  if (!_ocrPageDims) return 0;
-  const dims = _ocrPageDims[String(pageIdx)] || _ocrPageDims[pageIdx];
-  if (!dims || !dims.w || !dims.h) return 0;
-
-  const pdfLandscape = pdfVp.width > pdfVp.height;
-  const ocrLandscape = dims.w > dims.h;
-
-  // Se uno è landscape e l'altro portrait, serve rotazione 90°
-  if (pdfLandscape !== ocrLandscape) return 90;
-  return 0;
-}
-
 async function renderPreviewPages() {
   if (!previewPdf) return;
   const previewBody = document.getElementById('previewBody');
@@ -2829,14 +2815,14 @@ async function renderPreviewPages() {
     const page = await previewPdf.getPage(i);
     const vp1 = page.getViewport({ scale: 1 });
 
-    // Rileva se serve raddrizzare la pagina per allinearla alle coordinate OCR
-    const rotation = _detectPageRotation(i - 1, vp1);
-    const vpBase = page.getViewport({ scale: 1, rotation });
+    // Rendering: nessuna rotazione aggiuntiva, PDF.js gestisce già /Rotate
+    // La rotazione OCR viene applicata solo alle coordinate di highlight
+    const vpBase = page.getViewport({ scale: 1 });
 
     // Fit to container width, then apply zoom
     const fitScale = containerWidth / vpBase.width;
     const scale = fitScale * currentPreviewZoom;
-    const vp = page.getViewport({ scale, rotation });
+    const vp = page.getViewport({ scale });
 
     const div = document.createElement('div');
     div.className = 'preview-page';
