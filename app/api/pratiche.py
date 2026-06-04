@@ -1932,27 +1932,32 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=
     v0 = visure_list[0] if visure_list else {}
 
     # ── Dati comuni per più check ──
-    catasto_cognomi = []
+    catasto_nomi = []  # nomi completi intestatari catastali
     _seen_nominativi = set()
     for v in visure_list:
         for i in v.get('intestati', []):
-            nom = i.get('nominativo', '')
+            nom = i.get('nominativo', '').strip()
             if nom and nom not in _seen_nominativi:
                 _seen_nominativi.add(nom)
-                catasto_cognomi.append(nom.split()[0])
+                catasto_nomi.append(nom)
 
     _acq_tuple = titolo_fields.get('acquirenti') or titolo_fields.get('parti_acquirenti') or (None, None)
     titolo_acq_raw = _acq_tuple[1]
-    titolo_cognomi = []
+    titolo_nomi = []  # nomi completi acquirenti titolo
     if isinstance(titolo_acq_raw, list):
         for a in titolo_acq_raw:
             if isinstance(a, dict):
-                n = a.get('cognome', a.get('nominativo', str(a)))
-                titolo_cognomi.append(str(n).split()[0])
+                n = a.get('nominativo', '') or a.get('cognome', '')
+                if not n and a.get('cognome'):
+                    n = (a.get('cognome', '') + ' ' + a.get('nome', '')).strip()
+                titolo_nomi.append(str(n).strip())
             else:
-                titolo_cognomi.append(str(a).split()[0])
+                titolo_nomi.append(str(a).strip())
     elif isinstance(titolo_acq_raw, str) and titolo_acq_raw:
-        titolo_cognomi = [p.strip().split()[0] for p in titolo_acq_raw.split(';') if p.strip()]
+        titolo_nomi = [p.strip() for p in titolo_acq_raw.split(';') if p.strip()]
+    # Alias per compatibilità (conteggio intestati, etc.)
+    catasto_cognomi = catasto_nomi
+    titolo_cognomi = titolo_nomi
 
     # ── 1. Foglio / Particella / Subalterno ──
     if v0:
@@ -1979,16 +1984,22 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=
                 })
 
     # ── 2. Cognomi proprietari ──
-    if _is_enabled('cognomi_proprietari') and (catasto_cognomi or titolo_cognomi):
-        cat_set = set(_norm(c) for c in catasto_cognomi)
-        tit_set = set(_norm(c) for c in titolo_cognomi)
-        match = bool(cat_set & tit_set) if cat_set and tit_set else not (cat_set and tit_set)
+    if _is_enabled('cognomi_proprietari') and (catasto_nomi or titolo_nomi):
+        # Confronto a parole: per ogni persona catastale, almeno un cognome
+        # deve comparire in almeno un nome del titolo (e viceversa)
+        cat_words = set()
+        for n in catasto_nomi:
+            cat_words.update(_norm(w) for w in n.split() if len(w) > 2)
+        tit_words = set()
+        for n in titolo_nomi:
+            tit_words.update(_norm(w) for w in n.split() if len(w) > 2)
+        match = bool(cat_words & tit_words) if cat_words and tit_words else not (cat_words and tit_words)
         raw = 'ok' if match else 'error'
         verifiche.append({
             'check_id': 'cognomi_proprietari',
             'label': 'Cognomi proprietari',
-            'val_titolo': ', '.join(titolo_cognomi) or '\u2014',
-            'val_catasto': ', '.join(catasto_cognomi) or '\u2014',
+            'val_titolo': ', '.join(titolo_nomi) or '\u2014',
+            'val_catasto': ', '.join(catasto_nomi) or '\u2014',
             'esito': _severity('cognomi_proprietari', raw),
         })
 
