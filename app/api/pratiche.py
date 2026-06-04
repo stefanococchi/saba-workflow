@@ -1512,6 +1512,22 @@ def complete_practice_step(practice_id):
         if action != 'skip' and current_handler and should_auto:
             exec_result = _execute_backoffice_step(current_step, pr, body)
             step_states[str(current_order)]['exec_result'] = exec_result
+            # Ri-raccogli extracted_data DOPO l'handler (potrebbe aver salvato nuovi file)
+            db.refresh(pr)
+            if pr.result_data and isinstance(pr.result_data, dict):
+                for fhash, fdata in pr.result_data.get('files', {}).items():
+                    doc_type = fdata.get('identification', {}).get('documentId', '') or \
+                               fdata.get('identification', {}).get('documentTypeId', fhash)
+                    if step_doc_types:
+                        _norm = lambda s: s.lower().replace('_', '').replace(' ', '')
+                        if not any(_norm(t) in _norm(doc_type) or _norm(doc_type) in _norm(t) for t in step_doc_types):
+                            continue
+                    if fdata.get('extraction', {}).get('data'):
+                        extracted_data[doc_type] = fdata['extraction']['data']
+            # Merge extracted_data dall'handler (es. ipotecaria_CF)
+            if isinstance(exec_result, dict) and exec_result.get('extracted_data'):
+                extracted_data.update(exec_result['extracted_data'])
+            step_states[str(current_order)]['extracted_data'] = extracted_data
 
         # ── 3. Pulisci validation dalla result_data (è negli step_states ora) ──
         if pr.result_data and isinstance(pr.result_data, dict):
