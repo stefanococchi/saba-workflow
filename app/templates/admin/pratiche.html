@@ -4654,6 +4654,17 @@ function openIpotecariaDetail(stepOrder) {
   if (ispezioni.length === 0) return alert('Nessuna ispezione ipotecaria trovata');
   const practiceId = window._practiceId;
 
+  // Cerca comune immobile dai dati accumulati della pratica
+  let comuneImmobile = '';
+  const acc = practiceWorkflow.accumulated_data || {};
+  for (const docType in acc) {
+    const fields = acc[docType];
+    if (fields && typeof fields === 'object') {
+      const c = fields.comune || fields.comune_immobile || fields.comune_catastale || '';
+      if (c) { comuneImmobile = c.toString().toUpperCase().replace(/\s*\(.*\)/, '').trim(); break; }
+    }
+  }
+
   // Apri finestra indipendente
   const w = window.open('', 'ipotecaria_detail', 'width=1200,height=800,resizable=yes,scrollbars=yes');
   if (!w) return alert('Popup bloccato dal browser — abilita i popup per questo sito');
@@ -4698,6 +4709,11 @@ function openIpotecariaDetail(stepOrder) {
     .sel-bar { position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e9ecef; padding: 10px 24px; display: flex; align-items: center; gap: 12px; font-size: 0.82rem; }
     .sel-bar .count { font-weight: 600; color: #23488d; }
     .loading { text-align: center; padding: 40px; color: #999; }
+    .rules-box { margin: 12px 24px; padding: 12px 16px; background: #fffde7; border: 1px solid #fff9c4; border-radius: 10px; font-size: 0.82rem; }
+    .rules-box .rules-title { font-weight: 700; color: #f57f17; margin-bottom: 6px; }
+    .rules-box ul { margin: 0; padding-left: 18px; }
+    .rules-box li { margin-bottom: 3px; color: #555; }
+    .rules-box .comune-val { font-weight: 700; color: #23488d; }
   </style></head><body>
   <div class="ipo-header">
     <i class="bi bi-list-columns-reverse" style="font-size:1.2rem"></i>
@@ -4707,6 +4723,15 @@ function openIpotecariaDetail(stepOrder) {
     <button onclick="printFormalita()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 14px;border-radius:8px;font-size:0.78rem;cursor:pointer"><i class="bi bi-printer"></i> Stampa elenco formalità da scaricare</button>
   </div>
   <div class="ipo-tabs" id="ipoTabs"></div>
+  <div class="rules-box">
+    <div class="rules-title"><i class="bi bi-funnel-fill"></i> Regole di pre-selezione automatica</div>
+    <ul>
+      <li>Formalità <b>cancellate</b> → escluse di default</li>
+      <li>Formalità <b>a favore</b> → escluse di default</li>
+      <li>Formalità <b>contro con comune diverso</b> da <span class="comune-val" id="comuneLabel">${comuneImmobile || '(non disponibile)'}</span> → escluse di default</li>
+    </ul>
+    <div style="margin-top:4px;font-size:0.75rem;color:#888">Puoi modificare manualmente ogni selezione spuntando/despuntando la checkbox</div>
+  </div>
   <div class="ipo-content" id="ipoContent"></div>
   <div class="sel-bar">
     <i class="bi bi-funnel"></i>
@@ -4718,7 +4743,22 @@ function openIpotecariaDetail(stepOrder) {
   <scr`+`ipt>
   var _ispezioni = ${JSON.stringify(ispezioni)};
   var _practiceId = '${practiceId}';
+  var _comuneImmobile = '${comuneImmobile.replace(/'/g, "\\'")}';
   var _parsedCache = {};
+
+  function shouldAutoExclude(f) {
+    // 1) Cancellata
+    if (f.cancellazione || f.flagCancellazione === '1') return true;
+    var tipo = (f.tipo_formalita || f.descrizione || '').toUpperCase();
+    // 2) A favore (puro, non "A FAVORE E CONTRO")
+    if (tipo.indexOf('A FAVORE') !== -1 && tipo.indexOf('A FAVORE E CONTRO') === -1) return true;
+    // 3) Contro con comune diverso (include "A FAVORE E CONTRO")
+    if (tipo.indexOf('CONTRO') !== -1 && _comuneImmobile) {
+      var ubic = (f.ubicazione || '').toUpperCase().replace(/\\s*\\(.*\\)/, '').trim();
+      if (ubic && ubic.indexOf(_comuneImmobile) === -1) return true;
+    }
+    return false;
+  }
 
   function init() {
     var tabsEl = document.getElementById('ipoTabs');
@@ -4799,8 +4839,9 @@ function openIpotecariaDetail(stepOrder) {
     html += '<div class="sogg-meta"><span class="tag">'+forms.length+' formalità (dati XML)</span></div></div>';
     for (var j = 0; j < forms.length; j++) {
       var f = forms[j];
-      html += '<div class="form-card'+(f.flagCancellazione==='1'?' cancelled':'')+'">';
-      html += '<div class="cb"><input type="checkbox" data-idx="'+idx+'" data-form="'+j+'" onchange="updateSelCount()"></div>';
+      var autoExcl = shouldAutoExclude(f);
+      html += '<div class="form-card'+(f.flagCancellazione==='1'?' cancelled':'')+(autoExcl?' excluded':'')+'">';
+      html += '<div class="cb"><input type="checkbox" data-idx="'+idx+'" data-form="'+j+'"'+(autoExcl?' checked':'')+' onchange="updateSelCount()"></div>';
       html += '<div class="form-num">#'+(j+1)+'</div>';
       html += '<div class="form-body"><div class="form-title">'+(f.descrizione||'?')+'</div>';
       html += '<div class="form-tags">';
@@ -4815,7 +4856,8 @@ function openIpotecariaDetail(stepOrder) {
 
   function renderFormCard(f, j, panelIdx) {
     var cancellata = !!f.cancellazione;
-    var cls = 'form-card' + (cancellata ? ' cancelled' : '');
+    var autoExcl = shouldAutoExclude(f);
+    var cls = 'form-card' + (cancellata ? ' cancelled' : '') + (autoExcl ? ' excluded' : '');
     var cancTag = cancellata ? '<span class="tag-cancel">CANCELLATA '+(f.cancellazione.data||'')+'</span>' : '';
 
     var extras = '';
@@ -4832,7 +4874,7 @@ function openIpotecariaDetail(stepOrder) {
     }
 
     return '<div class="'+cls+'">' +
-      '<div class="cb"><input type="checkbox" data-panel="'+panelIdx+'" data-form="'+j+'" onchange="updateSelCount()"></div>' +
+      '<div class="cb"><input type="checkbox" data-panel="'+panelIdx+'" data-form="'+j+'"'+(autoExcl?' checked':'')+' onchange="updateSelCount()"></div>' +
       '<div class="form-num">#'+(f.numero||j+1)+'</div>' +
       '<div class="form-body">' +
         '<div class="form-title">'+(f.tipo_formalita||f.descrizione||'?')+' '+cancTag+'</div>' +
