@@ -4700,14 +4700,19 @@ function openIpotecariaDetail(stepOrder) {
   if (ispezioni.length === 0) return alert('Nessuna ispezione ipotecaria trovata');
   const practiceId = window._practiceId;
 
-  // Cerca comune immobile dai dati accumulati della pratica
+  // Cerca comune immobile: prima dall'input della richiesta SISTER, poi dai dati accumulati
   let comuneImmobile = '';
-  const acc = practiceWorkflow.accumulated_data || {};
-  for (const docType in acc) {
-    const fields = acc[docType];
-    if (fields && typeof fields === 'object') {
-      const c = fields.comune || fields.comune_immobile || fields.comune_catastale || '';
-      if (c) { comuneImmobile = c.toString().toUpperCase().replace(/\s*\(.*\)/, '').trim(); break; }
+  const inputComune = (er.input && er.input.comune) ? er.input.comune : '';
+  if (inputComune) {
+    comuneImmobile = inputComune.toString().toUpperCase().replace(/\s*\(.*\)/, '').trim();
+  } else {
+    const acc = practiceWorkflow.accumulated_data || {};
+    for (const docType in acc) {
+      const fields = acc[docType];
+      if (fields && typeof fields === 'object') {
+        const c = fields.comune || fields.comune_immobile || fields.comune_catastale || '';
+        if (c) { comuneImmobile = c.toString().toUpperCase().replace(/\s*\(.*\)/, '').trim(); break; }
+      }
     }
   }
 
