@@ -4749,7 +4749,12 @@ function openIpotecariaDetail(stepOrder) {
   if (!provinciaImmobile) {
     for (const isp of ispezioni) {
       for (const f of (isp.formalita || [])) {
-        const ubic = f.ubicazione || '';
+        // Parsed format: f.ubicazione = "MILANO(MI)"
+        // Raw XML format: f.ubicazioneImmobili = [{descrizione: "MILANO(MI)"}]
+        let ubic = f.ubicazione || '';
+        if (!ubic && f.ubicazioneImmobili) {
+          ubic = (f.ubicazioneImmobili || []).map(u => u.descrizione || '').join(', ');
+        }
         const m = ubic.match(/\(([A-Z]{2})\)/);
         if (m) { provinciaImmobile = m[1]; break; }
       }

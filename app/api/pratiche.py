@@ -1381,6 +1381,15 @@ def get_practice_workflow_status(practice_id):
         for s in steps:
             ss = step_states.get(str(s.order), {'status': 'pending'})
             handler = get_handler(s.type.name)
+            # Per verifica_report: rigenera le verifiche al volo (così fix al codice
+            # si applicano anche alle pratiche già processate)
+            if s.type.name == 'VERIFICA_REPORT' and ss.get('exec_result'):
+                try:
+                    fresh = handler.execute(s, pr, s.skip_conditions or {}, db)
+                    ss = dict(ss)
+                    ss['exec_result'] = fresh
+                except Exception as e:
+                    logger.warning(f"Regen verifica_report failed: {e}")
             display_data = handler.get_display_data(s.skip_conditions or {}, ss) if handler else {}
             steps_data.append({
                 'order': s.order,
