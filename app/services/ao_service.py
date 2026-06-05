@@ -206,7 +206,7 @@ def download_s3_binary(content_hash):
 
 # ── Polling task ───────────────────────────────────────────────────
 
-def get_task_status(task_id, hydrate_binaries=False):
+def get_task_status(task_id, hydrate_binaries=True):
     """Controlla lo stato di un task."""
     cfg = _get_config()
     url = f"{cfg['base_url']}/v1/task/{task_id}/status"
@@ -240,7 +240,7 @@ def cancel_task(task_id):
         return False
 
 
-def poll_task(task_id, interval=2.0, max_wait=120.0, stop_event=None, hydrate_binaries=False):
+def poll_task(task_id, interval=2.0, max_wait=120.0, stop_event=None, hydrate_binaries=True):
     """Polling di un task fino a completamento o timeout.
     Se stop_event è fornito e viene settato, interrompe il polling immediatamente.
     """

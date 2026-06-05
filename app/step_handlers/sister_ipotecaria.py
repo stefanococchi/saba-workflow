@@ -220,7 +220,7 @@ class SisterIpotecariaHandler(StepHandler):
                 try:
                     run_result = ao_service.run_agent(sister_agent_id, sister_input)
                     _save_progress(f"Ipotecaria {idx+1}/{len(codici_fiscali)}: CF {cf} — in attesa risposta SISTER...")
-                    task_result = ao_service.poll_task(run_result['taskId'], max_wait=60.0, hydrate_binaries=True)
+                    task_result = ao_service.poll_task(run_result['taskId'], max_wait=60.0)
                     output = task_result.get('output', {})
                     status = task_result.get('status', 'unknown')
                     error_msg = task_result.get('error', '') or ''
