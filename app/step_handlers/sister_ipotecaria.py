@@ -142,13 +142,18 @@ class SisterIpotecariaHandler(StepHandler):
                 comune_immobile_raw = str(flat[k]).strip()
                 break
         comune_immobile = _clean_comune(comune_immobile_raw)
-        # Provincia: prima estrai da "COMUNE (XX)", poi cerca campi specifici immobile
+        # Provincia: 1) da "COMUNE (XX)", 2) campi specifici, 3) lookup tabella comuni
         provincia_immobile = _extract_prov_from_comune(comune_immobile_raw)
         if not provincia_immobile:
             for k in ('provincia_immobile', 'provincia immobile', 'sigla_provincia'):
                 if flat.get(k):
                     provincia_immobile = str(flat[k]).upper().strip()
                     break
+        if not provincia_immobile and comune_immobile:
+            from app.services.comuni_province import get_provincia
+            provincia_immobile = get_provincia(comune_immobile)
+            if provincia_immobile:
+                logger.info(f"Sister ipotecaria: provincia {provincia_immobile} derivata da lookup comune {comune_immobile}")
 
         # Comune/provincia SOGGETTO (fallback)
         comune_soggetto = _clean_comune(flat.get('comune', ''))
