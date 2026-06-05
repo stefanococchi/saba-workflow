@@ -221,16 +221,25 @@ class SisterIpotecariaHandler(StepHandler):
 
                     if need_retry and attempt < MAX_RETRIES:
                         import time
-                        # Fallback immediato su "Comune non trovato" o dopo primo retry
                         comune_non_trovato = 'comune non trovato' in error_msg.lower()
+
+                        # Strategia fallback progressiva:
+                        # 1) Comune non trovato o primo retry → prova comune soggetto
+                        # 2) Ancora fallisce → prova senza comune/provincia (nazionale)
                         if not used_fallback and (comune_non_trovato or attempt >= 1) and (comune_fallback or provincia_fallback):
                             if comune_fallback:
                                 sister_input['comune'] = comune_fallback
                             if provincia_fallback:
                                 sister_input['provincia'] = provincia_fallback
                             used_fallback = True
-                            logger.info(f"Sister ipotecaria [{cf}] fallback: comune={sister_input.get('comune')}, "
+                            logger.info(f"Sister ipotecaria [{cf}] fallback soggetto: comune={sister_input.get('comune')}, "
                                         f"provincia={sister_input.get('provincia')}")
+                        elif used_fallback or (not comune_fallback and not provincia_fallback):
+                            # Ultimo tentativo: rimuovi comune/provincia (ricerca nazionale)
+                            sister_input.pop('comune', None)
+                            sister_input.pop('provincia', None)
+                            logger.info(f"Sister ipotecaria [{cf}] fallback nazionale: senza comune/provincia")
+
                         wait = 3 if comune_non_trovato else 3 + attempt * 2
                         if status != 'COMPLETED':
                             logger.warning(f"Sister ipotecaria [{cf}] {status} (tentativo {attempt + 1}/{MAX_RETRIES + 1}): "
