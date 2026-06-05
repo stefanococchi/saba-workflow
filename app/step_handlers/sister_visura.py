@@ -106,18 +106,36 @@ def _extract_pdf(output):
                 file_name = bv.get('fileName')
                 found_in = f'_binary[{i}]'
                 break
+            elif isinstance(bv, str) and len(bv) > 100:
+                content = base64.b64decode(bv)
+                found_in = f'_binary[{i}]'
+                break
+    if binary_out and not content:
+        import logging as _log
+        _btype = type(binary_out).__name__
+        if isinstance(binary_out, dict):
+            _bdetail = {k: (type(v).__name__, len(v) if isinstance(v, (str, list, bytes)) else list(v.keys()) if isinstance(v, dict) else '?') for k, v in binary_out.items()}
+        elif isinstance(binary_out, list):
+            _bdetail = [(type(v).__name__, len(v) if isinstance(v, (str, bytes)) else list(v.keys()) if isinstance(v, dict) else '?') for v in binary_out[:3]]
+        else:
+            _bdetail = f'{_btype}[{len(binary_out) if hasattr(binary_out, "__len__") else "?"}]'
+        _log.getLogger(__name__).warning(f"_extract_pdf: _binary presente ma non decodificato. type={_btype}, detail={_bdetail}")
 
-    # B. Chiavi note e sotto-dict
+    # B. Chiavi note e sotto-dict (cerca fino a 3 livelli di profondità)
     if not content:
-        search_targets = [output]
+        search_targets = [('', output)]
         for k, v in output.items():
             if isinstance(v, dict) and k != '_binary':
-                search_targets.append(v)
-        for target in search_targets:
+                search_targets.append((k, v))
+                # Terzo livello: es. output.sister.result
+                for k2, v2 in v.items():
+                    if isinstance(v2, dict):
+                        search_targets.append((f'{k}.{k2}', v2))
+        for prefix, target in search_targets:
             for key in ('file', 'pdf', 'data', 'document', 'binary', 'content', 'output', 'result', 'visura'):
                 if key in target and target[key]:
                     file_data = target[key]
-                    found_in = key
+                    found_in = f'{prefix}.{key}' if prefix else key
                     break
             if file_data:
                 break

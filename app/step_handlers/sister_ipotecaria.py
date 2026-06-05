@@ -234,11 +234,13 @@ class SisterIpotecariaHandler(StepHandler):
                         isp['file_size'] = len(content)
                         logger.info(f"Sister ipotecaria [{cf}]: saved {file_name} ({len(content)} bytes)")
                     else:
-                        # Log chiavi output AO per debug estrazione PDF
-                        _out_keys = list(output.keys()) if isinstance(output, dict) else type(output).__name__
-                        _sister_keys = list(output.get('sister', {}).keys()) if isinstance(output.get('sister'), dict) else None
+                        # Log struttura output AO per debug estrazione PDF
+                        def _map_keys(d, depth=0):
+                            if not isinstance(d, dict) or depth > 2:
+                                return type(d).__name__ if not isinstance(d, str) else f'str[{len(d)}]'
+                            return {k: _map_keys(v, depth + 1) for k, v in d.items()}
                         logger.warning(f"Sister ipotecaria [{cf}]: PDF non trovato nella risposta AO. "
-                                       f"output keys={_out_keys}, sister keys={_sister_keys}")
+                                       f"struttura={_map_keys(output)}")
 
                     # ── Salva sempre in result_data con documentId unico ──
                     try:
@@ -266,12 +268,14 @@ class SisterIpotecariaHandler(StepHandler):
                             ]
                         if isp.get('soggetti'):
                             isp_data['SOGGETTI'] = isp['soggetti']
-                        rd['files'][fh_key] = {
-                            'fileName': file_name,
+                        file_entry = {
                             'identification': {'documentId': doc_id},
                             'state': {'identification': 'completed', 'extraction': 'completed'},
                             'extraction': {'data': isp_data},
                         }
+                        if content:
+                            file_entry['fileName'] = file_name
+                        rd['files'][fh_key] = file_entry
                         practice_result.result_data = rd
                         flag_modified(practice_result, 'result_data')
                         db_session.flush()
