@@ -206,10 +206,12 @@ def download_s3_binary(content_hash):
 
 # ── Polling task ───────────────────────────────────────────────────
 
-def get_task_status(task_id):
+def get_task_status(task_id, hydrate_binaries=False):
     """Controlla lo stato di un task."""
     cfg = _get_config()
     url = f"{cfg['base_url']}/v1/task/{task_id}/status"
+    if hydrate_binaries:
+        url += "?hydrateBinaries=true"
     try:
         r = requests.get(url, headers=_headers(), timeout=_TIMEOUT)
         r.raise_for_status()
@@ -238,7 +240,7 @@ def cancel_task(task_id):
         return False
 
 
-def poll_task(task_id, interval=2.0, max_wait=120.0, stop_event=None):
+def poll_task(task_id, interval=2.0, max_wait=120.0, stop_event=None, hydrate_binaries=False):
     """Polling di un task fino a completamento o timeout.
     Se stop_event è fornito e viene settato, interrompe il polling immediatamente.
     """
@@ -252,7 +254,7 @@ def poll_task(task_id, interval=2.0, max_wait=120.0, stop_event=None):
             cancel_task(task_id)
             return {"status": "CANCELLED", "error": "Interrotto dall'utente"}
         try:
-            result = get_task_status(task_id)
+            result = get_task_status(task_id, hydrate_binaries=hydrate_binaries)
             poll_errors = 0  # reset su successo
             if result["status"] == "COMPLETED":
                 logger.info(f"AO poll_task: taskId={task_id} COMPLETED after {elapsed:.0f}s")
