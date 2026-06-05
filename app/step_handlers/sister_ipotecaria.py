@@ -233,48 +233,54 @@ class SisterIpotecariaHandler(StepHandler):
                         isp['file_saved'] = file_name
                         isp['file_size'] = len(content)
                         logger.info(f"Sister ipotecaria [{cf}]: saved {file_name} ({len(content)} bytes)")
-
-                        # ── Salva subito in result_data con documentId unico ──
-                        try:
-                            import hashlib
-                            from sqlalchemy.orm.attributes import flag_modified
-                            db_session.refresh(practice_result)
-                            rd = dict(practice_result.result_data or {})
-                            if 'files' not in rd:
-                                rd['files'] = {}
-                            fh_key = hashlib.md5(f"ipotecaria_{cf}".encode()).hexdigest()[:16]
-                            doc_id = f"Ipotecaria {cf}"
-                            isp_data = {'CODICE_FISCALE': cf}
-                            if isp.get('costo'):
-                                isp_data['COSTO'] = f"€ {isp['costo']}"
-                            if isp.get('num_formalita') is not None:
-                                isp_data['FORMALITA'] = f"{isp['num_formalita']} formalità"
-                            if isp.get('formalita'):
-                                isp_data['ELENCO_FORMALITA'] = [
-                                    {'descrizione': f.get('descrizione', '?'),
-                                     'data': f.get('data', ''),
-                                     'qualifica': f.get('qualifica', ''),
-                                     'repertorio': f.get('repertorio', ''),
-                                     'specie_atto': f.get('specieAtto', '')}
-                                    for f in isp['formalita']
-                                ]
-                            if isp.get('soggetti'):
-                                isp_data['SOGGETTI'] = isp['soggetti']
-                            rd['files'][fh_key] = {
-                                'fileName': file_name,
-                                'identification': {'documentId': doc_id},
-                                'state': {'identification': 'completed', 'extraction': 'completed'},
-                                'extraction': {'data': isp_data},
-                            }
-                            practice_result.result_data = rd
-                            flag_modified(practice_result, 'result_data')
-                            db_session.flush()
-                            logger.info(f"Sister ipotecaria [{cf}]: salvato in result_data come '{doc_id}'")
-                        except Exception as rd_err:
-                            logger.error(f"Sister ipotecaria [{cf}]: errore salvataggio result_data: {rd_err}")
                     else:
-                        isp['note'] = 'Nessun file nella risposta'
-                        all_ok = False
+                        # Log chiavi output AO per debug estrazione PDF
+                        _out_keys = list(output.keys()) if isinstance(output, dict) else type(output).__name__
+                        _sister_keys = list(output.get('sister', {}).keys()) if isinstance(output.get('sister'), dict) else None
+                        logger.warning(f"Sister ipotecaria [{cf}]: PDF non trovato nella risposta AO. "
+                                       f"output keys={_out_keys}, sister keys={_sister_keys}")
+
+                    # ── Salva sempre in result_data con documentId unico ──
+                    try:
+                        import hashlib
+                        from sqlalchemy.orm.attributes import flag_modified
+                        db_session.refresh(practice_result)
+                        rd = dict(practice_result.result_data or {})
+                        if 'files' not in rd:
+                            rd['files'] = {}
+                        fh_key = hashlib.md5(f"ipotecaria_{cf}".encode()).hexdigest()[:16]
+                        doc_id = f"Ipotecaria {cf}"
+                        isp_data = {'CODICE_FISCALE': cf}
+                        if isp.get('costo'):
+                            isp_data['COSTO'] = f"€ {isp['costo']}"
+                        if isp.get('num_formalita') is not None:
+                            isp_data['FORMALITA'] = f"{isp['num_formalita']} formalità"
+                        if isp.get('formalita'):
+                            isp_data['ELENCO_FORMALITA'] = [
+                                {'descrizione': f.get('descrizione', '?'),
+                                 'data': f.get('data', ''),
+                                 'qualifica': f.get('qualifica', ''),
+                                 'repertorio': f.get('repertorio', ''),
+                                 'specie_atto': f.get('specieAtto', '')}
+                                for f in isp['formalita']
+                            ]
+                        if isp.get('soggetti'):
+                            isp_data['SOGGETTI'] = isp['soggetti']
+                        rd['files'][fh_key] = {
+                            'fileName': file_name,
+                            'identification': {'documentId': doc_id},
+                            'state': {'identification': 'completed', 'extraction': 'completed'},
+                            'extraction': {'data': isp_data},
+                        }
+                        practice_result.result_data = rd
+                        flag_modified(practice_result, 'result_data')
+                        db_session.flush()
+                        logger.info(f"Sister ipotecaria [{cf}]: salvato in result_data come '{doc_id}'")
+                    except Exception as rd_err:
+                        logger.error(f"Sister ipotecaria [{cf}]: errore salvataggio result_data: {rd_err}")
+
+                    if not content:
+                        isp['note'] = 'Dati strutturati salvati, PDF non disponibile'
 
                     if status != 'COMPLETED':
                         all_ok = False
