@@ -169,7 +169,7 @@ class SisterIpotecariaHandler(StepHandler):
             _save_progress(f"Ipotecaria {idx+1}/{len(codici_fiscali)}: CF {cf} — invio richiesta a SISTER...")
             logger.info(f"Sister ipotecaria [{cf}] input: {sister_input}")
 
-            MAX_RETRIES = 1
+            MAX_RETRIES = 2
             for attempt in range(MAX_RETRIES + 1):
                 try:
                     run_result = ao_service.run_agent(sister_agent_id, sister_input)
@@ -179,11 +179,14 @@ class SisterIpotecariaHandler(StepHandler):
                     status = task_result.get('status', 'unknown')
                     error_msg = task_result.get('error', '') or ''
 
-                    # Retry su timeout SISTER (max 1 retry)
-                    if status != 'COMPLETED' and 'timeout' in error_msg.lower() and attempt < MAX_RETRIES:
+                    # Retry su errore SISTER (timeout, SisterNodeError, FAILED)
+                    if status != 'COMPLETED' and attempt < MAX_RETRIES:
                         import time
-                        logger.warning(f"Sister ipotecaria [{cf}] timeout (tentativo {attempt + 1}/{MAX_RETRIES + 1}), retry tra 3s...")
-                        time.sleep(3)
+                        wait = 3 + attempt * 2  # 3s, 5s
+                        logger.warning(f"Sister ipotecaria [{cf}] {status} (tentativo {attempt + 1}/{MAX_RETRIES + 1}): "
+                                       f"{error_msg[:120]}... retry tra {wait}s")
+                        _save_progress(f"Ipotecaria {idx+1}/{len(codici_fiscali)}: CF {cf} — retry {attempt + 1}...")
+                        time.sleep(wait)
                         continue
 
                     isp['status'] = status
@@ -291,14 +294,15 @@ class SisterIpotecariaHandler(StepHandler):
                     break  # successo o errore non-timeout, esci dal retry
 
                 except Exception as e:
-                    if 'timeout' in str(e).lower() and attempt < MAX_RETRIES:
+                    if attempt < MAX_RETRIES:
                         import time
-                        logger.warning(f"Sister ipotecaria [{cf}] exception timeout (tentativo {attempt + 1}), retry tra 3s...")
-                        time.sleep(3)
+                        wait = 3 + attempt * 2
+                        logger.warning(f"Sister ipotecaria [{cf}] exception (tentativo {attempt + 1}/{MAX_RETRIES + 1}): {e}... retry tra {wait}s")
+                        time.sleep(wait)
                         continue
                     isp['error'] = str(e)
                     all_ok = False
-                    logger.error(f"Sister ipotecaria [{cf}] error: {e}")
+                    logger.error(f"Sister ipotecaria [{cf}] error dopo {MAX_RETRIES + 1} tentativi: {e}")
                     break
 
             result['ispezioni'].append(isp)
