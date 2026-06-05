@@ -47,6 +47,16 @@ def _extract_useful_output(raw_output):
             result = item.get("json", {})
             # Preserva binary output (es. PDF da sister-agent)
             if item.get("binary"):
+                # Log struttura binary per debug
+                _bin = item["binary"]
+                if isinstance(_bin, dict):
+                    for _bk, _bv in _bin.items():
+                        if isinstance(_bv, dict):
+                            _data_len = len(str(_bv.get('data', ''))) if _bv.get('data') else 0
+                            logger.info(f"AO raw binary[{_bk}]: data_len={_data_len}, "
+                                        f"s3Stored={_bv.get('s3Stored')}, "
+                                        f"fileName={_bv.get('fileName')}, "
+                                        f"fileSize={_bv.get('fileSize')}")
                 if isinstance(result, dict):
                     result["_binary"] = item["binary"]
                 else:
