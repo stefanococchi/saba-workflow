@@ -241,11 +241,7 @@ class SisterIpotecariaHandler(StepHandler):
                             used_fallback = True
                             logger.info(f"Sister ipotecaria [{cf}] fallback soggetto: comune={sister_input.get('comune')}, "
                                         f"provincia={sister_input.get('provincia')}")
-                        elif used_fallback or (not comune_fallback and not provincia_fallback):
-                            # Ultimo tentativo: rimuovi comune/provincia (ricerca nazionale)
-                            sister_input.pop('comune', None)
-                            sister_input.pop('provincia', None)
-                            logger.info(f"Sister ipotecaria [{cf}] fallback nazionale: senza comune/provincia")
+                        # Nessun altro fallback — ripete ultimo comune usato
 
                         wait = 3 if comune_non_trovato else 3 + attempt * 2
                         if status != 'COMPLETED':
