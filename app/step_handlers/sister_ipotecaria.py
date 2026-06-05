@@ -126,17 +126,45 @@ class SisterIpotecariaHandler(StepHandler):
 
         logger.info(f"Sister ipotecaria: {len(codici_fiscali)} CF trovati: {codici_fiscali}")
 
-        # ── 4. Dati comuni ──
-        provincia = _find_field(flat, 'provincia', 'provincia', config)
-        comune = _find_field(flat, 'comune', 'comune', config).upper()
-        # Rimuovi provincia tra parentesi se presente (es. "CINISELLO BALSAMO (MI)" → "CINISELLO BALSAMO")
-        comune = re.sub(r'\s*\([A-Z]{2}\)\s*$', '', comune).strip()
+        # ── 4. Dati comuni: priorità immobile, fallback soggetto ──
+        def _clean_comune(c):
+            return re.sub(r'\s*\([A-Z]{2}\)\s*$', '', str(c).upper()).strip()
+
+        # Comune/provincia IMMOBILE (prioritario per conservatoria)
+        comune_immobile = ''
+        for k in ('comune immobile', 'comune_immobile', 'comune_catastale', 'comune catastale'):
+            if flat.get(k):
+                comune_immobile = _clean_comune(flat[k])
+                break
+        provincia_immobile = ''
+        for k in ('provincia', 'sigla_provincia', 'provincia_immobile'):
+            if flat.get(k):
+                provincia_immobile = str(flat[k]).upper().strip()
+                break
+
+        # Comune/provincia SOGGETTO (fallback)
+        comune_soggetto = _clean_comune(flat.get('comune', ''))
+        provincia_soggetto = ''
+        # Cerca provincia del soggetto dai dati visura/ipotecaria precedente
+        for k in ('provincia',):
+            if flat.get(k) and flat[k] != provincia_immobile:
+                provincia_soggetto = str(flat[k]).upper().strip()
+                break
+
+        # Usa immobile come default, soggetto come fallback
+        comune_primary = comune_immobile or comune_soggetto
+        provincia_primary = provincia_immobile or provincia_soggetto
+        comune_fallback = comune_soggetto if comune_soggetto != comune_primary else ''
+        provincia_fallback = provincia_soggetto if provincia_soggetto != provincia_primary else ''
+
+        logger.info(f"Sister ipotecaria: comune_immobile={comune_immobile}, comune_soggetto={comune_soggetto}, "
+                    f"prov_immobile={provincia_immobile}, prov_soggetto={provincia_soggetto}")
 
         base_input = {'operation': 'ispezioneIpotecaria'}
-        if provincia:
-            base_input['provincia'] = provincia
-        if comune:
-            base_input['comune'] = comune
+        if provincia_primary:
+            base_input['provincia'] = provincia_primary
+        if comune_primary:
+            base_input['comune'] = comune_primary
         if config.get('auth_username'):
             base_input['authProvider'] = config.get('auth_provider', 'sister')
             base_input['authUsername'] = config['auth_username']
@@ -170,6 +198,7 @@ class SisterIpotecariaHandler(StepHandler):
             logger.info(f"Sister ipotecaria [{cf}] input: {sister_input}")
 
             MAX_RETRIES = 2
+            used_fallback = False
             for attempt in range(MAX_RETRIES + 1):
                 try:
                     run_result = ao_service.run_agent(sister_agent_id, sister_input)
@@ -179,12 +208,32 @@ class SisterIpotecariaHandler(StepHandler):
                     status = task_result.get('status', 'unknown')
                     error_msg = task_result.get('error', '') or ''
 
-                    # Retry su errore SISTER (timeout, SisterNodeError, FAILED)
-                    if status != 'COMPLETED' and attempt < MAX_RETRIES:
+                    # Se SISTER fallisce o ritorna 0 formalità, prova con comune/provincia soggetto
+                    need_retry = status != 'COMPLETED'
+                    if not need_retry and status == 'COMPLETED':
+                        # Check se 0 formalità — potrebbe servire altra conservatoria
+                        sister_data_check = _extract_sister_data(output) if isinstance(output, dict) else {}
+                        xml_check = sister_data_check.get('xmlJson', {})
+                        if not xml_check.get('formalita') and not used_fallback and (comune_fallback or provincia_fallback):
+                            need_retry = True
+                            logger.info(f"Sister ipotecaria [{cf}]: 0 formalità con immobile, "
+                                        f"riprovo con comune soggetto={comune_fallback or comune_primary}")
+
+                    if need_retry and attempt < MAX_RETRIES:
                         import time
-                        wait = 3 + attempt * 2  # 3s, 5s
-                        logger.warning(f"Sister ipotecaria [{cf}] {status} (tentativo {attempt + 1}/{MAX_RETRIES + 1}): "
-                                       f"{error_msg[:120]}... retry tra {wait}s")
+                        wait = 3 + attempt * 2
+                        # Al secondo tentativo, prova con comune/provincia del soggetto
+                        if attempt >= 1 and not used_fallback and (comune_fallback or provincia_fallback):
+                            if comune_fallback:
+                                sister_input['comune'] = comune_fallback
+                            if provincia_fallback:
+                                sister_input['provincia'] = provincia_fallback
+                            used_fallback = True
+                            logger.info(f"Sister ipotecaria [{cf}] fallback: comune={sister_input.get('comune')}, "
+                                        f"provincia={sister_input.get('provincia')}")
+                        if status != 'COMPLETED':
+                            logger.warning(f"Sister ipotecaria [{cf}] {status} (tentativo {attempt + 1}/{MAX_RETRIES + 1}): "
+                                           f"{error_msg[:120]}... retry tra {wait}s")
                         _save_progress(f"Ipotecaria {idx+1}/{len(codici_fiscali)}: CF {cf} — retry {attempt + 1}...")
                         time.sleep(wait)
                         continue
