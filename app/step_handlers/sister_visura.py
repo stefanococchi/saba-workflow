@@ -329,6 +329,12 @@ class SisterVisuraHandler(StepHandler):
                 sister_input['subalterno'] = subalterno
 
             label = f"{foglio}/{particella}/{subalterno}"
+
+            # Pausa tra chiamate consecutive per evitare conflitti sessione SISTER
+            if idx > 0:
+                import time
+                time.sleep(5)
+
             _save_progress(f"Visura {idx+1}/{len(combos)}: {label} — invio richiesta a SISTER...")
             logger.info(f"Sister visura [{label}] input: {sister_input}")
 

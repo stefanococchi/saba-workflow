@@ -206,6 +206,11 @@ class SisterIpotecariaHandler(StepHandler):
             sister_input = dict(base_input)
             sister_input['codiceFiscale'] = cf
 
+            # Pausa tra chiamate consecutive per evitare conflitti sessione SISTER
+            if idx > 0:
+                import time
+                time.sleep(5)
+
             _save_progress(f"Ipotecaria {idx+1}/{len(codici_fiscali)}: CF {cf} — invio richiesta a SISTER...")
             logger.info(f"Sister ipotecaria [{cf}] input: {sister_input}")
 
