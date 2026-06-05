@@ -160,6 +160,40 @@ def practice_process_stream(agent_id, practice_id, files=None, team_id=None):
     )
 
 
+# ── Download binari S3 ────────────────────────────────────────────
+
+def download_s3_binary(content_hash):
+    """Scarica un file binario da AO tramite contentHash (file su S3).
+    Prova endpoint comuni dell'API AO. Restituisce bytes o None.
+    """
+    cfg = _get_config()
+    base = cfg['base_url']
+    headers = _headers(accept="application/octet-stream")
+
+    # Prova gli endpoint possibili per download file
+    endpoints = [
+        f"{base}/v1/file/{content_hash}/download",
+        f"{base}/v1/file/{content_hash}",
+        f"{base}/v1/binary/{content_hash}",
+    ]
+    for url in endpoints:
+        try:
+            r = requests.get(url, headers=headers, timeout=30)
+            if r.status_code == 200 and len(r.content) > 100:
+                logger.info(f"AO download_s3_binary: OK da {url} ({len(r.content)} bytes)")
+                return r.content
+            elif r.status_code == 404:
+                continue
+            else:
+                logger.debug(f"AO download_s3_binary: {url} status={r.status_code} size={len(r.content)}")
+        except Exception as e:
+            logger.debug(f"AO download_s3_binary: {url} error: {e}")
+            continue
+
+    logger.warning(f"AO download_s3_binary: nessun endpoint funzionante per contentHash={content_hash[:16]}...")
+    return None
+
+
 # ── Polling task ───────────────────────────────────────────────────
 
 def get_task_status(task_id):

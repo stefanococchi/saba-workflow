@@ -90,18 +90,34 @@ def _extract_pdf(output):
     binary_out = output.get('_binary')
     if binary_out and isinstance(binary_out, dict):
         for bk, bv in binary_out.items():
-            if isinstance(bv, dict) and bv.get('data'):
-                content = base64.b64decode(bv['data'])
-                file_name = bv.get('fileName')
-                found_in = f'_binary.{bk}'
-                break
+            if isinstance(bv, dict):
+                raw = bv.get('data', '')
+                if raw and len(str(raw)) > 100:
+                    # Dati base64 inline
+                    content = base64.b64decode(raw)
+                    file_name = bv.get('fileName')
+                    found_in = f'_binary.{bk}'
+                    break
+                elif bv.get('s3Stored') and bv.get('contentHash'):
+                    # File su S3 — prova a scaricarlo via AO API
+                    try:
+                        from app.services.ao_service import download_s3_binary
+                        s3_content = download_s3_binary(bv['contentHash'])
+                        if s3_content:
+                            content = s3_content
+                            file_name = bv.get('fileName')
+                            found_in = f'_binary.{bk}(s3)'
+                            break
+                    except Exception as _e:
+                        import logging as _log
+                        _log.getLogger(__name__).warning(f"_extract_pdf: download S3 fallito per {bv.get('contentHash', '?')}: {_e}")
             elif isinstance(bv, str) and len(bv) > 100:
                 content = base64.b64decode(bv)
                 found_in = f'_binary.{bk}'
                 break
     elif binary_out and isinstance(binary_out, list):
         for i, bv in enumerate(binary_out):
-            if isinstance(bv, dict) and bv.get('data'):
+            if isinstance(bv, dict) and bv.get('data') and len(str(bv['data'])) > 100:
                 content = base64.b64decode(bv['data'])
                 file_name = bv.get('fileName')
                 found_in = f'_binary[{i}]'
@@ -110,16 +126,6 @@ def _extract_pdf(output):
                 content = base64.b64decode(bv)
                 found_in = f'_binary[{i}]'
                 break
-    if binary_out and not content:
-        import logging as _log
-        _btype = type(binary_out).__name__
-        if isinstance(binary_out, dict):
-            _bdetail = {k: (type(v).__name__, len(v) if isinstance(v, (str, list, bytes)) else list(v.keys()) if isinstance(v, dict) else '?') for k, v in binary_out.items()}
-        elif isinstance(binary_out, list):
-            _bdetail = [(type(v).__name__, len(v) if isinstance(v, (str, bytes)) else list(v.keys()) if isinstance(v, dict) else '?') for v in binary_out[:3]]
-        else:
-            _bdetail = f'{_btype}[{len(binary_out) if hasattr(binary_out, "__len__") else "?"}]'
-        _log.getLogger(__name__).warning(f"_extract_pdf: _binary presente ma non decodificato. type={_btype}, detail={_bdetail}")
 
     # B. Chiavi note e sotto-dict (cerca fino a 3 livelli di profondità)
     if not content:
