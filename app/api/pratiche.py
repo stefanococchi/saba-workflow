@@ -2183,18 +2183,30 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=
                      'aggiornamento identificativ', 'variazione identificativ']:
             full_text_norm = full_text_norm.replace(_bl, '')
 
+        # Verifica se il testo contiene soppressione REALE dell'unità (non solo contesto storico)
+        # Il pattern "immobiliare soppressa/o dal DD/MM/YYYY" indica stato attuale soppresso
+        _has_soppresso = bool(re.search(
+            r'immobiliare\s+soppress[ao]\s+dal\s+\d{2}/\d{2}/\d{4}', full_text_norm
+        ))
+
         # Pattern per severità (ordine: alta → bassa). Cerca radici.
         _TRIGGERS = [
-            # (severità, radici da cercare, messaggio)
-            ('error', ['soppress'],
-             'Immobile soppresso: F/M/S potrebbero non essere più validi. Controlla i nuovi identificativi.'),
+            # Solo se il parser ha rilevato immobile soppresso — la parola 'soppresso'
+            # appare spesso in visure storiche come contesto senza indicare stato attuale
+        ]
+        if _has_soppresso:
+            _TRIGGERS.append(
+                ('error', ['soppress'],
+                 'Immobile soppresso: F/M/S potrebbero non essere più validi. Controlla i nuovi identificativi.')
+            )
+        _TRIGGERS.extend([
             ('error', ['frazionament', 'fusione', 'accorpamento', 'tipo mappale'],
              'Particella frazionata/fusa o cambiata di natura: confini e consistenza possono essere cambiati.'),
             ('warning', ['allineamento mappe', 'riordino fondiario'],
              'Foglio/subalterno modificati per operazione cartografica (non compravendita): stesso immobile, identificativi diversi.'),
             ('warning', ['costituzion'],
              'Nuovo identificativo costituito: verifica che corrisponda all\'immobile cercato.'),
-        ]
+        ])
         # Parole "variazione di X" innocue — NON sono trigger
         _SAFE_VARIATIONS = [
             'variazione toponomastica', 'variazione di classamento',
