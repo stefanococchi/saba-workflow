@@ -2179,14 +2179,15 @@ def _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config=
         full_text_norm = ''.join(c for c in full_text_norm if unicodedata.category(c) != 'Mn')
 
         # Rimuovi frasi standard che contengono stem ma non indicano mutazioni
-        for _bl in ['dati identificativi']:
+        for _bl in ['dati identificativi', 'identificativi catastali',
+                     'aggiornamento identificativ', 'variazione identificativ']:
             full_text_norm = full_text_norm.replace(_bl, '')
 
         # Pattern per severità (ordine: alta → bassa). Cerca radici.
         _TRIGGERS = [
             # (severità, radici da cercare, messaggio)
-            ('error', ['soppress', 'identificativ'],
-             'Identificativo variato o soppresso: F/M/S potrebbero non essere più validi. Controlla i nuovi identificativi.'),
+            ('error', ['soppress'],
+             'Immobile soppresso: F/M/S potrebbero non essere più validi. Controlla i nuovi identificativi.'),
             ('error', ['frazionament', 'fusione', 'accorpamento', 'tipo mappale'],
              'Particella frazionata/fusa o cambiata di natura: confini e consistenza possono essere cambiati.'),
             ('warning', ['allineamento mappe', 'riordino fondiario'],
