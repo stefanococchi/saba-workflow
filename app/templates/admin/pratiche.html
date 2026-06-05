@@ -4697,7 +4697,9 @@ function openIpotecariaDetail(stepOrder) {
   const step = practiceWorkflow.steps.find(s => s.order === stepOrder);
   if (!step) return;
   const er = step.state?.exec_result || {};
-  const ispezioni = er.ispezioni || [];
+  const ispezioni = (er.ispezioni || []).filter(isp =>
+    (isp.formalita && isp.formalita.length > 0) || isp.file_saved
+  );
   if (ispezioni.length === 0) return alert('Nessuna ispezione ipotecaria trovata');
   const practiceId = window._practiceId;
 
