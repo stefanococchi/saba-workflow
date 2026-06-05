@@ -130,24 +130,31 @@ class SisterIpotecariaHandler(StepHandler):
         def _clean_comune(c):
             return re.sub(r'\s*\([A-Z]{2}\)\s*$', '', str(c).upper()).strip()
 
+        def _extract_prov_from_comune(c):
+            """Estrae sigla provincia da 'SAVIGLIANO (CN)' → 'CN'."""
+            m = re.search(r'\(([A-Z]{2})\)\s*$', str(c).upper())
+            return m.group(1) if m else ''
+
         # Comune/provincia IMMOBILE (prioritario per conservatoria)
-        comune_immobile = ''
+        comune_immobile_raw = ''
         for k in ('comune immobile', 'comune_immobile', 'comune_catastale', 'comune catastale'):
             if flat.get(k):
-                comune_immobile = _clean_comune(flat[k])
+                comune_immobile_raw = str(flat[k]).strip()
                 break
-        provincia_immobile = ''
-        for k in ('provincia', 'sigla_provincia', 'provincia_immobile'):
-            if flat.get(k):
-                provincia_immobile = str(flat[k]).upper().strip()
-                break
+        comune_immobile = _clean_comune(comune_immobile_raw)
+        # Provincia: prima estrai da "COMUNE (XX)", poi cerca campi specifici immobile
+        provincia_immobile = _extract_prov_from_comune(comune_immobile_raw)
+        if not provincia_immobile:
+            for k in ('provincia_immobile', 'provincia immobile', 'sigla_provincia'):
+                if flat.get(k):
+                    provincia_immobile = str(flat[k]).upper().strip()
+                    break
 
         # Comune/provincia SOGGETTO (fallback)
         comune_soggetto = _clean_comune(flat.get('comune', ''))
         provincia_soggetto = ''
-        # Cerca provincia del soggetto dai dati visura/ipotecaria precedente
         for k in ('provincia',):
-            if flat.get(k) and flat[k] != provincia_immobile:
+            if flat.get(k):
                 provincia_soggetto = str(flat[k]).upper().strip()
                 break
 
