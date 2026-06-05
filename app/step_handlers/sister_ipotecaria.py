@@ -278,11 +278,18 @@ class SisterIpotecariaHandler(StepHandler):
 
                     # Salva PDF
                     sogg_cognome = ''
+                    sogg_nome = ''
                     for s in isp.get('soggetti', []):
                         if s.get('cognome'):
                             sogg_cognome = re.sub(r'[^A-Za-z]', '', s['cognome']).upper()
+                            sogg_nome = re.sub(r'[^A-Za-z]', '', s.get('nome', '')).upper()
                             break
-                    file_name = f"ipotecaria_{sogg_cognome}.pdf" if sogg_cognome else f"ipotecaria_{cf}.pdf"
+                    if sogg_cognome:
+                        # Usa cognome_nome per evitare collisioni tra omonimi
+                        name_part = f"{sogg_cognome}_{sogg_nome}" if sogg_nome else sogg_cognome
+                        file_name = f"ipotecaria_{name_part}.pdf"
+                    else:
+                        file_name = f"ipotecaria_{cf}.pdf"
                     content, ao_file_name, found_in = _extract_pdf(output)
 
                     if content:
