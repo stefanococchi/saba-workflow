@@ -127,6 +127,63 @@ class VerificaReportHandler(StepHandler):
         except Exception as e:
             logger.warning(f"Caricamento/parsing file visura: {e}")
 
+        # ── Parsing ipotecaria PDF ──
+        try:
+            from app.models import PracticeFile
+            from app.services.ipotecaria_parser import parse_ipotecaria_pdf
+
+            ipo_files = db_session.query(PracticeFile).filter_by(
+                practice_id=practice_result.practice_id
+            ).all()
+            rd = dict(practice_result.result_data or {})
+            rd_files = rd.get('files', {})
+            rd_modified = False
+
+            for pf in ipo_files:
+                fn = (pf.file_name or '').lower()
+                if 'ipotecaria' not in fn:
+                    continue
+                if not pf.data or not pf.mime_type or 'pdf' not in pf.mime_type:
+                    continue
+
+                try:
+                    parsed = parse_ipotecaria_pdf(bytes(pf.data))
+                    if parsed and parsed.get('formalita'):
+                        # Trova il file in result_data.files (match per fileName)
+                        for fhash, fdata in rd_files.items():
+                            if fdata.get('fileName') == pf.file_name:
+                                ext_data = fdata.get('extraction', {}).get('data', {})
+                                if not isinstance(ext_data, dict):
+                                    ext_data = {}
+                                # Inietta dati parsati dal PDF
+                                if parsed.get('header'):
+                                    for k, v in parsed['header'].items():
+                                        if k not in ext_data or not ext_data[k]:
+                                            ext_data[k] = v
+                                if parsed.get('soggetto'):
+                                    if 'SOGGETTO_PDF' not in ext_data:
+                                        ext_data['SOGGETTO_PDF'] = parsed['soggetto']
+                                if parsed.get('formalita'):
+                                    ext_data['FORMALITA_PDF'] = len(parsed['formalita'])
+                                    ext_data['FORMALITA_DETTAGLIO'] = parsed['formalita']
+                                fdata.setdefault('extraction', {})['data'] = ext_data
+                                rd_modified = True
+                                logger.info(f"Ipotecaria parser: iniettati dati in {pf.file_name} "
+                                            f"({len(parsed.get('formalita', []))} formalità)")
+                                break
+                except Exception as e:
+                    logger.warning(f"Parsing ipotecaria {pf.file_name}: {e}")
+
+            if rd_modified:
+                rd['files'] = rd_files
+                practice_result.result_data = rd
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(practice_result, 'result_data')
+                db_session.flush()
+
+        except Exception as e:
+            logger.warning(f"Caricamento/parsing file ipotecaria: {e}")
+
         # ── Esegui verifiche ──
         verifiche = _build_verifiche(titolo_fields, visure_list, ipotecaria_list, checks_config,
                                      visura_texts=visura_texts)
