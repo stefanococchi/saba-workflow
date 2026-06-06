@@ -58,7 +58,7 @@ class PaymentService:
 
         try:
             params = {
-                'payment_method_types': ['card', 'paypal'],
+                'payment_method_types': ['card'],
                 'line_items': [{
                     'price_data': {
                         'currency': currency,
