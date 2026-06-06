@@ -5068,8 +5068,8 @@ function drRenderStepCard(step, result, state, idx, isPast) {
                     if (step.config.field_name) html += ' — campo: <code>' + step.config.field_name + '</code>';
                     html += '</div>';
                     html += drInteractiveBox('bi-bullseye', _t('dr_goal_question'),
-                        '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'goal\',\'met\')"><i class="bi bi-check-lg"></i> ' + _t('dr_yes_reached') + '</button>' +
-                        '<button class="btn btn-sm btn-outline-danger" onclick="drSubmitResponse(\'goal\',\'not_met\')"><i class="bi bi-x-lg"></i> ' + _t('dr_no_not_reached') + '</button>'
+                        '<button class="btn btn-sm btn-success me-2" type="button" onclick="drSubmitResponse(\'goal\',\'met\')"><i class="bi bi-check-lg"></i> ' + _t('dr_yes_reached') + '</button>' +
+                        '<button class="btn btn-sm btn-outline-danger" type="button" onclick="drSubmitResponse(\'goal\',\'not_met\')"><i class="bi bi-x-lg"></i> ' + _t('dr_no_not_reached') + '</button>'
                     );
                     html += '<div style="margin-top:10px;font-size:11px;color:var(--md-on-surface-variant)">';
                     html += '<div style="margin-bottom:4px"><i class="bi bi-arrow-right"></i> ' + _t('dr_if_reached') + ' → ' + (step.config.if_met || 'continue') + (step.config.if_met === 'jump' ? ' (step ' + step.config.if_met_step + ')' : '') + '</div>';
@@ -5097,9 +5097,9 @@ function drRenderStepCard(step, result, state, idx, isPast) {
                 html += '</div></div>';
                 if (isWaiting) {
                     html += drInteractiveBox('bi-person-check', _t('dr_simulate_approver'),
-                        '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'approval\',\'approved\')"><i class="bi bi-check-lg"></i> ' + _t('approved') + '</button>' +
-                        '<button class="btn btn-sm btn-danger me-2" onclick="drSubmitResponse(\'approval\',\'rejected\')"><i class="bi bi-x-lg"></i> ' + _t('rejected') + '</button>' +
-                        '<button class="btn btn-sm btn-outline-warning" onclick="drSubmitResponse(\'approval\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>'
+                        '<button class="btn btn-sm btn-success me-2" type="button" onclick="drSubmitResponse(\'approval\',\'approved\')"><i class="bi bi-check-lg"></i> ' + _t('approved') + '</button>' +
+                        '<button class="btn btn-sm btn-danger me-2" type="button" onclick="drSubmitResponse(\'approval\',\'rejected\')"><i class="bi bi-x-lg"></i> ' + _t('rejected') + '</button>' +
+                        '<button class="btn btn-sm btn-outline-warning" type="button" onclick="drSubmitResponse(\'approval\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>'
                     );
                     html += '<div style="margin-top:10px;font-size:11px;color:var(--md-on-surface-variant)">';
                     html += '<div style="margin-bottom:4px"><i class="bi bi-arrow-right"></i> ' + _t('dr_if_approved') + ' → ' + (step.config.if_approved || 'continue') + (step.config.if_approved === 'jump' ? ' (step ' + step.config.if_approved_step + ')' : '') + '</div>';
@@ -5130,13 +5130,13 @@ function drRenderStepCard(step, result, state, idx, isPast) {
                     if (result.responseType === 'scale') {
                         html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
                         for (var s = 1; s <= result.scaleMax; s++) {
-                            html += '<button class="btn btn-sm btn-outline-primary" onclick="drSubmitResponse(\'survey\',\'' + s + '\')" style="min-width:40px">' + s + '</button>';
+                            html += '<button class="btn btn-sm btn-outline-primary" type="button" onclick="drSubmitResponse(\'survey\',\'' + s + '\')" style="min-width:40px">' + s + '</button>';
                         }
                         html += '</div>';
                     } else {
                         html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
                         (result.choices || []).forEach(function(c) {
-                            html += '<button class="btn btn-sm btn-outline-primary" onclick="drSubmitResponse(\'survey\',\'' + c.replace(/'/g, "\\'") + '\')">' + c + '</button>';
+                            html += '<button class="btn btn-sm btn-outline-primary" type="button" onclick="drSubmitResponse(\'survey\',\'' + c.replace(/'/g, "\\'") + '\')">' + c + '</button>';
                         });
                         html += '</div>';
                     }
@@ -5224,16 +5224,16 @@ function drRenderLandingForm(result, idx) {
             html += '<i class="bi bi-credit-card"></i> <strong>Pagamento richiesto:</strong> ' + _payAmt + ' ' + _payCur;
             if (_hasCond) html += '<br><i class="bi bi-funnel"></i> Solo se <strong>' + _step.config.payment_condition_field + '</strong> = <strong>' + _step.config.payment_condition_value + '</strong>';
             html += '</div>';
-            html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-credit-card"></i> Form + Paga OK</button>';
-            html += '<button class="btn btn-sm btn-outline-danger me-2" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-x-circle"></i> Form + Pagamento fallito</button>';
+            html += '<button class="btn btn-sm btn-success me-2" type="button" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-credit-card"></i> Form + Paga OK</button>';
+            html += '<button class="btn btn-sm btn-outline-danger me-2" type="button" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-x-circle"></i> Form + Pagamento fallito</button>';
             if (_hasCond) {
-                html += '<button class="btn btn-sm btn-outline-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-send-fill"></i> ' + _step.config.payment_condition_field + '≠' + _step.config.payment_condition_value + ' (no pagamento)</button>';
+                html += '<button class="btn btn-sm btn-outline-success me-2" type="button" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-send-fill"></i> ' + _step.config.payment_condition_field + '≠' + _step.config.payment_condition_value + ' (no pagamento)</button>';
             }
         } else {
-            html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-check-lg"></i> ' + _t('dr_form_filled') + '</button>';
+            html += '<button class="btn btn-sm btn-success me-2" type="button" onclick="drSubmitResponse(\'landing\',\'filled\')"><i class="bi bi-check-lg"></i> ' + _t('dr_form_filled') + '</button>';
         }
-        html += '<button class="btn btn-sm btn-outline-secondary me-2" onclick="drSubmitResponse(\'landing\',\'empty\')"><i class="bi bi-x-lg"></i> ' + _t('not_filled') + '</button>';
-        html += '<button class="btn btn-sm btn-outline-warning" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>';
+        html += '<button class="btn btn-sm btn-outline-secondary me-2" type="button" onclick="drSubmitResponse(\'landing\',\'empty\')"><i class="bi bi-x-lg"></i> ' + _t('not_filled') + '</button>';
+        html += '<button class="btn btn-sm btn-outline-warning" type="button" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>';
         html += '</div>';
         html += '</div>';
         return html;
@@ -5312,16 +5312,16 @@ function drRenderLandingForm(result, idx) {
         if (step.config.payment_description) html += ' — ' + step.config.payment_description;
         if (hasCond) html += '<br><i class="bi bi-funnel"></i> Solo se <strong>' + step.config.payment_condition_field + '</strong> = <strong>' + step.config.payment_condition_value + '</strong>';
         html += '</div>';
-        html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitLandingFormWithPayment(' + idx + ',true)"><i class="bi bi-credit-card"></i> ' + (hasCond ? step.config.payment_condition_field + '=' + step.config.payment_condition_value + ' + ' : '') + 'Paga OK</button>';
-        html += '<button class="btn btn-sm btn-outline-danger me-2" onclick="drSubmitLandingFormWithPayment(' + idx + ',false)"><i class="bi bi-x-circle"></i> ' + (hasCond ? step.config.payment_condition_field + '=' + step.config.payment_condition_value + ' + ' : '') + 'Pagamento fallito</button>';
+        html += '<button class="btn btn-sm btn-success me-2" type="button" onclick="drSubmitLandingFormWithPayment(' + idx + ',true)"><i class="bi bi-credit-card"></i> ' + (hasCond ? step.config.payment_condition_field + '=' + step.config.payment_condition_value + ' + ' : '') + 'Paga OK</button>';
+        html += '<button class="btn btn-sm btn-outline-danger me-2" type="button" onclick="drSubmitLandingFormWithPayment(' + idx + ',false)"><i class="bi bi-x-circle"></i> ' + (hasCond ? step.config.payment_condition_field + '=' + step.config.payment_condition_value + ' + ' : '') + 'Pagamento fallito</button>';
         if (hasCond) {
-            html += '<button class="btn btn-sm btn-outline-success me-2" onclick="drSubmitLandingForm(' + idx + ')"><i class="bi bi-send-fill"></i> ' + step.config.payment_condition_field + '≠' + step.config.payment_condition_value + ' (no pagamento)</button>';
+            html += '<button class="btn btn-sm btn-outline-success me-2" type="button" onclick="drSubmitLandingForm(' + idx + ')"><i class="bi bi-send-fill"></i> ' + step.config.payment_condition_field + '≠' + step.config.payment_condition_value + ' (no pagamento)</button>';
         }
     } else {
-        html += '<button class="btn btn-sm btn-success me-2" onclick="drSubmitLandingForm(' + idx + ')"><i class="bi bi-send-fill"></i> ' + _t('dr_submit_form') + '</button>';
+        html += '<button class="btn btn-sm btn-success me-2" type="button" onclick="drSubmitLandingForm(' + idx + ')"><i class="bi bi-send-fill"></i> ' + _t('dr_submit_form') + '</button>';
     }
-    html += '<button class="btn btn-sm btn-outline-secondary me-2" onclick="drSubmitResponse(\'landing\',\'empty\')"><i class="bi bi-x-lg"></i> ' + _t('dr_does_not_fill') + '</button>';
-    html += '<button class="btn btn-sm btn-outline-warning" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>';
+    html += '<button class="btn btn-sm btn-outline-secondary me-2" type="button" onclick="drSubmitResponse(\'landing\',\'empty\')"><i class="bi bi-x-lg"></i> ' + _t('dr_does_not_fill') + '</button>';
+    html += '<button class="btn btn-sm btn-outline-warning" type="button" onclick="drSubmitResponse(\'landing\',\'timeout\')"><i class="bi bi-clock"></i> ' + _t('timeout') + '</button>';
     html += '</div>';
 
     html += '</div>';
