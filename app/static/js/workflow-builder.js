@@ -5337,8 +5337,12 @@ function drValidateLandingForm(stepIdx, formData) {
     // Clear previous errors
     var container = document.getElementById('drLandingFields_' + stepIdx);
     if (container) {
-        container.querySelectorAll('.dr-must-be-error').forEach(function(el) { el.remove(); });
-        container.querySelectorAll('.dr-must-be-invalid').forEach(function(el) { el.classList.remove('dr-must-be-invalid'); });
+        container.querySelectorAll('[style*="border-left"]').forEach(function(el) {
+            if (el.classList.contains('dr-landing-field')) { el.style.borderLeft = ''; el.style.paddingLeft = ''; }
+        });
+        container.querySelectorAll('div[style*="#B3261E"]').forEach(function(el) {
+            if (el.parentNode) el.parentNode.removeChild(el);
+        });
     }
 
     var hasError = false;
@@ -5349,9 +5353,10 @@ function drValidateLandingForm(stepIdx, formData) {
         var allFields = container.querySelectorAll('.dr-landing-field');
         for (var j = 0; j < allFields.length; j++) {
             if (allFields[j].querySelector('[data-field="' + fieldName + '"]')) {
-                allFields[j].classList.add('dr-must-be-invalid');
+                allFields[j].style.borderLeft = '3px solid #B3261E';
+                allFields[j].style.paddingLeft = '8px';
                 var hint = document.createElement('div');
-                hint.className = 'dr-must-be-error';
+                hint.style.cssText = 'color:#B3261E;font-size:12px;font-weight:700;margin-top:6px;padding:4px 8px;background:#fef2f2;border-radius:4px;border-left:3px solid #B3261E';
                 hint.textContent = msg;
                 allFields[j].appendChild(hint);
                 break;
