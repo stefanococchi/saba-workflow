@@ -78,6 +78,7 @@ class PaymentService:
                     'step_id': str(step_id),
                 },
                 'expires_at': int(time.time()) + 1800,  # 30 minutes
+                'locale': 'en',
             }
 
             if participant_email:
