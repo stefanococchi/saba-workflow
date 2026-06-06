@@ -36,7 +36,7 @@
             window.__sabaPaymentSubmitting = true;
 
             var btn = form.querySelector('[type="submit"]');
-            if (btn) { btn.disabled = true; btn.textContent = 'Reindirizzamento al pagamento...'; }
+            if (btn) { btn.disabled = true; btn.textContent = 'Redirecting to payment...'; }
 
             var fd = new FormData(form);
             var data = {};
@@ -63,13 +63,13 @@
                 });
             }).then(function(r) {
                 if (r.ok) return r.json();
-                return r.json().then(function(err) { throw new Error(err.error || 'Errore pagamento'); });
+                return r.json().then(function(err) { throw new Error(err.error || 'Payment error'); });
             }).then(function(result) {
                 window.location.href = result.checkout_url;
             }).catch(function(err) {
                 var em = document.querySelector('.saba-error-msg');
-                if (em) { em.textContent = err.message || 'Errore pagamento'; em.style.display = 'block'; }
-                if (btn) { btn.disabled = false; btn.textContent = 'Riprova'; }
+                if (em) { em.textContent = err.message || 'Payment error'; em.style.display = 'block'; }
+                if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
                 window.__sabaPaymentSubmitting = false;
             });
         }, true); // CAPTURE phase — runs before bubble-phase listeners
@@ -96,7 +96,7 @@
 
                 if (submitBtn) {
                     submitBtn.disabled = true;
-                    submitBtn.textContent = 'Invio in corso...';
+                    submitBtn.textContent = 'Submitting...';
                 }
                 if (successMsg) successMsg.style.display = 'none';
                 if (errorMsg) errorMsg.style.display = 'none';
@@ -138,7 +138,7 @@
 
                     if (_payment.enabled && !_payment.already_paid) {
                         // Payment flow: redirect to Stripe Checkout
-                        if (submitBtn) submitBtn.textContent = 'Reindirizzamento al pagamento...';
+                        if (submitBtn) submitBtn.textContent = 'Redirecting to payment...';
                         var response = await fetch('/landing/{{ token }}/checkout', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -150,10 +150,10 @@
                         } else {
                             var err = await response.json();
                             if (errorMsg) {
-                                errorMsg.textContent = err.error || 'Errore creazione pagamento.';
+                                errorMsg.textContent = err.error || 'Payment error. Please try again.';
                                 errorMsg.style.display = 'block';
                             }
-                            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Riprova'; }
+                            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Retry'; }
                             _submitting = false;
                         }
                     } else {
@@ -174,7 +174,7 @@
                         } else {
                             var err = await response.json();
                             if (errorMsg) {
-                                errorMsg.textContent = err.error || 'Errore durante il salvataggio.';
+                                errorMsg.textContent = err.error || 'Error saving data. Please try again.';
                                 errorMsg.style.display = 'block';
                             }
                             if (submitBtn) {
@@ -186,7 +186,7 @@
                     }
                 } catch (error) {
                     if (errorMsg) {
-                        errorMsg.textContent = 'Errore di connessione. Riprova.';
+                        errorMsg.textContent = 'Connection error. Please try again.';
                         errorMsg.style.display = 'block';
                     }
                     if (submitBtn) {
@@ -211,10 +211,10 @@
                         headers: { 'Content-Type': 'application/json' }
                     });
                     if (response.ok) {
-                        document.body.innerHTML = '<div style="text-align:center;padding:60px;font-family:sans-serif"><h2>Disiscrizione completata</h2><p>Non riceverai più comunicazioni.</p></div>';
+                        document.body.innerHTML = '<div style="text-align:center;padding:60px;font-family:sans-serif"><h2>Unsubscribed</h2><p>You will no longer receive messages.</p></div>';
                     }
                 } catch (error) {
-                    alert('Errore durante la disiscrizione.');
+                    alert('An error occurred. Please try again.');
                 }
             });
         });

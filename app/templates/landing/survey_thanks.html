@@ -1,12 +1,12 @@
 {% extends "landing/base.html" %}
 
-{% block title %}Grazie! - {{ workflow.name }}{% endblock %}
+{% block title %}Thank you! - {{ workflow.name }}{% endblock %}
 
 {% block content %}
 <div style="text-align:center; padding: 20px 0;">
     <div style="font-size:48px; margin-bottom:16px;">&#10003;</div>
-    <h1 style="font-size:24px; margin-bottom:12px;">Grazie!</h1>
-    <p style="font-size:16px; color:#666; margin-bottom:8px;">La tua risposta e' stata registrata.</p>
+    <h1 style="font-size:24px; margin-bottom:12px;">Thank you!</h1>
+    <p style="font-size:16px; color:#666; margin-bottom:8px;">Your response has been recorded.</p>
     {% if question %}
     <p style="font-size:14px; color:#999; margin-bottom:4px;">{{ question }}</p>
     {% endif %}

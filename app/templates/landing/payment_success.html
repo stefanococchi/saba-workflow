@@ -1,6 +1,6 @@
 {% extends "landing/base.html" %}
 
-{% block title %}Pagamento ricevuto - Saba Workflow{% endblock %}
+{% block title %}Payment received - Saba Workflow{% endblock %}
 
 {% block content %}
 <div style="text-align: center;">
@@ -9,18 +9,18 @@
         <path d="M 25 40 L 35 50 L 55 30" stroke="#4f4" stroke-width="3" stroke-linecap="round" fill="none"/>
     </svg>
 
-    <h1 style="color: #4f4;">Pagamento ricevuto!</h1>
-    <p style="font-size: 18px;">Grazie, il tuo pagamento è stato completato con successo.</p>
+    <h1 style="color: #4f4;">Payment received!</h1>
+    <p style="font-size: 18px;">Thank you, your payment has been completed successfully.</p>
 
     <div style="margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px;">
         {% if participant.full_name %}
-        <p><strong>Nome:</strong> {{ participant.full_name }}</p>
+        <p><strong>Name:</strong> {{ participant.full_name }}</p>
         {% endif %}
         <p><strong>Email:</strong> {{ participant.email }}</p>
     </div>
 
     <p style="margin-top: 30px; color: #999; font-size: 14px;">
-        Riceverai una conferma via email. Puoi chiudere questa pagina.
+        You will receive a confirmation email. You can close this page.
     </p>
 </div>
 {% endblock %}

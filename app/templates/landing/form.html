@@ -4,8 +4,8 @@
 
 {% block content %}
 <h1>{{ workflow.name }}</h1>
-<p>Ciao {{ participant.full_name or participant.email }},</p>
-<p>Compila il form qui sotto per partecipare.</p>
+<p>Hello {{ participant.full_name or participant.email }},</p>
+<p>Please fill out the form below.</p>
 
 <form id="landingForm">
     {% if config and config.fields %}
@@ -55,7 +55,7 @@
                 <select id="{{ field.name }}"
                         name="{{ field.name }}"
                         {% if field.required %}required{% endif %}>
-                    <option value="">Seleziona...</option>
+                    <option value="">Select...</option>
                     {% for option in field.options %}
                     <option value="{{ option.value }}">{{ option.label }}</option>
                     {% endfor %}
@@ -66,46 +66,46 @@
     {% else %}
         <!-- Default form se config non specificato -->
         <div class="form-group">
-            <label for="nome">Nome completo <span style="color: red;">*</span></label>
+            <label for="nome">Full name <span style="color: red;">*</span></label>
             <input type="text" id="nome" name="nome" required>
         </div>
-        
+
         <div class="form-group">
-            <label for="azienda">Azienda</label>
+            <label for="azienda">Company</label>
             <input type="text" id="azienda" name="azienda">
         </div>
-        
+
         <div class="form-group">
-            <label for="note">Note</label>
+            <label for="note">Notes</label>
             <textarea id="note" name="note"></textarea>
         </div>
     {% endif %}
     
     {% if payment_config and payment_config.enabled and not payment_config.already_paid %}
     <div style="background: #fff8e1; border-left: 4px solid #f9a825; padding: 15px; border-radius: 6px; margin-bottom: 16px;">
-        <strong>Pagamento richiesto:</strong>
+        <strong>Payment required:</strong>
         {{ "%.2f"|format(payment_config.amount_cents / 100) }} {{ payment_config.currency|upper }}
         {% if payment_config.description %}<br><small>{{ payment_config.description }}</small>{% endif %}
     </div>
     <button type="submit" id="submitBtn">
-        Paga {{ "%.2f"|format(payment_config.amount_cents / 100) }} {{ payment_config.currency|upper }} e invia
+        Pay {{ "%.2f"|format(payment_config.amount_cents / 100) }} {{ payment_config.currency|upper }} and submit
     </button>
     {% elif payment_config and payment_config.enabled and payment_config.already_paid %}
     <div class="success" style="margin-bottom: 16px;">
-        <strong>Pagamento ricevuto!</strong> Puoi procedere con l'invio del form.
+        <strong>Payment received!</strong> You can now submit the form.
     </div>
-    <button type="submit" id="submitBtn">Invia</button>
+    <button type="submit" id="submitBtn">Submit</button>
     {% else %}
-    <button type="submit" id="submitBtn">Invia</button>
+    <button type="submit" id="submitBtn">Submit</button>
     {% endif %}
 </form>
 
 <div id="successMessage" class="success" style="display: none;">
-    <strong>Grazie!</strong> I tuoi dati sono stati salvati correttamente.
+    <strong>Thank you!</strong> Your data has been saved successfully.
 </div>
 
 <div id="errorMessage" class="error" style="display: none;">
-    Si è verificato un errore. Riprova.
+    An error occurred. Please try again.
 </div>
 
 {% endblock %}
@@ -113,9 +113,7 @@
 {% block footer %}
 {{ super() }}
 <div style="margin-top: 10px;">
-    <a href="/landing/{{ token }}/unsubscribe" onclick="return confirm('Sei sicuro di volerti disiscrivere?')">
-        Non ricevere più comunicazioni
-    </a>
+    <a href="#" id="unsubscribeLink">Unsubscribe from future messages</a>
 </div>
 {% endblock %}
 
@@ -141,7 +139,7 @@ document.getElementById('landingForm').addEventListener('submit', async (e) => {
     const errorMsg = document.getElementById('errorMessage');
 
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Invio in corso...';
+    submitBtn.textContent = 'Submitting...';
 
     successMsg.style.display = 'none';
     errorMsg.style.display = 'none';
@@ -153,10 +151,10 @@ document.getElementById('landingForm').addEventListener('submit', async (e) => {
     formData.forEach((value, key) => {
         if (value instanceof File && value.size > 0) {
             if (value.size > 20 * 1024 * 1024) {
-                errorMsg.textContent = 'File troppo grande (max 20 MB).';
+                errorMsg.textContent = 'File too large (max 20 MB).';
                 errorMsg.style.display = 'block';
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Invia';
+                submitBtn.textContent = 'Submit';
                 return;
             }
             filePromises.push(
@@ -187,7 +185,7 @@ document.getElementById('landingForm').addEventListener('submit', async (e) => {
 
         if (needsPayment) {
             // Payment flow: send form data to checkout endpoint
-            submitBtn.textContent = 'Reindirizzamento al pagamento...';
+            submitBtn.textContent = 'Redirecting to payment...';
             const response = await fetch('/landing/{{ token }}/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -198,10 +196,10 @@ document.getElementById('landingForm').addEventListener('submit', async (e) => {
                 window.location.href = result.checkout_url;
             } else {
                 const error = await response.json();
-                errorMsg.textContent = error.error || 'Errore creazione pagamento.';
+                errorMsg.textContent = error.error || 'Payment error. Please try again.';
                 errorMsg.style.display = 'block';
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Riprova';
+                submitBtn.textContent = 'Retry';
                 _submitting = false;
             }
         } else {
@@ -219,19 +217,38 @@ document.getElementById('landingForm').addEventListener('submit', async (e) => {
                 setTimeout(() => { e.target.style.display = 'none'; }, 2000);
             } else {
                 const error = await response.json();
-                errorMsg.textContent = error.error || 'Errore durante il salvataggio.';
+                errorMsg.textContent = error.error || 'Error saving data. Please try again.';
                 errorMsg.style.display = 'block';
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Invia';
+                submitBtn.textContent = 'Submit';
                 _submitting = false;
             }
         }
     } catch (error) {
-        errorMsg.textContent = 'Errore di connessione. Riprova.';
+        errorMsg.textContent = 'Connection error. Please try again.';
         errorMsg.style.display = 'block';
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Invia';
+        submitBtn.textContent = 'Submit';
         _submitting = false;
+    }
+});
+
+document.getElementById('unsubscribeLink').addEventListener('click', async function(e) {
+    e.preventDefault();
+    if (!confirm('Are you sure you want to unsubscribe?')) return;
+    try {
+        var response = await fetch('/landing/{{ token }}/unsubscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (response.ok) {
+            document.querySelector('.container').innerHTML =
+                '<div style="text-align:center;padding:40px"><h2>Unsubscribed</h2><p>You will no longer receive messages.</p></div>';
+        } else {
+            alert('An error occurred. Please try again.');
+        }
+    } catch (err) {
+        alert('Connection error. Please try again.');
     }
 });
 </script>

@@ -1,5 +1,8 @@
+import os
 from flask import Flask
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -11,6 +14,7 @@ Base = declarative_base()
 # Sessione DB e app reference
 db_session = None
 _app_instance = None
+limiter = Limiter(key_func=get_remote_address, default_limits=["200 per minute"])
 # Limita a 5 thread concorrenti per evitare sovraccarico su Graph API e DB
 scheduler = BackgroundScheduler(executors={
     'default': ThreadPoolExecutor(max_workers=5)
@@ -66,8 +70,22 @@ def create_app(config_object=None):
     # Inizializza database
     init_db(app)
 
-    # CORS
-    CORS(app)
+    # CORS — restrict to /api/* with configurable origins
+    cors_origins = os.getenv('CORS_ORIGINS', '*').split(',')
+    CORS(app, resources={r"/api/*": {"origins": cors_origins}})
+
+    # Rate limiter
+    limiter.init_app(app)
+
+    # Security headers
+    @app.after_request
+    def _security_headers(response):
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        if not app.debug:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        return response
 
     # Registra blueprints
     from app.api import workflow_bp, participant_bp, landing_bp, health_bp, stripe_bp

@@ -1,6 +1,6 @@
 {% extends "landing/base.html" %}
 
-{% block title %}Già completato - Saba Workflow{% endblock %}
+{% block title %}Already completed - Saba Workflow{% endblock %}
 
 {% block content %}
 <div style="text-align: center;">
@@ -8,21 +8,21 @@
         <circle cx="40" cy="40" r="35" fill="none" stroke="#4f4" stroke-width="3"/>
         <path d="M 25 40 L 35 50 L 55 30" stroke="#4f4" stroke-width="3" stroke-linecap="round" fill="none"/>
     </svg>
-    
-    <h1 style="color: #4f4;">Tutto fatto!</h1>
-    <p style="font-size: 18px;">Hai già completato questo workflow.</p>
-    
+
+    <h1 style="color: #4f4;">All done!</h1>
+    <p style="font-size: 18px;">You have already completed this workflow.</p>
+
     <div style="margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; text-align: left;">
-        <h3 style="margin-bottom: 10px; color: #8B6914;">Riepilogo</h3>
+        <h3 style="margin-bottom: 10px; color: #8B6914;">Summary</h3>
         <p><strong>Email:</strong> {{ participant.email }}</p>
         {% if participant.full_name %}
-        <p><strong>Nome:</strong> {{ participant.full_name }}</p>
+        <p><strong>Name:</strong> {{ participant.full_name }}</p>
         {% endif %}
-        <p><strong>Completato il:</strong> {{ participant.completed_at|localtime('%d/%m/%Y alle %H:%M') }}</p>
+        <p><strong>Completed on:</strong> {{ participant.completed_at|localtime('%d/%m/%Y %H:%M') }}</p>
     </div>
-    
+
     <p style="margin-top: 30px; color: #999; font-size: 14px;">
-        Grazie per la tua partecipazione!
+        Thank you for your participation!
     </p>
 </div>
 {% endblock %}

@@ -1,19 +1,61 @@
+import re
+import os
+import logging
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, render_template, render_template_string, current_app
 from markupsafe import Markup
 from app import db_session as db
+from app.app_init import limiter
 from app.models import Participant, WorkflowStep, ParticipantStatus, StepType, ActivityLog, PaymentStatus
 from app.services import TokenService, SchedulerService
 from app.services.activity_service import log_activity
 from app.services.payment_service import PaymentService, PaymentError
-from datetime import datetime, timedelta
-import logging
 
 logger = logging.getLogger(__name__)
 
 landing_bp = Blueprint('landing', __name__)
 
+# --- Input validation helpers ---
+MAX_FIELDS = 50
+MAX_FIELD_LENGTH = 10_000
+FIELD_KEY_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,128}$')
+ALLOWED_MIME = {
+    'application/pdf', 'image/jpeg', 'image/png',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
+MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
+
+
+def _validate_form_data(form_data: dict) -> str | None:
+    """Validate form payload. Returns error message string or None if valid."""
+    if not isinstance(form_data, dict):
+        return 'Invalid payload'
+    if len(form_data) > MAX_FIELDS:
+        return f'Too many fields (max {MAX_FIELDS})'
+    for key, value in form_data.items():
+        if not FIELD_KEY_RE.match(key):
+            return f'Invalid field name: {key}'
+        if isinstance(value, dict) and 'data' in value and 'filename' in value:
+            # File upload
+            if value.get('mime') not in ALLOWED_MIME:
+                return f'File type not allowed: {value.get("mime")}'
+            if value.get('size', 0) > MAX_FILE_SIZE:
+                return 'File too large (max 20 MB)'
+            # Sanitize filename — strip path components
+            fname = os.path.basename(value.get('filename', ''))
+            if not fname or fname.startswith('.'):
+                return 'Invalid filename'
+            value['filename'] = fname
+        elif isinstance(value, str) and len(value) > MAX_FIELD_LENGTH:
+            return f'Field "{key}" is too long (max {MAX_FIELD_LENGTH} characters)'
+    return None
+
 
 @landing_bp.route('/landing/<token>', methods=['GET'])
+@limiter.limit("30 per minute")
 def show_landing_page(token):
     """Mostra landing page per partecipante"""
     try:
@@ -22,14 +64,14 @@ def show_landing_page(token):
         
         if not payload:
             return render_template('landing/error.html', 
-                                 error='Link scaduto o non valido'), 400
+                                 error='Link expired or invalid'), 400
         
         # Recupera partecipante
         participant = db.get(Participant, payload['participant_id'])
         
         if not participant:
             return render_template('landing/error.html',
-                                 error='Partecipante non trovato'), 404
+                                 error='Participant not found'), 404
         
         # Verifica se già completato
         if participant.status == ParticipantStatus.COMPLETED:
@@ -117,10 +159,11 @@ def show_landing_page(token):
     except Exception as e:
         logger.error(f"Errore landing page: {str(e)}")
         return render_template('landing/error.html',
-                             error='Errore caricamento pagina'), 500
+                             error='Error loading page'), 500
 
 
 @landing_bp.route('/landing/<token>', methods=['POST'])
+@limiter.limit("5 per minute")
 def submit_landing_data(token):
     """Submit dati da landing page"""
     try:
@@ -128,7 +171,7 @@ def submit_landing_data(token):
         payload = TokenService.verify_token(token)
         
         if not payload:
-            return jsonify({'error': 'Token non valido'}), 400
+            return jsonify({'error': 'Invalid token'}), 400
         
         # Recupera partecipante (con lock per evitare race condition da double-click)
         participant = db.query(Participant).filter_by(
@@ -136,18 +179,18 @@ def submit_landing_data(token):
         ).with_for_update().first()
 
         if not participant:
-            return jsonify({'error': 'Partecipante non trovato'}), 404
+            return jsonify({'error': 'Participant not found'}), 404
 
         # Verifica se già completato
         if participant.status == ParticipantStatus.COMPLETED:
-            return jsonify({'error': 'Già completato'}), 400
+            return jsonify({'error': 'Already completed'}), 400
 
         # Verifica se form già compilato (anti double-submit)
         # Ignore internal keys (_payment, _payment_pending, _payment_step_id) when checking
         if participant.collected_data:
             user_keys = [k for k in participant.collected_data.keys() if not k.startswith('_')]
             if user_keys:
-                return jsonify({'success': True, 'message': 'Dati già salvati'}), 200
+                return jsonify({'error': 'Form already submitted'}), 409
 
         # Guard: block direct submission if payment is required but not completed
         _guard_step = None
@@ -170,26 +213,15 @@ def submit_landing_data(token):
                 if _needs_payment:
                     _existing = dict(participant.collected_data or {})
                     if not (_existing.get('_payment', {}).get('status') == 'completed'):
-                        return jsonify({'error': 'Pagamento richiesto prima dell\'invio'}), 402
+                        return jsonify({'error': 'Payment required before submission'}), 402
 
         # Salva dati
         form_data = request.get_json()
 
-        # Validazione file upload (base64 in JSON)
-        ALLOWED_MIME = {'application/pdf', 'image/jpeg', 'image/png',
-                        'application/msword',
-                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                        'application/vnd.ms-excel',
-                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
-        MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
-
-        for key, value in form_data.items():
-            if isinstance(value, dict) and 'data' in value and 'filename' in value:
-                # È un file upload
-                if value.get('mime') not in ALLOWED_MIME:
-                    return jsonify({'error': f'Tipo file non consentito: {value.get("mime")}'}), 400
-                if value.get('size', 0) > MAX_FILE_SIZE:
-                    return jsonify({'error': 'File troppo grande (max 20 MB)'}), 400
+        # Validate form payload
+        validation_error = _validate_form_data(form_data)
+        if validation_error:
+            return jsonify({'error': validation_error}), 400
 
         # Merge con dati esistenti (riassegnazione per trigger change detection SQLAlchemy)
         existing = dict(participant.collected_data or {})
@@ -255,27 +287,28 @@ def submit_landing_data(token):
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Errore submit landing: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Errore submit landing: {str(e)}", exc_info=True)
+        return jsonify({'error': 'An error occurred while saving your data. Please try again.'}), 500
 
 
 @landing_bp.route('/landing/<token>/checkout', methods=['POST'])
+@limiter.limit("3 per minute")
 def create_checkout(token):
     """Create Stripe Checkout Session for landing page payment."""
     try:
         payload = TokenService.verify_token(token)
         if not payload:
-            return jsonify({'error': 'Token non valido'}), 400
+            return jsonify({'error': 'Invalid token'}), 400
 
         participant = db.query(Participant).filter_by(
             id=payload['participant_id']
         ).with_for_update().first()
 
         if not participant:
-            return jsonify({'error': 'Partecipante non trovato'}), 404
+            return jsonify({'error': 'Participant not found'}), 404
 
         if participant.status == ParticipantStatus.COMPLETED:
-            return jsonify({'error': 'Già completato'}), 400
+            return jsonify({'error': 'Already completed'}), 400
 
         # Find current step
         current_step = None
@@ -287,18 +320,18 @@ def create_checkout(token):
         # Get payment config from skip_conditions
         config = current_step.skip_conditions or {} if current_step else {}
         if not config.get('payment_enabled'):
-            return jsonify({'error': 'Pagamento non richiesto per questo step'}), 400
+            return jsonify({'error': 'Payment not required for this step'}), 400
 
         amount_cents = int(config.get('payment_amount_cents', 0))
         if amount_cents <= 0:
-            return jsonify({'error': 'Importo non configurato'}), 400
+            return jsonify({'error': 'Amount not configured'}), 400
 
         currency = config.get('payment_currency', current_app.config.get('STRIPE_PAYMENT_CURRENCY', 'eur'))
         description = config.get('payment_description', f'{participant.workflow.name} - {current_step.name}')
 
         # Check for existing successful payment (idempotency)
         if PaymentService.has_successful_payment(participant.id, current_step.id):
-            return jsonify({'error': 'Pagamento già effettuato'}), 400
+            return jsonify({'error': 'Payment already completed'}), 400
 
         # Store form data temporarily with _payment_pending flag
         form_data = request.get_json() or {}
@@ -346,11 +379,11 @@ def create_checkout(token):
     except PaymentError as e:
         db.rollback()
         logger.error(f"PAYMENT ERROR create_checkout: {str(e)}")
-        return jsonify({'error': 'Errore creazione pagamento'}), 500
+        return jsonify({'error': 'Payment creation error'}), 500
     except Exception as e:
         db.rollback()
         logger.error(f"PAYMENT ERROR create_checkout: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Errore creazione pagamento'}), 500
+        return jsonify({'error': 'Payment creation error'}), 500
 
 
 @landing_bp.route('/landing/<token>/payment-success', methods=['GET'])
@@ -359,18 +392,18 @@ def payment_success(token):
     try:
         payload = TokenService.verify_token(token)
         if not payload:
-            return render_template('landing/error.html', error='Link scaduto o non valido'), 400
+            return render_template('landing/error.html', error='Link expired or invalid'), 400
 
         session_id = request.args.get('session_id')
         if not session_id:
-            return render_template('landing/error.html', error='Sessione pagamento mancante'), 400
+            return render_template('landing/error.html', error='Payment session missing'), 400
 
         participant = db.query(Participant).filter_by(
             id=payload['participant_id']
         ).with_for_update().first()
 
         if not participant:
-            return render_template('landing/error.html', error='Partecipante non trovato'), 404
+            return render_template('landing/error.html', error='Participant not found'), 404
 
         # Verify payment with Stripe API
         session_data = PaymentService.verify_checkout_session(session_id)
@@ -440,11 +473,11 @@ def payment_success(token):
     except PaymentError as e:
         db.rollback()
         logger.error(f"PAYMENT ERROR payment_success: {str(e)}")
-        return render_template('landing/error.html', error='Errore verifica pagamento. Se il pagamento è stato effettuato, verrà registrato automaticamente.'), 500
+        return render_template('landing/error.html', error='Payment verification error. If the payment was completed, it will be recorded automatically.'), 500
     except Exception as e:
         db.rollback()
         logger.error(f"PAYMENT ERROR payment_success: {str(e)}", exc_info=True)
-        return render_template('landing/error.html', error='Errore verifica pagamento'), 500
+        return render_template('landing/error.html', error='Payment verification error'), 500
 
 
 @landing_bp.route('/landing/<token>/payment-cancelled', methods=['GET'])
@@ -453,11 +486,11 @@ def payment_cancelled(token):
     try:
         payload = TokenService.verify_token(token)
         if not payload:
-            return render_template('landing/error.html', error='Link scaduto o non valido'), 400
+            return render_template('landing/error.html', error='Link expired or invalid'), 400
 
         participant = db.get(Participant, payload['participant_id'])
         if not participant:
-            return render_template('landing/error.html', error='Partecipante non trovato'), 404
+            return render_template('landing/error.html', error='Participant not found'), 404
 
         # Remove _payment_pending flag but keep form data
         existing = dict(participant.collected_data or {})
@@ -478,22 +511,23 @@ def payment_cancelled(token):
 
     except Exception as e:
         logger.error(f"PAYMENT ERROR payment_cancelled: {str(e)}")
-        return render_template('landing/error.html', error='Errore'), 500
+        return render_template('landing/error.html', error='An error occurred'), 500
 
 
 @landing_bp.route('/landing/<token>/unsubscribe', methods=['POST'])
+@limiter.limit("3 per minute")
 def unsubscribe_from_landing(token):
     """Unsubscribe da landing page"""
     try:
         payload = TokenService.verify_token(token)
         
         if not payload:
-            return jsonify({'error': 'Token non valido'}), 400
+            return jsonify({'error': 'Invalid token'}), 400
         
         participant = db.get(Participant, payload['participant_id'])
         
         if not participant:
-            return jsonify({'error': 'Partecipante non trovato'}), 404
+            return jsonify({'error': 'Participant not found'}), 404
         
         # Cancella esecuzioni
         SchedulerService.cancel_scheduled_executions(participant.id)
@@ -517,8 +551,8 @@ def unsubscribe_from_landing(token):
         
     except Exception as e:
         db.rollback()
-        logger.error(f"Errore unsubscribe landing: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Errore unsubscribe landing: {str(e)}", exc_info=True)
+        return jsonify({'error': 'An error occurred. Please try again.'}), 500
 
 
 @landing_bp.route('/approval/<token>', methods=['GET'])
@@ -628,15 +662,15 @@ def show_survey(token):
     try:
         payload = TokenService.verify_token(token)
         if not payload:
-            return render_template('landing/error.html', error='Link scaduto o non valido'), 400
+            return render_template('landing/error.html', error='Link expired or invalid'), 400
 
         participant = db.get(Participant, payload['participant_id'])
         if not participant:
-            return render_template('landing/error.html', error='Partecipante non trovato'), 404
+            return render_template('landing/error.html', error='Participant not found'), 404
 
         choice = request.args.get('choice', '')
         if not choice:
-            return render_template('landing/error.html', error='Nessuna risposta selezionata'), 400
+            return render_template('landing/error.html', error='No answer selected'), 400
 
         # Trova lo step survey per il nome
         survey_step = None
@@ -678,4 +712,4 @@ def show_survey(token):
     except Exception as e:
         db.rollback()
         logger.error(f"Errore survey: {str(e)}")
-        return render_template('landing/error.html', error='Errore salvataggio risposta'), 500
+        return render_template('landing/error.html', error='Error saving response'), 500
