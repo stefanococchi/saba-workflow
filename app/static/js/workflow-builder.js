@@ -5339,8 +5339,7 @@ function drValidateMustBe(stepIdx, formData) {
             var val = String(formData[f.name] || '').toLowerCase();
             if (val !== String(f.must_be).toLowerCase()) {
                 var msg = f.must_be_message || 'You must select "' + f.must_be + '" for "' + (f.label || f.name) + '"';
-                drLog('error', 'bi-exclamation-triangle', msg, '');
-                alert(msg);
+                drLog('error', 'bi-exclamation-triangle', msg, f.label || f.name);
                 return false;
             }
         }
