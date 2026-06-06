@@ -5328,22 +5328,46 @@ function drRenderLandingForm(result, idx) {
     return html;
 }
 
-// Validate must_be constraints on landing form fields (logs warnings, never blocks)
+// Validate must_be constraints on landing form fields — blocks submission like the real landing page
 function drValidateMustBe(stepIdx, formData) {
     var result = drState.stepResults[stepIdx];
     var fields = result ? result.landingFields : null;
-    if (!fields) return;
+    if (!fields) return true;
+
+    // Clear previous error hints
+    var container = document.getElementById('drLandingFields_' + stepIdx);
+    if (container) {
+        container.querySelectorAll('.dr-must-be-error').forEach(function(el) { el.remove(); });
+        container.querySelectorAll('.dr-must-be-invalid').forEach(function(el) { el.classList.remove('dr-must-be-invalid'); });
+    }
+
+    var hasError = false;
     for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
         if (f.must_be) {
             var val = String(formData[f.name] || '').toLowerCase();
             var required = String(f.must_be).toLowerCase();
             if (val !== required) {
-                var msg = f.must_be_message || 'You must select "' + f.must_be + '" for "' + (f.label || f.name) + '"';
-                drLog('error', 'bi-exclamation-triangle', msg, (f.label || f.name) + ': selected "' + (formData[f.name] || '') + '", required "' + f.must_be + '"');
+                hasError = true;
+                var msg = f.must_be_message || 'You must select "' + f.must_be + '" to proceed';
+                // Show inline error next to the field
+                if (container) {
+                    var fieldDiv = container.querySelector('[data-field="' + f.name + '"]');
+                    if (fieldDiv) {
+                        var wrapper = fieldDiv.closest('.dr-landing-field');
+                        if (wrapper) {
+                            wrapper.classList.add('dr-must-be-invalid');
+                            var hint = document.createElement('div');
+                            hint.className = 'dr-must-be-error';
+                            hint.textContent = msg;
+                            wrapper.appendChild(hint);
+                        }
+                    }
+                }
             }
         }
     }
+    return !hasError;
 }
 
 // Submit landing form — collect field values and feed into collected_data
@@ -5366,8 +5390,8 @@ function drSubmitLandingForm(stepIdx) {
         }
     });
 
-    // Log must_be warnings (does not block)
-    drValidateMustBe(stepIdx, formData);
+    // Validate must_be — blocks if invalid, like the real landing page
+    if (!drValidateMustBe(stepIdx, formData)) return;
 
     // Merge into collected_data (so subsequent conditions can use it)
     Object.keys(formData).forEach(function(k) {
@@ -5411,8 +5435,8 @@ function drSubmitLandingFormWithPayment(stepIdx, paymentOk) {
         } catch(e) {}
     }
 
-    // Log must_be warnings (does not block)
-    drValidateMustBe(stepIdx, formData);
+    // Validate must_be — blocks if invalid, like the real landing page
+    if (!drValidateMustBe(stepIdx, formData)) return;
 
     var step = workflowSteps[stepIdx];
     var payAmount = (parseFloat(step.config.payment_amount) || 0).toFixed(2);

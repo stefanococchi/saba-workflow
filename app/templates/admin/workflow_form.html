@@ -1037,6 +1037,18 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
 .dr-landing-field .dr-input {
     background: var(--md-surface-container-lowest, #fff);
 }
+.dr-landing-field.dr-must-be-invalid .dr-input,
+.dr-landing-field.dr-must-be-invalid .dr-radio-group {
+    border: 2px solid var(--md-error, #B3261E);
+    border-radius: 8px;
+    padding: 6px;
+}
+.dr-must-be-error {
+    color: var(--md-error, #B3261E);
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+}
 .dr-radio-group {
     display: flex;
     flex-wrap: wrap;
