@@ -193,13 +193,12 @@ class PaymentService:
         Deterministic idempotency key: participant + step + date + attempt count.
         Prevents double-charging within the same attempt, but allows retries after rollback.
         """
-        # Count existing INITIATED payments for this participant+step today
+        # Count all payment attempts for this participant+step today
         attempt = 0
         try:
-            attempt = _db().query(PaymentLog).filter_by(
-                participant_id=participant_id,
-                step_id=step_id,
-                status=PaymentStatus.INITIATED,
+            attempt = _db().query(PaymentLog).filter(
+                PaymentLog.participant_id == participant_id,
+                PaymentLog.step_id == step_id,
             ).count()
         except Exception:
             pass
