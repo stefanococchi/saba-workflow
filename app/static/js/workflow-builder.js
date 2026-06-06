@@ -5328,6 +5328,26 @@ function drRenderLandingForm(result, idx) {
     return html;
 }
 
+// Validate must_be constraints on landing form fields
+function drValidateMustBe(stepIdx, formData) {
+    var result = drState.stepResults[stepIdx];
+    var fields = result ? result.landingFields : null;
+    if (!fields) return true;
+    for (var i = 0; i < fields.length; i++) {
+        var f = fields[i];
+        if (f.must_be) {
+            var val = String(formData[f.name] || '').toLowerCase();
+            if (val !== String(f.must_be).toLowerCase()) {
+                var msg = f.must_be_message || 'You must select "' + f.must_be + '" for "' + (f.label || f.name) + '"';
+                drLog('error', 'bi-exclamation-triangle', msg, '');
+                alert(msg);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 // Submit landing form — collect field values and feed into collected_data
 function drSubmitLandingForm(stepIdx) {
     if (!drState) return;
@@ -5347,6 +5367,9 @@ function drSubmitLandingForm(stepIdx) {
             formData[field] = el.value;
         }
     });
+
+    // Validate must_be constraints
+    if (!drValidateMustBe(stepIdx, formData)) return;
 
     // Merge into collected_data (so subsequent conditions can use it)
     Object.keys(formData).forEach(function(k) {
@@ -5389,6 +5412,9 @@ function drSubmitLandingFormWithPayment(stepIdx, paymentOk) {
             document.getElementById('drCollectedData').value = JSON.stringify(drState.config.collected_data, null, 2);
         } catch(e) {}
     }
+
+    // Validate must_be constraints
+    if (!drValidateMustBe(stepIdx, formData)) return;
 
     var step = workflowSteps[stepIdx];
     var payAmount = (parseFloat(step.config.payment_amount) || 0).toFixed(2);
