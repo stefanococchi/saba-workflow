@@ -5352,15 +5352,16 @@ function drValidateMustBe(stepIdx, formData) {
                 var msg = f.must_be_message || 'You must select "' + f.must_be + '" to proceed';
                 // Show inline error next to the field
                 if (container) {
-                    var fieldDiv = container.querySelector('[data-field="' + f.name + '"]');
-                    if (fieldDiv) {
-                        var wrapper = fieldDiv.closest('.dr-landing-field');
-                        if (wrapper) {
-                            wrapper.classList.add('dr-must-be-invalid');
+                    // Find all .dr-landing-field wrappers and match by data-field inside
+                    var allFields = container.querySelectorAll('.dr-landing-field');
+                    for (var j = 0; j < allFields.length; j++) {
+                        if (allFields[j].querySelector('[data-field="' + f.name + '"]')) {
+                            allFields[j].classList.add('dr-must-be-invalid');
                             var hint = document.createElement('div');
                             hint.className = 'dr-must-be-error';
                             hint.textContent = msg;
-                            wrapper.appendChild(hint);
+                            allFields[j].appendChild(hint);
+                            break;
                         }
                     }
                 }
