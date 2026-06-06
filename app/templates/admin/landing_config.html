@@ -636,7 +636,7 @@ function initFromConfig(cfg) {
     // Ripristina campi
     fields = [];
     (cfg.fields || []).forEach(function(f) {
-        addField(f.label, f.name, f.type, f.placeholder || '', f.required, f.width || '100%', f.options);
+        addField(f.label, f.name, f.type, f.placeholder || '', f.required, f.width || '100%', f.options, f.must_be || '');
     });
 
     updatePreview();
@@ -698,7 +698,7 @@ function selectTemplate(name) {
 // =============================================
 // FIELDS MANAGEMENT
 // =============================================
-function addField(label, name, type, placeholder, required, width, options) {
+function addField(label, name, type, placeholder, required, width, options, must_be) {
     label = label || '';
     name = name || '';
     type = type || 'text';
@@ -706,9 +706,10 @@ function addField(label, name, type, placeholder, required, width, options) {
     required = required !== undefined ? required : false;
     width = width || '100%';
     options = options || '';
+    must_be = must_be || '';
 
     var idx = fields.length;
-    fields.push({ label: label, name: name, type: type, placeholder: placeholder, required: required, width: width, options: options });
+    fields.push({ label: label, name: name, type: type, placeholder: placeholder, required: required, width: width, options: options, must_be: must_be });
     renderFields();
     updatePreview();
 }
