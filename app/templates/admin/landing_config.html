@@ -487,6 +487,7 @@
                             <th style="width:130px">Tipo</th>
                             <th style="width:150px">Placeholder</th>
                             <th style="width:60px">Obbl.</th>
+                            <th style="width:90px">Must be</th>
                             <th style="width:80px">Largh.</th>
                             <th style="width:40px"></th>
                         </tr>
@@ -743,6 +744,7 @@ function renderFields() {
             '</select></td>' +
             '<td><input type="text" value="' + esc(isChoice ? f.options : f.placeholder) + '" class="form-control form-control-sm" placeholder="' + (isChoice ? 'opt1, opt2, opt3' : 'Placeholder...') + '" onchange="updateField(' + i + ',\'' + (isChoice ? 'options' : 'placeholder') + '\',this.value)"></td>' +
             '<td class="text-center"><input type="checkbox" class="form-check-input"' + (f.required ? ' checked' : '') + ' onchange="updateField(' + i + ',\'required\',this.checked)"></td>' +
+            '<td>' + (isChoice ? '<input type="text" value="' + esc(f.must_be || '') + '" class="form-control form-control-sm" placeholder="e.g. yes" onchange="updateField(' + i + ',\'must_be\',this.value)" title="Required value to proceed">' : '') + '</td>' +
             '<td><select class="form-select form-select-sm" onchange="updateField(' + i + ',\'width\',this.value)">' +
                 '<option value="100%"' + (f.width==='100%'?' selected':'') + '>Intera</option>' +
                 '<option value="50%"' + (f.width==='50%'?' selected':'') + '>Metà</option>' +
@@ -862,6 +864,7 @@ function generateHTML() {
                 opt = opt.trim();
                 if (opt) fieldsHtml += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:400;color:' + textColor + ';font-size:14px;cursor:pointer"><input type="radio" name="' + esc(f.name) + '" value="' + esc(opt) + '"> ' + esc(opt) + '</label>';
             });
+            if (f.must_be) fieldsHtml += '<small style="color:#c62828;font-size:11px">Must select "' + esc(f.must_be) + '" to proceed</small>';
         } else if (f.type === 'checkbox') {
             (f.options || '').split(',').forEach(function(opt) {
                 opt = opt.trim();

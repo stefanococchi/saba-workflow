@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, render_template, render_template_string, current_app
 from markupsafe import Markup
 from app import db_session as db
-from app.app_init import limiter
+from app import limiter
 from app.models import Participant, WorkflowStep, ParticipantStatus, StepType, ActivityLog, PaymentStatus
 from app.services import TokenService, SchedulerService
 from app.services.activity_service import log_activity
@@ -222,6 +222,23 @@ def submit_landing_data(token):
         validation_error = _validate_form_data(form_data)
         if validation_error:
             return jsonify({'error': validation_error}), 400
+
+        # Validate must_be constraints (e.g. "accept terms" must be "yes")
+        current_step_for_validation = None
+        if payload.get('step_id'):
+            current_step_for_validation = db.get(WorkflowStep, payload['step_id'])
+        if current_step_for_validation:
+            fields_config = None
+            if current_step_for_validation.landing_page_config:
+                fields_config = current_step_for_validation.landing_page_config.get('fields', [])
+            elif current_step_for_validation.landing_gjs_data and isinstance(current_step_for_validation.landing_gjs_data, dict):
+                fields_config = current_step_for_validation.landing_gjs_data.get('fields', [])
+            if fields_config:
+                for fc in fields_config:
+                    must_be = fc.get('must_be')
+                    if must_be and str(form_data.get(fc['name'], '')).lower() != str(must_be).lower():
+                        msg = fc.get('must_be_message', f'You must select "{must_be}" for "{fc.get("label", fc["name"])}"')
+                        return jsonify({'error': msg}), 400
 
         # Merge con dati esistenti (riassegnazione per trigger change detection SQLAlchemy)
         existing = dict(participant.collected_data or {})
