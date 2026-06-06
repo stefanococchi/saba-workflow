@@ -5328,13 +5328,13 @@ function drRenderLandingForm(result, idx) {
     return html;
 }
 
-// Validate must_be constraints on landing form fields — blocks submission like the real landing page
-function drValidateMustBe(stepIdx, formData) {
+// Validate landing form fields (required + must_be) — blocks submission like the real landing page
+function drValidateLandingForm(stepIdx, formData) {
     var result = drState.stepResults[stepIdx];
     var fields = result ? result.landingFields : null;
     if (!fields) return true;
 
-    // Clear previous error hints
+    // Clear previous errors
     var container = document.getElementById('drLandingFields_' + stepIdx);
     if (container) {
         container.querySelectorAll('.dr-must-be-error').forEach(function(el) { el.remove(); });
@@ -5342,29 +5342,38 @@ function drValidateMustBe(stepIdx, formData) {
     }
 
     var hasError = false;
+
+    function showFieldError(fieldName, msg) {
+        hasError = true;
+        if (!container) return;
+        var allFields = container.querySelectorAll('.dr-landing-field');
+        for (var j = 0; j < allFields.length; j++) {
+            if (allFields[j].querySelector('[data-field="' + fieldName + '"]')) {
+                allFields[j].classList.add('dr-must-be-invalid');
+                var hint = document.createElement('div');
+                hint.className = 'dr-must-be-error';
+                hint.textContent = msg;
+                allFields[j].appendChild(hint);
+                break;
+            }
+        }
+    }
+
     for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
-        if (f.must_be) {
-            var val = String(formData[f.name] || '').toLowerCase();
-            var required = String(f.must_be).toLowerCase();
-            if (val !== required) {
-                hasError = true;
-                var msg = f.must_be_message || 'You must select "' + f.must_be + '" to proceed';
-                // Show inline error next to the field
-                if (container) {
-                    // Find all .dr-landing-field wrappers and match by data-field inside
-                    var allFields = container.querySelectorAll('.dr-landing-field');
-                    for (var j = 0; j < allFields.length; j++) {
-                        if (allFields[j].querySelector('[data-field="' + f.name + '"]')) {
-                            allFields[j].classList.add('dr-must-be-invalid');
-                            var hint = document.createElement('div');
-                            hint.className = 'dr-must-be-error';
-                            hint.textContent = msg;
-                            allFields[j].appendChild(hint);
-                            break;
-                        }
-                    }
-                }
+        var val = formData[f.name];
+        var isEmpty = val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);
+
+        // Required check
+        if (f.required && isEmpty) {
+            showFieldError(f.name, 'This field is required');
+            continue;
+        }
+
+        // Must_be check
+        if (f.must_be && !isEmpty) {
+            if (String(val).toLowerCase() !== String(f.must_be).toLowerCase()) {
+                showFieldError(f.name, f.must_be_message || 'You must select "' + f.must_be + '" to proceed');
             }
         }
     }
@@ -5392,7 +5401,7 @@ function drSubmitLandingForm(stepIdx) {
     });
 
     // Validate must_be — blocks if invalid, like the real landing page
-    if (!drValidateMustBe(stepIdx, formData)) return;
+    if (!drValidateLandingForm(stepIdx, formData)) return;
 
     // Merge into collected_data (so subsequent conditions can use it)
     Object.keys(formData).forEach(function(k) {
@@ -5437,7 +5446,7 @@ function drSubmitLandingFormWithPayment(stepIdx, paymentOk) {
     }
 
     // Validate must_be — blocks if invalid, like the real landing page
-    if (!drValidateMustBe(stepIdx, formData)) return;
+    if (!drValidateLandingForm(stepIdx, formData)) return;
 
     var step = workflowSteps[stepIdx];
     var payAmount = (parseFloat(step.config.payment_amount) || 0).toFixed(2);
