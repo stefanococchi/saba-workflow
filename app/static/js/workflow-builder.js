@@ -5328,11 +5328,11 @@ function drRenderLandingForm(result, idx) {
     return html;
 }
 
-// Validate must_be constraints on landing form fields
+// Validate must_be constraints on landing form fields (logs warnings, never blocks)
 function drValidateMustBe(stepIdx, formData) {
     var result = drState.stepResults[stepIdx];
     var fields = result ? result.landingFields : null;
-    if (!fields) return true;
+    if (!fields) return;
     for (var i = 0; i < fields.length; i++) {
         var f = fields[i];
         if (f.must_be) {
@@ -5340,12 +5340,10 @@ function drValidateMustBe(stepIdx, formData) {
             var required = String(f.must_be).toLowerCase();
             if (val !== required) {
                 var msg = f.must_be_message || 'You must select "' + f.must_be + '" for "' + (f.label || f.name) + '"';
-                drLog('error', 'bi-exclamation-triangle', msg, f.label || f.name);
-                return false;
+                drLog('error', 'bi-exclamation-triangle', msg, (f.label || f.name) + ': selected "' + (formData[f.name] || '') + '", required "' + f.must_be + '"');
             }
         }
     }
-    return true;
 }
 
 // Submit landing form — collect field values and feed into collected_data
@@ -5368,8 +5366,8 @@ function drSubmitLandingForm(stepIdx) {
         }
     });
 
-    // Validate must_be constraints
-    if (!drValidateMustBe(stepIdx, formData)) return;
+    // Log must_be warnings (does not block)
+    drValidateMustBe(stepIdx, formData);
 
     // Merge into collected_data (so subsequent conditions can use it)
     Object.keys(formData).forEach(function(k) {
@@ -5413,8 +5411,8 @@ function drSubmitLandingFormWithPayment(stepIdx, paymentOk) {
         } catch(e) {}
     }
 
-    // Validate must_be constraints
-    if (!drValidateMustBe(stepIdx, formData)) return;
+    // Log must_be warnings (does not block)
+    drValidateMustBe(stepIdx, formData);
 
     var step = workflowSteps[stepIdx];
     var payAmount = (parseFloat(step.config.payment_amount) || 0).toFixed(2);
