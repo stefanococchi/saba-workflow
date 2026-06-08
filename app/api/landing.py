@@ -193,10 +193,11 @@ def submit_landing_data(token):
             return jsonify({'error': 'Already completed'}), 400
 
         # Verifica se form già compilato (anti double-submit)
-        # Ignore internal keys (_payment, _payment_pending, _payment_step_id) when checking
+        # Allow resubmission if previous data was only a pending payment (user went back)
         if participant.collected_data:
             user_keys = [k for k in participant.collected_data.keys() if not k.startswith('_')]
-            if user_keys:
+            is_pending_payment = participant.collected_data.get('_payment_pending', False)
+            if user_keys and not is_pending_payment:
                 return jsonify({'error': 'Form already submitted'}), 409
 
         # Guard: block direct submission if payment is required but not completed
