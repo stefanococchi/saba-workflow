@@ -88,7 +88,20 @@ class PaymentService:
             if idempotency_key:
                 kwargs['idempotency_key'] = idempotency_key
 
-            session = stripe.checkout.Session.create(**params, **kwargs)
+            try:
+                session = stripe.checkout.Session.create(**params, **kwargs)
+            except stripe.IdempotencyError:
+                # Idempotency key collision (e.g. participant was reset and retries)
+                # Retry once with a unique key
+                logger.warning(
+                    f"STRIPE: IdempotencyError for key={idempotency_key}, retrying with new key | "
+                    f"participant={participant_id} step={step_id}"
+                )
+                import uuid
+                kwargs['idempotency_key'] = hashlib.sha256(
+                    f"pay_{participant_id}_{step_id}_{uuid.uuid4()}".encode()
+                ).hexdigest()[:32]
+                session = stripe.checkout.Session.create(**params, **kwargs)
 
             logger.info(
                 f"STRIPE: Checkout session created | session={session.id} "
@@ -193,7 +206,7 @@ class PaymentService:
         Deterministic idempotency key: participant + step + date + attempt count.
         Prevents double-charging within the same attempt, but allows retries after rollback.
         """
-        # Count all payment attempts for this participant+step today
+        # Count all payment attempts for this participant+step
         attempt = 0
         try:
             attempt = _db().query(PaymentLog).filter(
