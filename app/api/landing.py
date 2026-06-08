@@ -485,7 +485,8 @@ def payment_success(token):
             db.commit()
 
         return render_template('landing/payment_success.html',
-                             participant=participant, workflow=participant.workflow)
+                             participant=participant, workflow=participant.workflow,
+                             payment_time=datetime.utcnow())
 
     except PaymentError as e:
         db.rollback()

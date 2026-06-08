@@ -17,7 +17,7 @@
         <p><strong>Name:</strong> {{ participant.full_name }}</p>
         {% endif %}
         <p><strong>Email:</strong> {{ participant.email }}</p>
-        <p><strong>Completed on:</strong> {{ participant.completed_at|localtime('%d/%m/%Y %H:%M') }}</p>
+        <p><strong>Completed on:</strong> {{ payment_time|localtime('%d/%m/%Y %H:%M') }}</p>
     </div>
 
     <p style="margin-top: 30px; color: #999; font-size: 14px;">
