@@ -142,7 +142,10 @@
                         ? 'Please select one of these options.'
                         : 'Please fill out this field.';
                     inp.addEventListener('invalid', function() { inp.setCustomValidity(msg); });
-                    inp.addEventListener('change', function() { inp.setCustomValidity(''); });
+                    inp.addEventListener('change', function() {
+                        // Clear validity on ALL inputs in the same group (radio/checkbox)
+                        inputs.forEach(function(i) { i.setCustomValidity(''); });
+                    });
                     inp.addEventListener('input', function() { inp.setCustomValidity(''); });
                 });
             }
