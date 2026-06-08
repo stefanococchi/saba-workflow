@@ -853,19 +853,21 @@ function generateHTML() {
         if (f.type === 'textarea') {
             fieldsHtml += '<textarea name="' + esc(f.name) + '" rows="3" placeholder="' + esc(f.placeholder) + '"' + (f.required ? ' required' : '') + ' style="' + inputStyle + ';resize:vertical"></textarea>';
         } else if (f.type === 'select') {
-            fieldsHtml += '<select name="' + esc(f.name) + '"' + (f.required ? ' required' : '') + ' style="' + inputStyle + '">';
-            fieldsHtml += '<option value="">Seleziona...</option>';
+            fieldsHtml += '<select name="' + esc(f.name) + '"' + (f.required ? ' required' : '') + (f.must_be ? ' data-must-be="' + esc(f.must_be) + '"' : '') + ' style="' + inputStyle + '">';
+            fieldsHtml += '<option value="">Select...</option>';
             (f.options || '').split(',').forEach(function(opt) {
                 opt = opt.trim();
                 if (opt) fieldsHtml += '<option value="' + esc(opt) + '">' + esc(opt) + '</option>';
             });
             fieldsHtml += '</select>';
         } else if (f.type === 'radio') {
+            fieldsHtml += '<div data-radio-group="' + esc(f.name) + '"' + (f.must_be ? ' data-must-be="' + esc(f.must_be) + '"' : '') + '>';
             (f.options || '').split(',').forEach(function(opt) {
                 opt = opt.trim();
                 if (opt) fieldsHtml += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:400;color:' + textColor + ';font-size:14px;cursor:pointer"><input type="radio" name="' + esc(f.name) + '" value="' + esc(opt) + '"> ' + esc(opt) + '</label>';
             });
-            if (f.must_be) fieldsHtml += '<small style="color:#c62828;font-size:11px">Must select "' + esc(f.must_be) + '" to proceed</small>';
+            if (f.must_be) fieldsHtml += '<small class="must-be-hint" style="color:#c62828;font-size:11px;display:none">Must select "' + esc(f.must_be) + '" to proceed</small>';
+            fieldsHtml += '</div>';
         } else if (f.type === 'checkbox') {
             (f.options || '').split(',').forEach(function(opt) {
                 opt = opt.trim();

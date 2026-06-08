@@ -82,11 +82,56 @@
     (function() {
         var _submitting = false;
         var _payment = window.__sabaPayment || {};
-        // Intercetta tutti i form con classe saba-landing-form
+
+        // must_be validation: block submit if select/radio value doesn't match required value
+        function validateMustBe(form) {
+            var ok = true;
+            // Select dropdowns with data-must-be
+            form.querySelectorAll('select[data-must-be]').forEach(function(sel) {
+                var required = sel.getAttribute('data-must-be');
+                var hint = sel.parentElement.querySelector('.must-be-hint');
+                if (sel.value !== required) {
+                    ok = false;
+                    sel.style.borderColor = '#c62828';
+                    if (hint) hint.style.display = 'block';
+                } else {
+                    sel.style.borderColor = '';
+                    if (hint) hint.style.display = 'none';
+                }
+            });
+            // Radio button groups with data-must-be
+            form.querySelectorAll('[data-radio-group][data-must-be]').forEach(function(group) {
+                var required = group.getAttribute('data-must-be');
+                var name = group.getAttribute('data-radio-group');
+                var checked = group.querySelector('input[name="' + name + '"]:checked');
+                var hint = group.querySelector('.must-be-hint');
+                if (!checked || checked.value !== required) {
+                    ok = false;
+                    group.style.borderLeft = '3px solid #c62828';
+                    group.style.paddingLeft = '8px';
+                    if (hint) hint.style.display = 'block';
+                } else {
+                    group.style.borderLeft = '';
+                    group.style.paddingLeft = '';
+                    if (hint) hint.style.display = 'none';
+                }
+            });
+            return ok;
+        }
+
+        // Live feedback on change for must_be fields
+        document.querySelectorAll('select[data-must-be]').forEach(function(sel) {
+            sel.addEventListener('change', function() { validateMustBe(sel.closest('form') || document); });
+        });
+        document.querySelectorAll('[data-radio-group][data-must-be] input[type="radio"]').forEach(function(r) {
+            r.addEventListener('change', function() { validateMustBe(r.closest('form') || document); });
+        });
+
         var forms = document.querySelectorAll('.saba-landing-form');
         forms.forEach(function(form) {
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
+                if (!validateMustBe(form)) return;
                 if (_submitting) return;
                 _submitting = true;
 
@@ -109,12 +154,12 @@
                     if (value instanceof File && value.size > 0) {
                         if (value.size > 20 * 1024 * 1024) {
                             if (errorMsg) {
-                                errorMsg.textContent = 'File troppo grande (max 20 MB).';
+                                errorMsg.textContent = 'File too large (max 20 MB).';
                                 errorMsg.style.display = 'block';
                             }
                             if (submitBtn) {
                                 submitBtn.disabled = false;
-                                submitBtn.textContent = 'Invia';
+                                submitBtn.textContent = 'Submit';
                             }
                             _submitting = false;
                             return;
@@ -136,7 +181,15 @@
                 try {
                     await Promise.all(filePromises);
 
-                    if (_payment.enabled && !_payment.already_paid) {
+                    // Check if payment condition is met
+                    var needsPayment = _payment.enabled && !_payment.already_paid;
+                    if (needsPayment && _payment.condition_field) {
+                        var condVal = data[_payment.condition_field] || '';
+                        if (Array.isArray(condVal)) condVal = condVal.join(',');
+                        needsPayment = String(condVal).toLowerCase() === String(_payment.condition_value).toLowerCase();
+                    }
+
+                    if (needsPayment) {
                         // Payment flow: redirect to Stripe Checkout
                         if (submitBtn) submitBtn.textContent = 'Redirecting to payment...';
                         var response = await fetch('/landing/{{ token }}/checkout', {
@@ -179,7 +232,7 @@
                             }
                             if (submitBtn) {
                                 submitBtn.disabled = false;
-                                submitBtn.textContent = 'Invia';
+                                submitBtn.textContent = 'Submit';
                             }
                             _submitting = false;
                         }
@@ -191,7 +244,7 @@
                     }
                     if (submitBtn) {
                         submitBtn.disabled = false;
-                        submitBtn.textContent = 'Invia';
+                        submitBtn.textContent = 'Submit';
                     }
                     _submitting = false;
                 }
@@ -203,7 +256,7 @@
         unsubLinks.forEach(function(link) {
             link.addEventListener('click', async function(e) {
                 e.preventDefault();
-                if (!confirm('Sei sicuro di volerti disiscrivere?')) return;
+                if (!confirm('Are you sure you want to unsubscribe?')) return;
 
                 try {
                     var response = await fetch('/landing/{{ token }}/unsubscribe', {
