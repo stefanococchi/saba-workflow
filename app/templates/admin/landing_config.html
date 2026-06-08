@@ -928,10 +928,7 @@ function saveConfig() {
     var config = collectConfig();
     var html = generateHTML();
 
-    // Inietta script submit nel HTML
-    var btnLabel = document.getElementById('cfgButtonText').value || 'Invia';
-    var submitScript = '<scr' + 'ipt>(function(){function readFileB64(file){return new Promise(function(ok,fail){var r=new FileReader();r.onload=function(){ok(r.result)};r.onerror=fail;r.readAsDataURL(file)});}var forms=document.querySelectorAll(".saba-landing-form");forms.forEach(function(f){f.addEventListener("submit",function(e){e.preventDefault();var btn=f.querySelector("[type=submit]");if(btn){btn.disabled=true;btn.textContent="Invio...";}var fd=new FormData(f);var d={};var fps=[];fd.forEach(function(v,k){if(v instanceof File&&v.size>0){if(v.size>20*1024*1024){alert("File troppo grande (max 20 MB)");if(btn){btn.disabled=false;btn.textContent="' + btnLabel + '";}return;}fps.push(readFileB64(v).then(function(b){d[k]={filename:v.name,mime:v.type,size:v.size,data:b};}));}else if(v instanceof File){/*empty file,skip*/}else if(d[k]){if(!Array.isArray(d[k]))d[k]=[d[k]];d[k].push(v);}else{d[k]=v;}});Promise.all(fps).then(function(){return fetch(window.location.pathname,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)});}).then(function(r){if(r.ok){var s=document.querySelector(".saba-success-msg");if(s)s.style.display="block";f.style.display="none";}else{var em=document.querySelector(".saba-error-msg");if(em)em.style.display="block";if(btn){btn.disabled=false;btn.textContent="' + btnLabel + '";}}}).catch(function(){var em=document.querySelector(".saba-error-msg");if(em)em.style.display="block";if(btn){btn.disabled=false;btn.textContent="' + btnLabel + '";}});});});})();</scr' + 'ipt>';
-    html = html.replace('</body>', submitScript + '</body>');
+    // Submit handling is done by custom.html template — no inline script needed
 
     fetch(SAVE_URL, {
         method: 'POST',

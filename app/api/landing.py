@@ -132,7 +132,10 @@ def show_landing_page(token):
         # Se lo step ha un design custom (HTML pre-generato), usa quello
         landing_html = None
         if current_step and current_step.landing_html:
-            landing_html = current_step.landing_html
+            # Strip legacy inline submit script — submit is handled by custom.html template
+            landing_html = re.sub(
+                r'<script>\(function\(\)\{function readFileB64.*?</script>',
+                '', current_step.landing_html, flags=re.DOTALL)
         elif current_step and current_step.landing_gjs_data and not current_step.landing_html:
             # Config template senza HTML pre-generato — usa form.html con config dal gjs_data
             gjs = current_step.landing_gjs_data
