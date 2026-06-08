@@ -428,6 +428,7 @@ class SchedulerService:
             # jump to 'end' or no valid target → stop workflow
             SchedulerService.cancel_scheduled_executions(participant.id)
             participant.status = ParticipantStatus.COMPLETED
+            participant.completed_at = datetime.utcnow()
             _db().commit()
             logger.info(f"✓ Workflow stopped for participant {participant.id} (jump to end)")
             return
@@ -447,6 +448,7 @@ class SchedulerService:
         elif action == 'stop':
             SchedulerService.cancel_scheduled_executions(participant.id)
             participant.status = ParticipantStatus.COMPLETED
+            participant.completed_at = datetime.utcnow()
             _db().commit()
             logger.info(f"✓ Workflow stopped for participant {participant.id}")
             return
@@ -722,6 +724,7 @@ class SchedulerService:
             if action == 'complete':
                 SchedulerService.cancel_scheduled_executions(participant.id)
                 participant.status = ParticipantStatus.COMPLETED
+                participant.completed_at = datetime.utcnow()
                 _db().commit()
                 logger.info(f"✓ Workflow COMPLETED for participant {participant.id}")
                 # Mark execution as sent but don't schedule next
@@ -965,6 +968,7 @@ class SchedulerService:
             if action == 'stop':
                 SchedulerService.cancel_scheduled_executions(participant.id)
                 participant.status = ParticipantStatus.COMPLETED
+                participant.completed_at = datetime.utcnow()
                 _db().commit()
                 logger.info(f"✓ Workflow STOPPED for participant {participant.id} by condition")
             elif action == 'jump' and jump_target:
@@ -1343,6 +1347,7 @@ class SchedulerService:
                 # Explicit END
                 logger.info(f"✓ Workflow completed for participant {participant.id} (explicit END)")
                 participant.status = ParticipantStatus.COMPLETED
+                participant.completed_at = datetime.utcnow()
                 _db().commit()
                 return
             elif explicit_next and explicit_next != 'auto':
@@ -1378,6 +1383,7 @@ class SchedulerService:
             else:
                 logger.info(f"✓ Workflow completed for participant {participant.id} (no more steps)")
                 participant.status = ParticipantStatus.COMPLETED
+                participant.completed_at = datetime.utcnow()
                 _db().commit()
 
         except Exception as e:
