@@ -29,6 +29,8 @@
                 }
             }
 
+            if (!form.checkValidity()) { form.reportValidity(); return; }
+
             e.preventDefault();
             e.stopImmediatePropagation();
 
@@ -131,6 +133,7 @@
         forms.forEach(function(form) {
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
+                if (!form.checkValidity()) { form.reportValidity(); return; }
                 if (!validateMustBe(form)) return;
                 if (_submitting) return;
                 _submitting = true;
