@@ -11,6 +11,43 @@
 <body>
     <script>
     window.__sabaPayment = {{ (payment_config or {})|tojson }};
+
+    // must_be validation — global so both capture and bubble handlers can use it
+    window.__sabaValidateMustBe = function(form) {
+        var ok = true;
+        // Select dropdowns with data-must-be
+        form.querySelectorAll('select[data-must-be]').forEach(function(sel) {
+            var required = sel.getAttribute('data-must-be');
+            var hint = sel.parentElement.querySelector('.must-be-hint');
+            if (sel.value !== required) {
+                ok = false;
+                sel.style.borderColor = '#c62828';
+                if (hint) hint.style.display = 'block';
+            } else {
+                sel.style.borderColor = '';
+                if (hint) hint.style.display = 'none';
+            }
+        });
+        // Radio button groups with data-must-be
+        form.querySelectorAll('[data-radio-group][data-must-be]').forEach(function(group) {
+            var required = group.getAttribute('data-must-be');
+            var name = group.getAttribute('data-radio-group');
+            var checked = group.querySelector('input[name="' + name + '"]:checked');
+            var hint = group.querySelector('.must-be-hint');
+            if (!checked || checked.value !== required) {
+                ok = false;
+                group.style.borderLeft = '3px solid #c62828';
+                group.style.paddingLeft = '8px';
+                if (hint) hint.style.display = 'block';
+            } else {
+                group.style.borderLeft = '';
+                group.style.paddingLeft = '';
+                if (hint) hint.style.display = 'none';
+            }
+        });
+        return ok;
+    };
+
     // If payment is enabled, intercept ALL form submits in CAPTURE phase
     // (runs before the inline submit script embedded in custom_html)
     if (window.__sabaPayment && window.__sabaPayment.enabled && !window.__sabaPayment.already_paid) {
@@ -30,6 +67,7 @@
             }
 
             if (!form.checkValidity()) { form.reportValidity(); return; }
+            if (!window.__sabaValidateMustBe(form)) return;
 
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -85,41 +123,55 @@
         var _submitting = false;
         var _payment = window.__sabaPayment || {};
 
-        // must_be validation: block submit if select/radio value doesn't match required value
-        function validateMustBe(form) {
-            var ok = true;
-            // Select dropdowns with data-must-be
-            form.querySelectorAll('select[data-must-be]').forEach(function(sel) {
-                var required = sel.getAttribute('data-must-be');
-                var hint = sel.parentElement.querySelector('.must-be-hint');
-                if (sel.value !== required) {
-                    ok = false;
-                    sel.style.borderColor = '#c62828';
-                    if (hint) hint.style.display = 'block';
+        var validateMustBe = window.__sabaValidateMustBe;
+
+        // Patch saved HTML: inject required, data-must-be, data-radio-group from field config
+        var _fieldsConfig = {{ (fields_config or [])|tojson }};
+        _fieldsConfig.forEach(function(f) {
+            if (!f.name) return;
+            var form = document.querySelector('.saba-landing-form');
+            if (!form) return;
+            var inputs = form.querySelectorAll('[name="' + f.name + '"]');
+            if (!inputs.length) return;
+
+            // Add required attribute if missing
+            if (f.required) {
+                inputs.forEach(function(inp) {
+                    if (!inp.hasAttribute('required')) inp.setAttribute('required', '');
+                });
+            }
+
+            // For radio/select with must_be: add data-must-be
+            if (f.must_be && (f.type === 'radio' || f.type === 'select')) {
+                if (f.type === 'select') {
+                    inputs.forEach(function(sel) {
+                        if (!sel.hasAttribute('data-must-be')) sel.setAttribute('data-must-be', f.must_be);
+                    });
                 } else {
-                    sel.style.borderColor = '';
-                    if (hint) hint.style.display = 'none';
+                    // Radio: find or create wrapper div with data-radio-group
+                    var first = inputs[0];
+                    var wrapper = first.closest('[data-radio-group]');
+                    if (!wrapper) {
+                        // Find common parent of all radio inputs
+                        wrapper = first.parentElement.parentElement;
+                        if (wrapper) {
+                            wrapper.setAttribute('data-radio-group', f.name);
+                        }
+                    }
+                    if (wrapper && !wrapper.hasAttribute('data-must-be')) {
+                        wrapper.setAttribute('data-must-be', f.must_be);
+                        // Add hint if missing
+                        if (!wrapper.querySelector('.must-be-hint')) {
+                            var hint = document.createElement('small');
+                            hint.className = 'must-be-hint';
+                            hint.style.cssText = 'color:#c62828;font-size:11px;display:none';
+                            hint.textContent = 'Must select "' + f.must_be + '" to proceed';
+                            wrapper.appendChild(hint);
+                        }
+                    }
                 }
-            });
-            // Radio button groups with data-must-be
-            form.querySelectorAll('[data-radio-group][data-must-be]').forEach(function(group) {
-                var required = group.getAttribute('data-must-be');
-                var name = group.getAttribute('data-radio-group');
-                var checked = group.querySelector('input[name="' + name + '"]:checked');
-                var hint = group.querySelector('.must-be-hint');
-                if (!checked || checked.value !== required) {
-                    ok = false;
-                    group.style.borderLeft = '3px solid #c62828';
-                    group.style.paddingLeft = '8px';
-                    if (hint) hint.style.display = 'block';
-                } else {
-                    group.style.borderLeft = '';
-                    group.style.paddingLeft = '';
-                    if (hint) hint.style.display = 'none';
-                }
-            });
-            return ok;
-        }
+            }
+        });
 
         // Live feedback on change for must_be fields
         document.querySelectorAll('select[data-must-be]').forEach(function(sel) {

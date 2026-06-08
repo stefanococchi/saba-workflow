@@ -143,9 +143,13 @@ def show_landing_page(token):
                 landing_config = gjs
 
         if landing_html:
+            # Pass field config so template can patch missing attributes at runtime
+            gjs = current_step.landing_gjs_data
+            fields_config = gjs.get('fields', []) if isinstance(gjs, dict) else []
             return render_template('landing/custom.html',
                                  custom_html=landing_html,
                                  custom_css=current_step.landing_css or '',
+                                 fields_config=fields_config,
                                  participant=participant,
                                  workflow=participant.workflow,
                                  token=token,

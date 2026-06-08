@@ -864,7 +864,7 @@ function generateHTML() {
             fieldsHtml += '<div data-radio-group="' + esc(f.name) + '"' + (f.must_be ? ' data-must-be="' + esc(f.must_be) + '"' : '') + '>';
             (f.options || '').split(',').forEach(function(opt) {
                 opt = opt.trim();
-                if (opt) fieldsHtml += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:400;color:' + textColor + ';font-size:14px;cursor:pointer"><input type="radio" name="' + esc(f.name) + '" value="' + esc(opt) + '"> ' + esc(opt) + '</label>';
+                if (opt) fieldsHtml += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:400;color:' + textColor + ';font-size:14px;cursor:pointer"><input type="radio" name="' + esc(f.name) + '" value="' + esc(opt) + '"' + (f.required ? ' required' : '') + '> ' + esc(opt) + '</label>';
             });
             if (f.must_be) fieldsHtml += '<small class="must-be-hint" style="color:#c62828;font-size:11px;display:none">Must select "' + esc(f.must_be) + '" to proceed</small>';
             fieldsHtml += '</div>';
