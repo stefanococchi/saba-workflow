@@ -182,12 +182,41 @@
             }
         });
 
-        // Live feedback on change for must_be fields
+        // Live feedback on change — validate only the specific field that changed
+        function validateSingleMustBe(el) {
+            if (el.tagName === 'SELECT') {
+                var required = el.getAttribute('data-must-be');
+                var hint = el.parentElement.querySelector('.must-be-hint');
+                if (el.value !== required) {
+                    el.style.borderColor = '#c62828';
+                    if (hint) hint.style.display = 'block';
+                } else {
+                    el.style.borderColor = '';
+                    if (hint) hint.style.display = 'none';
+                }
+            } else {
+                var group = el.closest('[data-radio-group][data-must-be]');
+                if (!group) return;
+                var required = group.getAttribute('data-must-be');
+                var name = group.getAttribute('data-radio-group');
+                var checked = group.querySelector('input[name="' + name + '"]:checked');
+                var hint = group.querySelector('.must-be-hint');
+                if (!checked || checked.value !== required) {
+                    group.style.borderLeft = '3px solid #c62828';
+                    group.style.paddingLeft = '8px';
+                    if (hint) hint.style.display = 'block';
+                } else {
+                    group.style.borderLeft = '';
+                    group.style.paddingLeft = '';
+                    if (hint) hint.style.display = 'none';
+                }
+            }
+        }
         document.querySelectorAll('select[data-must-be]').forEach(function(sel) {
-            sel.addEventListener('change', function() { validateMustBe(sel.closest('form') || document); });
+            sel.addEventListener('change', function() { validateSingleMustBe(sel); });
         });
         document.querySelectorAll('[data-radio-group][data-must-be] input[type="radio"]').forEach(function(r) {
-            r.addEventListener('change', function() { validateMustBe(r.closest('form') || document); });
+            r.addEventListener('change', function() { validateSingleMustBe(r); });
         });
 
         var forms = document.querySelectorAll('.saba-landing-form');
