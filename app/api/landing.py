@@ -18,7 +18,7 @@ landing_bp = Blueprint('landing', __name__)
 # --- Input validation helpers ---
 MAX_FIELDS = 50
 MAX_FIELD_LENGTH = 10_000
-FIELD_KEY_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,128}$')
+FIELD_KEY_RE = re.compile(r'^[a-zA-Z0-9_\-#. ]{1,128}$')
 ALLOWED_MIME = {
     'application/pdf', 'image/jpeg', 'image/png',
     'application/msword',
