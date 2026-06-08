@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -134,10 +134,16 @@
             var inputs = form.querySelectorAll('[name="' + f.name + '"]');
             if (!inputs.length) return;
 
-            // Add required attribute if missing
+            // Add required attribute if missing + English validation message
             if (f.required) {
                 inputs.forEach(function(inp) {
                     if (!inp.hasAttribute('required')) inp.setAttribute('required', '');
+                    var msg = (inp.type === 'radio' || inp.type === 'checkbox')
+                        ? 'Please select one of these options.'
+                        : 'Please fill out this field.';
+                    inp.addEventListener('invalid', function() { inp.setCustomValidity(msg); });
+                    inp.addEventListener('change', function() { inp.setCustomValidity(''); });
+                    inp.addEventListener('input', function() { inp.setCustomValidity(''); });
                 });
             }
 

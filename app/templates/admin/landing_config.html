@@ -892,7 +892,7 @@ function generateHTML() {
     var logoHtml = logo ? '<img src="' + esc(logo) + '" alt="Logo" style="max-height:48px;margin-bottom:16px">' : '';
     var footerHtml = footer ? '<p style="text-align:center;color:' + textColor + ';opacity:0.5;font-size:12px;margin-top:24px">' + esc(footer) + '</p>' : '';
 
-    return '<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
+    return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
         '<link href="https://fonts.googleapis.com/css2?family=' + encodeURIComponent(font) + ':wght@300;400;500;600;700;800&display=swap" rel="stylesheet">' +
         '<style>*{margin:0;padding:0;box-sizing:border-box}input:focus,textarea:focus,select:focus{border-color:' + btn1 + ' !important;box-shadow:0 0 0 3px ' + btn1 + '22}button:hover{opacity:0.9;transform:translateY(-1px)}button:active{transform:translateY(0)}</style>' +
         '</head><body>' +
