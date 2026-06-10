@@ -37,6 +37,14 @@ class Config:
     STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
     STRIPE_PAYMENT_CURRENCY = os.getenv('STRIPE_PAYMENT_CURRENCY', 'eur')
 
+    # Microsoft SSO (Entra ID)
+    MS_SSO_CLIENT_ID = os.getenv('MS_SSO_CLIENT_ID', '')
+    MS_SSO_CLIENT_SECRET = os.getenv('MS_SSO_CLIENT_SECRET', '')
+    MS_SSO_TENANT_ID = os.getenv('MS_SSO_TENANT_ID', '')
+    MS_SSO_AUTHORITY = f"https://login.microsoftonline.com/{os.getenv('MS_SSO_TENANT_ID', '')}"
+    MS_SSO_REDIRECT_URI = os.getenv('MS_SSO_REDIRECT_URI', '')
+    MS_SSO_SCOPES = ['User.Read']
+
     # JWT
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
     JWT_EXPIRATION_HOURS = int(os.getenv('JWT_EXPIRATION_HOURS', 72))

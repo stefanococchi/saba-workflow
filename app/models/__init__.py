@@ -327,9 +327,14 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(100), unique=True, nullable=False)
     email = Column(String(255), nullable=True)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)
     is_superuser = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Microsoft SSO
+    microsoft_id = Column(String(100), unique=True, nullable=True)
+    ms_access_token = Column(Text, nullable=True)
+    ms_refresh_token = Column(Text, nullable=True)
 
     workflows = relationship('Workflow', secondary=user_workflows, backref='users')
 
@@ -337,6 +342,8 @@ class User(Base):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
+        if not self.password_hash:
+            return False
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
