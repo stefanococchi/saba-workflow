@@ -1288,10 +1288,18 @@ def executions_monitor():
                 'status_counts': wf_pcounts,
             }
 
+        # Available events for the selected workflow (pre-computed in config)
+        available_events = []
+        if workflow_id:
+            sel_wf = next((w for w in workflows if w.id == workflow_id), None)
+            if sel_wf:
+                available_events = (sel_wf.config or {}).get('available_events', [])
+
         return render_template('admin/executions_monitor.html',
                              workflows=workflows,
                              current_workflow_id=workflow_id,
-                             flow_data=flow_data)
+                             flow_data=flow_data,
+                             available_events=available_events)
 
     except Exception as e:
         logger.error(f"Errore monitor esecuzioni: {str(e)}")
@@ -1299,7 +1307,8 @@ def executions_monitor():
         return render_template('admin/executions_monitor.html',
                              workflows=[],
                              current_workflow_id=None,
-                             flow_data={})
+                             flow_data={},
+                             available_events=[])
 
 
 @admin_bp.route('/pratiche')

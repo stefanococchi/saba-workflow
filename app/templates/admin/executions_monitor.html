@@ -25,11 +25,7 @@
     }
     .status-chip.active { border-color: transparent; font-weight: 600; }
     .status-chip[data-status="all"].active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
-    .status-chip[data-status="form_submitted"].active { background: #d1fae5; color: #065f46; }
-    .status-chip[data-status="email_failed"].active { background: var(--md-error-container); color: var(--md-error); }
-    .status-chip[data-status="simulation"].active { background: #fef3c7; color: #92400e; }
-    .status-chip[data-status="workflow_started"].active { background: var(--md-primary-container); color: var(--md-primary); }
-    .status-chip[data-status="status_changed"].active { background: #dbeafe; color: #1e40af; }
+    .status-chip.active:not([data-status="all"]) { background: var(--chip-bg); color: var(--chip-fg); }
     .query-builder { background: var(--md-surface-container); border-radius: var(--md-shape-md); padding: 16px; margin-top: 12px; }
     .query-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
     .query-row select, .query-row input { font-size: 13px; }
@@ -153,14 +149,9 @@
             </div>
         </div>
 
-        <!-- Event type chips -->
-        <div class="status-chips mt-3">
+        <!-- Event type chips (dynamic from workflow config) -->
+        <div class="status-chips mt-3" id="eventChips">
             <div class="status-chip active" data-status="all" onclick="filterByType('all')">{{ t.all }} <span id="countAll" class="counter-badge ms-1">0</span></div>
-            <div class="status-chip" data-status="form_submitted" onclick="filterByType('form_submitted')">{{ t.form_submitted }}</div>
-            <div class="status-chip" data-status="email_failed" onclick="filterByType('email_failed')">Email Failed</div>
-            <div class="status-chip" data-status="simulation" onclick="filterByType('simulation')">{{ t.simulation }}</div>
-            <div class="status-chip" data-status="workflow_started" onclick="filterByType('workflow_started')">{{ t.workflow_started }}</div>
-            <div class="status-chip" data-status="status_changed" onclick="filterByType('status_changed')">{{ t.status_changed }}</div>
         </div>
 
         <!-- Column toggles -->
@@ -188,6 +179,9 @@
     <div class="card-header d-flex justify-content-between align-items-center py-2">
         <h6 class="mb-0"><i class="bi bi-bar-chart-steps"></i> {{ t.status_flow or 'Status Flow' }}</h6>
         <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-primary" onclick="toggleAvailableEvents()" title="Available Events">
+                <i class="bi bi-lightning"></i> Events
+            </button>
             <button class="btn btn-sm btn-primary" onclick="exportStatusFlow()">
                 <i class="bi bi-file-earmark-spreadsheet"></i> Export Excel
             </button>
@@ -195,6 +189,12 @@
                 <i class="bi bi-x-lg"></i>
             </button>
         </div>
+    </div>
+    <div id="availableEventsPanel" style="display:none; padding: 12px 16px; border-bottom: 1px solid var(--md-outline-variant); background: var(--md-surface-container-lowest);">
+        <div style="font-size:12px; font-weight:600; color:var(--md-on-surface-variant); margin-bottom:8px;">
+            <i class="bi bi-lightning"></i> Trackable events for this workflow
+        </div>
+        <div id="availableEventsList" class="d-flex flex-wrap gap-2"></div>
     </div>
     <div class="card-body py-3">
         <div id="flowCurrentContainer"></div>
@@ -306,6 +306,95 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
 var T = {{ t|tojson }};
+var AVAILABLE_EVENTS = {{ available_events|tojson }};
+
+// =============================================
+// EVENT CHIP CONFIG
+// =============================================
+var EVENT_CHIP_META = {
+    // Email lifecycle
+    email_scheduled:       { label: 'Scheduled', bg: '#fef3c7', fg: '#92400e' },
+    email_sent:            { label: 'Email Sent', bg: '#d1fae5', fg: '#065f46' },
+    email_delivered:       { label: 'Delivered', bg: '#e0f7fa', fg: '#00695c' },
+    email_opened:          { label: 'Opened', bg: '#e0f7fa', fg: '#0097a7' },
+    email_clicked:         { label: 'Clicked', bg: '#f3e5f5', fg: '#7b1fa2' },
+    email_completed:       { label: T.completed || 'Completed', bg: '#dbeafe', fg: '#1e40af' },
+    email_failed:          { label: 'Email Failed', bg: 'var(--md-error-container)', fg: 'var(--md-error)' },
+    email_skipped:         { label: 'Skipped', bg: '#f3f4f6', fg: '#6b7280' },
+    // Landing & form
+    landing_opened:        { label: T.landing_opened || 'Landing Opened', bg: '#fff3e0', fg: '#e65100' },
+    form_submitted:        { label: T.form_submitted || 'Form Submitted', bg: '#d1fae5', fg: '#065f46' },
+    survey_submitted:      { label: T.survey_submitted || 'Survey Submitted', bg: '#e0f2f1', fg: '#00695c' },
+    unsubscribed:          { label: T.unsubscribed || 'Unsubscribed', bg: '#fce4ec', fg: '#c62828' },
+    // Approval
+    approval_granted:      { label: 'Approved', bg: '#d1fae5', fg: '#065f46' },
+    approval_rejected:     { label: 'Rejected', bg: '#fce4ec', fg: '#c62828' },
+    // Payment
+    payment_initiated:     { label: 'Payment Initiated', bg: '#fff3e0', fg: '#e65100' },
+    payment_completed:     { label: 'Payment Completed', bg: '#d1fae5', fg: '#065f46' },
+    payment_cancelled:     { label: 'Payment Cancelled', bg: '#fef3c7', fg: '#92400e' },
+    payment_expired:       { label: 'Payment Expired', bg: '#f3f4f6', fg: '#6b7280' },
+    payment_refunded:      { label: 'Refunded', bg: '#e8eaf6', fg: '#283593' },
+    payment_disputed:      { label: 'Disputed', bg: '#fce4ec', fg: '#c62828' },
+    payment_failed:        { label: 'Payment Failed', bg: 'var(--md-error-container)', fg: 'var(--md-error)' },
+    // Document check
+    document_check_validated: { label: 'Doc Validated', bg: '#d1fae5', fg: '#065f46' },
+    document_check_rejected:  { label: 'Doc Rejected', bg: '#fce4ec', fg: '#c62828' },
+    // Workflow & system
+    workflow_started:      { label: T.workflow_started || 'Workflow Started', bg: 'var(--md-primary-container)', fg: 'var(--md-primary)' },
+    status_changed:        { label: T.status_changed || 'Status Changed', bg: '#dbeafe', fg: '#1e40af' },
+    condition_evaluated:   { label: 'Condition Evaluated', bg: '#e8eaf6', fg: '#283593' },
+    goal_met:              { label: 'Goal Met', bg: '#d1fae5', fg: '#065f46' },
+    goal_not_met:          { label: 'Goal Not Met', bg: '#f3f4f6', fg: '#6b7280' },
+    simulation:            { label: T.simulation || 'Simulation', bg: '#fef3c7', fg: '#92400e' },
+    reconciled:            { label: 'Reconciled', bg: '#eceff1', fg: '#455a64' },
+    participant_imported:  { label: 'Imported', bg: '#e3f2fd', fg: '#1565c0' },
+};
+
+(function buildEventChips() {
+    var container = document.getElementById('eventChips');
+    if (!container) return;
+    var events = AVAILABLE_EVENTS.length ? AVAILABLE_EVENTS : Object.keys(EVENT_CHIP_META);
+    events.forEach(function(evt) {
+        var meta = EVENT_CHIP_META[evt];
+        if (!meta) return;
+        var chip = document.createElement('div');
+        chip.className = 'status-chip';
+        chip.setAttribute('data-status', evt);
+        chip.onclick = function() { filterByType(evt); };
+        chip.textContent = meta.label;
+        chip.style.setProperty('--chip-bg', meta.bg);
+        chip.style.setProperty('--chip-fg', meta.fg);
+        container.appendChild(chip);
+    });
+})();
+
+// =============================================
+// AVAILABLE EVENTS PANEL
+// =============================================
+function toggleAvailableEvents() {
+    var panel = document.getElementById('availableEventsPanel');
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+}
+
+(function buildAvailableEventsList() {
+    var container = document.getElementById('availableEventsList');
+    if (!container) return;
+    var events = AVAILABLE_EVENTS.length ? AVAILABLE_EVENTS : [];
+    if (!events.length) {
+        container.innerHTML = '<span style="font-size:12px;color:var(--md-on-surface-variant)">No events configured — save workflow steps to compute.</span>';
+        return;
+    }
+    events.forEach(function(evt) {
+        var meta = EVENT_CHIP_META[evt] || { label: evt, bg: '#f3f4f6', fg: '#6b7280' };
+        var badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.style.cssText = 'background:' + meta.bg + ';color:' + meta.fg + ';font-size:11px;padding:4px 10px;border-radius:var(--md-shape-full);font-weight:500;';
+        badge.textContent = meta.label;
+        container.appendChild(badge);
+    });
+})();
+
 // =============================================
 // DATA
 // =============================================
@@ -441,22 +530,43 @@ function applyFilters() {
 // EVENT BADGE RENDERING
 // =============================================
 var EVENT_BADGES = {
-    form_submitted: '<span class="badge bg-success"><i class="bi bi-check2-square"></i> ' + T.form_submitted + '</span>',
-    status_changed: '<span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> ' + T.status_changed + '</span>',
-    workflow_started: '<span class="badge bg-primary"><i class="bi bi-play-circle"></i> ' + T.workflow_started + '</span>',
-    simulation: '<span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> ' + T.simulation + '</span>',
-    unsubscribed: '<span class="badge bg-danger"><i class="bi bi-person-x"></i> ' + T.unsubscribed + '</span>',
-    email_sent: '<span class="badge bg-success"><i class="bi bi-envelope-check"></i> Email Sent</span>',
-    email_failed: '<span class="badge bg-danger"><i class="bi bi-envelope-x"></i> Email Failed</span>',
+    // Email lifecycle
     email_scheduled: '<span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Scheduled</span>',
+    email_sent: '<span class="badge bg-success"><i class="bi bi-envelope-check"></i> Email Sent</span>',
+    email_delivered: '<span class="badge" style="background:#0097a7;color:#fff"><i class="bi bi-envelope-open"></i> Delivered</span>',
+    email_opened: '<span class="badge" style="background:#00bcd4;color:#fff"><i class="bi bi-envelope-open"></i> Opened</span>',
+    email_clicked: '<span class="badge" style="background:#9c27b0;color:#fff"><i class="bi bi-cursor"></i> Clicked</span>',
     email_completed: '<span class="badge bg-primary"><i class="bi bi-check-all"></i> ' + T.completed + '</span>',
+    email_failed: '<span class="badge bg-danger"><i class="bi bi-envelope-x"></i> Email Failed</span>',
     email_skipped: '<span class="badge bg-secondary"><i class="bi bi-skip-forward"></i> Skipped</span>',
+    // Landing & form
+    landing_opened: '<span class="badge" style="background:#ff9800;color:#fff"><i class="bi bi-box-arrow-up-right"></i> ' + T.landing_opened + '</span>',
+    form_submitted: '<span class="badge bg-success"><i class="bi bi-check2-square"></i> ' + T.form_submitted + '</span>',
+    survey_submitted: '<span class="badge bg-info"><i class="bi bi-ui-checks"></i> ' + T.survey_submitted + '</span>',
+    unsubscribed: '<span class="badge bg-danger"><i class="bi bi-person-x"></i> ' + T.unsubscribed + '</span>',
+    // Approval
+    approval_granted: '<span class="badge bg-success"><i class="bi bi-hand-thumbs-up"></i> Approved</span>',
+    approval_rejected: '<span class="badge bg-danger"><i class="bi bi-hand-thumbs-down"></i> Rejected</span>',
+    // Payment
+    payment_initiated: '<span class="badge" style="background:#ff9800;color:#fff"><i class="bi bi-credit-card"></i> Payment Initiated</span>',
+    payment_completed: '<span class="badge bg-success"><i class="bi bi-credit-card-2-front"></i> Payment Completed</span>',
+    payment_cancelled: '<span class="badge bg-warning text-dark"><i class="bi bi-credit-card"></i> Payment Cancelled</span>',
+    payment_expired: '<span class="badge bg-secondary"><i class="bi bi-credit-card"></i> Payment Expired</span>',
+    payment_refunded: '<span class="badge" style="background:#283593;color:#fff"><i class="bi bi-arrow-return-left"></i> Refunded</span>',
+    payment_disputed: '<span class="badge bg-danger"><i class="bi bi-exclamation-triangle"></i> Disputed</span>',
+    payment_failed: '<span class="badge bg-danger"><i class="bi bi-credit-card"></i> Payment Failed</span>',
+    // Document check
+    document_check_validated: '<span class="badge bg-success"><i class="bi bi-file-earmark-check"></i> Doc Validated</span>',
+    document_check_rejected: '<span class="badge bg-danger"><i class="bi bi-file-earmark-x"></i> Doc Rejected</span>',
+    // Workflow & system
+    workflow_started: '<span class="badge bg-primary"><i class="bi bi-play-circle"></i> ' + T.workflow_started + '</span>',
+    status_changed: '<span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> ' + T.status_changed + '</span>',
+    condition_evaluated: '<span class="badge bg-info"><i class="bi bi-shuffle"></i> Condition Evaluated</span>',
     goal_met: '<span class="badge bg-success"><i class="bi bi-trophy"></i> Goal Met</span>',
     goal_not_met: '<span class="badge bg-secondary"><i class="bi bi-trophy"></i> Goal Not Met</span>',
+    simulation: '<span class="badge bg-warning text-dark"><i class="bi bi-eye"></i> ' + T.simulation + '</span>',
+    reconciled: '<span class="badge" style="background:#607d8b;color:#fff"><i class="bi bi-arrow-left-right"></i> Reconciled</span>',
     participant_imported: '<span class="badge bg-info"><i class="bi bi-download"></i> Imported</span>',
-    condition_evaluated: '<span class="badge bg-info"><i class="bi bi-shuffle"></i> Condition Evaluated</span>',
-    landing_opened: '<span class="badge" style="background:#ff9800;color:#fff"><i class="bi bi-box-arrow-up-right"></i> ' + T.landing_opened + '</span>',
-    survey_submitted: '<span class="badge bg-info"><i class="bi bi-ui-checks"></i> ' + T.survey_submitted + '</span>',
 };
 
 var STEP_ICONS = { email: 'bi-envelope', wait_until: 'bi-calendar-check', goal_check: 'bi-trophy', export_data: 'bi-download', condition: 'bi-shuffle' };
