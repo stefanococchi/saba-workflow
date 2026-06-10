@@ -1311,6 +1311,28 @@ def executions_monitor():
                              available_events=[])
 
 
+@admin_bp.route('/api/backfill-events', methods=['POST'])
+@superuser_required
+def backfill_available_events():
+    """One-time backfill: compute available_events for all workflows."""
+    from app.api.workflows import compute_available_events
+    try:
+        workflows = db.query(Workflow).options(selectinload(Workflow.steps)).all()
+        results = []
+        for wf in workflows:
+            steps_data = [{'type': s.type.value, 'landing_page_config': s.landing_page_config,
+                           'skip_conditions': s.skip_conditions} for s in wf.steps]
+            config = dict(wf.config) if wf.config else {}
+            config['available_events'] = compute_available_events(steps_data)
+            wf.config = config
+            results.append({'id': wf.id, 'name': wf.name, 'events': len(config['available_events'])})
+        db.commit()
+        return jsonify({'ok': True, 'workflows': results})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @admin_bp.route('/pratiche')
 def pratiche_page():
     """Pagina pratiche documentali"""
