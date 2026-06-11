@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, session
 from app import db_session as db
 from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage, Attachment, User, user_workflows
 from app.api.auth import superuser_required
