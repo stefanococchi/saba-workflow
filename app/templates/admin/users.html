@@ -31,10 +31,20 @@
                         <td><strong>{{ user.username }}</strong></td>
                         <td>{{ user.email or '—' }}</td>
                         <td>
-                            {% if user.is_superuser %}
-                            <span class="badge bg-warning text-dark">{{ t.superuser }}</span>
+                            {% if user.id == session.get('user_id') %}
+                                {% if user.is_superuser %}
+                                <span class="badge bg-warning text-dark">{{ t.superuser }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ t.user }}</span>
+                                {% endif %}
                             {% else %}
-                            <span class="badge bg-secondary">{{ t.user }}</span>
+                            <a href="#" onclick="toggleRole({{ user.id }}, this);return false;" title="Click to change role" style="text-decoration:none">
+                                {% if user.is_superuser %}
+                                <span class="badge bg-warning text-dark" style="cursor:pointer">{{ t.superuser }} <i class="bi bi-arrow-repeat" style="font-size:10px"></i></span>
+                                {% else %}
+                                <span class="badge bg-secondary" style="cursor:pointer">{{ t.user }} <i class="bi bi-arrow-repeat" style="font-size:10px"></i></span>
+                                {% endif %}
+                            </a>
                             {% endif %}
                         </td>
                         <td>
@@ -141,6 +151,17 @@
 
 {% block extra_js %}
 <script>
+function toggleRole(userId, el) {
+    if (!confirm('Change role for this user?')) return;
+    fetch('/admin/users/' + userId + '/toggle-role', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { alert(data.error); return; }
+            location.reload();
+        })
+        .catch(function() { alert('Error'); });
+}
+
 function toggleWorkflow(userId, workflowId, el) {
     fetch('/admin/users/' + userId + '/toggle-workflow/' + workflowId, { method: 'POST' })
         .then(function(r) { return r.json(); })

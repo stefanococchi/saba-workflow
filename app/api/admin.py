@@ -2079,6 +2079,24 @@ def user_delete(user_id):
         return redirect(url_for('admin.users_list'))
 
 
+@admin_bp.route('/users/<int:user_id>/toggle-role', methods=['POST'])
+@superuser_required
+def toggle_user_role(user_id):
+    """Toggle user between superuser and regular user"""
+    try:
+        user = db.get(User, user_id)
+        if not user:
+            return jsonify({'error': 'Not found'}), 404
+        if user.id == session.get('user_id'):
+            return jsonify({'error': 'Cannot change your own role'}), 400
+        user.is_superuser = not user.is_superuser
+        db.commit()
+        return jsonify({'is_superuser': user.is_superuser}), 200
+    except Exception as e:
+        db.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @admin_bp.route('/users/<int:user_id>/toggle-workflow/<int:workflow_id>', methods=['POST'])
 @superuser_required
 def toggle_user_workflow(user_id, workflow_id):
