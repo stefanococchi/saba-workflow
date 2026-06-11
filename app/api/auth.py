@@ -156,6 +156,56 @@ def microsoft_callback():
     return redirect(next_url or url_for('admin.dashboard'))
 
 
+# ── SSO Diagnostics (temporary – remove after debugging) ─────────
+
+@auth_bp.route('/auth/sso-check')
+def sso_check():
+    """Diagnostic endpoint to verify SSO configuration."""
+    from flask import jsonify
+
+    cfg = current_app.config
+    client_id = cfg.get('MS_SSO_CLIENT_ID', '')
+    tenant_id = cfg.get('MS_SSO_TENANT_ID', '')
+    authority = cfg.get('MS_SSO_AUTHORITY', '')
+    redirect_uri = cfg.get('MS_SSO_REDIRECT_URI', '')
+    has_secret = bool(cfg.get('MS_SSO_CLIENT_SECRET', ''))
+
+    checks = {
+        '1_sso_enabled': _sso_enabled(),
+        '2_client_id': client_id[:8] + '...' if len(client_id) > 8 else ('MISSING' if not client_id else client_id),
+        '3_tenant_id': tenant_id[:8] + '...' if len(tenant_id) > 8 else ('MISSING' if not tenant_id else tenant_id),
+        '4_client_secret_set': has_secret,
+        '5_authority': authority or 'MISSING',
+        '6_redirect_uri': redirect_uri or 'MISSING',
+        '7_scopes': cfg.get('MS_SSO_SCOPES', []),
+    }
+
+    # Test: can we reach the OpenID config endpoint?
+    discovery_url = f"{authority}/v2.0/.well-known/openid-configuration"
+    try:
+        r = http_requests.get(discovery_url, timeout=10)
+        checks['8_openid_discovery'] = {
+            'url': discovery_url,
+            'status': r.status_code,
+            'ok': r.status_code == 200,
+        }
+        if r.status_code == 200:
+            data = r.json()
+            checks['8_openid_discovery']['issuer'] = data.get('issuer', '')
+            checks['8_openid_discovery']['authorization_endpoint'] = data.get('authorization_endpoint', '')
+    except Exception as e:
+        checks['8_openid_discovery'] = {'error': str(e)}
+
+    # Check: do any users in the DB have @sabae20.it emails?
+    sabae_users = db.query(User).filter(User.email.ilike('%@sabae20.it')).all()
+    checks['9_sabae20_users'] = [
+        {'username': u.username, 'email': u.email, 'has_microsoft_id': bool(u.microsoft_id)}
+        for u in sabae_users
+    ]
+
+    return jsonify(checks)
+
+
 # ── Local login ───────────────────────────────────────────────────
 
 @auth_bp.route('/auth/login', methods=['GET', 'POST'])
