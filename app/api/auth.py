@@ -133,8 +133,24 @@ def microsoft_callback():
             db.commit()
 
     if not user:
-        flash('Your Microsoft account is not authorized to access this system.', 'danger')
-        return redirect(url_for('auth.login', mode='local'))
+        # Auto-provision: create user on first SSO login
+        display_name = me.get('displayName', '')
+        username = ms_email.split('@')[0]
+        # Ensure unique username
+        base_username = username
+        counter = 1
+        while db.query(User).filter_by(username=username).first():
+            username = f"{base_username}{counter}"
+            counter += 1
+        user = User(
+            username=username,
+            email=ms_email,
+            microsoft_id=ms_id,
+            is_superuser=False,
+        )
+        db.add(user)
+        db.commit()
+        logger.info(f"Auto-provisioned new user {username} ({ms_email}) via SSO")
 
     # Save tokens
     user.ms_access_token = access_token
