@@ -336,7 +336,7 @@ class User(Base):
     email = Column(String(255), nullable=True)
     password_hash = Column(String(255), nullable=True)
     is_superuser = Column(Boolean, default=False, nullable=False)
-    role = Column(SQLEnum(UserRole), default=UserRole.USER, nullable=False, server_default='user')
+    role = Column(SQLEnum(UserRole, values_callable=lambda e: [s.value for s in e]), default=UserRole.USER, nullable=False, server_default='user')
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Microsoft SSO
