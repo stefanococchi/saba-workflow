@@ -47,7 +47,8 @@ def add_participants(workflow_id):
                 email=p_data['email'],
                 first_name=p_data.get('first_name', ''),
                 last_name=p_data.get('last_name', ''),
-                phone=p_data.get('phone')
+                phone=p_data.get('phone'),
+                sabaform_data=p_data.get('sabaform_data', {})
             )
             
             db.add(participant)

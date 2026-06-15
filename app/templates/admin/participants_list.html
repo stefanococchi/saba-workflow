@@ -312,6 +312,18 @@
                         <label class="form-label">{{ t.phone }}</label>
                         <input type="text" class="form-control" id="newPhone">
                     </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">{{ t.company }}</label>
+                        <input type="text" class="form-control" id="newCompany">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">{{ t.role }}</label>
+                        <input type="text" class="form-control" id="newRole">
+                    </div>
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label">{{ t.notes }}</label>
+                        <textarea class="form-control" id="newNotes" rows="2"></textarea>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1095,6 +1107,9 @@ function newParticipant() {
     document.getElementById('newLastName').value = '';
     document.getElementById('newEmail').value = '';
     document.getElementById('newPhone').value = '';
+    document.getElementById('newCompany').value = '';
+    document.getElementById('newRole').value = '';
+    document.getElementById('newNotes').value = '';
     // Pre-seleziona workflow se filtrato
     var wfFilter = document.getElementById('filterWorkflow').value;
     if (wfFilter) document.getElementById('newWorkflow').value = wfFilter;
@@ -1106,12 +1121,21 @@ function createParticipant() {
     var firstName = document.getElementById('newFirstName').value.trim();
     if (!firstName) { alert(T.name + ' required'); return; }
 
+    var company = document.getElementById('newCompany').value.trim();
+    var role = document.getElementById('newRole').value.trim();
+    var notes = document.getElementById('newNotes').value.trim();
+    var sabaform_data = {};
+    if (company) sabaform_data.company = company;
+    if (role) sabaform_data.role = role;
+    if (notes) sabaform_data.note = notes;
+
     var payload = {
         participants: [{
             first_name: firstName,
             last_name: document.getElementById('newLastName').value.trim(),
             email: document.getElementById('newEmail').value.trim(),
-            phone: document.getElementById('newPhone').value.trim()
+            phone: document.getElementById('newPhone').value.trim(),
+            sabaform_data: sabaform_data
         }]
     };
 
