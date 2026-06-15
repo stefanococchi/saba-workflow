@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="tk-breadcrumb">
-    <a href="{{ url_for('tracking.index') }}"><i class="bi bi-arrow-left"></i> Tutti i workflow</a>
+    <a href="{{ url_for('tracking.index') }}"><i class="bi bi-arrow-left"></i> All workflows</a>
 </div>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -21,7 +21,7 @@
     <div class="row text-center">
         <div class="col-3 tk-stat">
             <div class="tk-stat-value" id="statTotal">{{ participants|length }}</div>
-            <div class="tk-stat-label">Totali</div>
+            <div class="tk-stat-label">Total</div>
         </div>
         <div class="col-3 tk-stat">
             <div class="tk-stat-value" style="color:var(--tk-info)" id="statPending">—</div>
@@ -29,11 +29,11 @@
         </div>
         <div class="col-3 tk-stat">
             <div class="tk-stat-value" style="color:var(--tk-primary)" id="statInProgress">—</div>
-            <div class="tk-stat-label">In corso</div>
+            <div class="tk-stat-label">In Progress</div>
         </div>
         <div class="col-3 tk-stat">
             <div class="tk-stat-value" style="color:var(--tk-success)" id="statCompleted">—</div>
-            <div class="tk-stat-label">Completati</div>
+            <div class="tk-stat-label">Completed</div>
         </div>
     </div>
 </div>
@@ -43,7 +43,7 @@
     <div class="tk-card-title"><i class="bi bi-funnel"></i> Status Flow</div>
     <div id="statusFlow" class="tk-flow">
         <div style="text-align:center;color:var(--tk-on-surface-variant);width:100%;padding:20px">
-            <span class="spinner-border spinner-border-sm"></span> Caricamento...
+            <span class="spinner-border spinner-border-sm"></span> Loading...
         </div>
     </div>
 </div>
@@ -51,8 +51,8 @@
 <!-- Participants table -->
 <div class="tk-card">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <div class="tk-card-title" style="margin-bottom:0"><i class="bi bi-people"></i> Partecipanti</div>
-        <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Cerca..."
+        <div class="tk-card-title" style="margin-bottom:0"><i class="bi bi-people"></i> Participants</div>
+        <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Search..."
                style="width:220px;border-radius:20px;font-size:12px" oninput="filterTable()">
     </div>
 
@@ -61,12 +61,12 @@
         <table class="tk-table" id="participantsTable">
             <thead>
                 <tr>
-                    <th>Nome</th>
-                    <th>Azienda</th>
-                    <th>Step attuale</th>
-                    <th>Stato</th>
-                    <th>Progresso</th>
-                    <th>Ultima interazione</th>
+                    <th>Name</th>
+                    <th>Company</th>
+                    <th>Current Step</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Last Interaction</th>
                 </tr>
             </thead>
             <tbody>
@@ -82,7 +82,15 @@
                 {% set company = (p.sabaform_data or {}).get('company', '') %}
                 <tr class="participant-row"
                     data-search="{{ (p.first_name or '')|lower }} {{ (p.last_name or '')|lower }} {{ company|lower }} {{ (p.email or '')|lower }}"
-                    data-pid="{{ p.id }}" style="cursor:pointer" onclick="showParticipantTimeline({{ p.id }}, this)">
+                    data-pid="{{ p.id }}"
+                    data-name="{{ (p.first_name or '') }} {{ (p.last_name or '') }}"
+                    data-email="{{ p.email or '' }}"
+                    data-phone="{{ p.phone or '' }}"
+                    data-status="{{ p.status.value }}"
+                    data-enrolled="{{ p.enrolled_at.strftime('%d/%m/%Y %H:%M') if p.enrolled_at else '' }}"
+                    data-collected='{{ (p.collected_data or {})|tojson }}'
+                    data-sabaform='{{ (p.sabaform_data or {})|tojson }}'
+                    style="cursor:pointer" onclick="showParticipantTimeline({{ p.id }}, this)">
                     <td>
                         <strong>{{ p.first_name or '' }} {{ p.last_name or '' }}</strong>
                     </td>
@@ -129,9 +137,43 @@
     {% else %}
     <div class="tk-empty">
         <i class="bi bi-people"></i>
-        <p>Nessun partecipante in questo workflow.</p>
+        <p>No participants in this workflow.</p>
     </div>
     {% endif %}
+</div>
+
+<!-- Participant Detail Panel -->
+<div class="tk-card" id="participantDetail" style="display:none">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="tk-card-title" style="margin-bottom:0"><i class="bi bi-person-lines-fill"></i> <span id="pdTitle">Participant Details</span></div>
+        <button class="btn btn-outline-secondary btn-sm" style="font-size:11px;border-radius:20px;padding:2px 12px"
+                onclick="hideParticipantDetail()">
+            <i class="bi bi-x"></i> Close
+        </button>
+    </div>
+    <div class="row">
+        <!-- Info -->
+        <div class="col-md-4 mb-3">
+            <h6 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--tk-on-surface-variant);margin-bottom:8px">
+                <i class="bi bi-person"></i> Info
+            </h6>
+            <div id="pdInfo"></div>
+        </div>
+        <!-- Collected Data -->
+        <div class="col-md-4 mb-3">
+            <h6 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--tk-on-surface-variant);margin-bottom:8px">
+                <i class="bi bi-collection"></i> Collected Data
+            </h6>
+            <div id="pdCollected"></div>
+        </div>
+        <!-- Import Data -->
+        <div class="col-md-4 mb-3">
+            <h6 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--tk-on-surface-variant);margin-bottom:8px">
+                <i class="bi bi-database"></i> Import Data
+            </h6>
+            <div id="pdSabaform"></div>
+        </div>
+    </div>
 </div>
 
 <!-- Execution Timeline -->
@@ -139,21 +181,21 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div class="tk-card-title" style="margin-bottom:0"><i class="bi bi-clock-history"></i> Execution Timeline</div>
         <div class="d-flex gap-2 align-items-center">
-            <span id="timelineFilterLabel" style="font-size:11px;color:var(--tk-on-surface-variant)">Tutti i partecipanti</span>
+            <span id="timelineFilterLabel" style="font-size:11px;color:var(--tk-on-surface-variant)">All participants</span>
             <button class="btn btn-outline-secondary btn-sm" style="font-size:11px;border-radius:20px;padding:2px 12px"
                     onclick="clearTimelineFilter()" id="btnClearFilter" style="display:none">
-                <i class="bi bi-x"></i> Reset filtro
+                <i class="bi bi-x"></i> Clear filter
             </button>
         </div>
     </div>
     <div id="timeline">
         <div style="text-align:center;color:var(--tk-on-surface-variant);padding:20px">
-            <span class="spinner-border spinner-border-sm"></span> Caricamento timeline...
+            <span class="spinner-border spinner-border-sm"></span> Loading timeline...
         </div>
     </div>
     <div id="timelineMore" style="text-align:center;display:none;padding:8px">
         <button class="btn btn-outline-primary btn-sm" style="border-radius:20px;font-size:12px" onclick="showMoreTimeline()">
-            Mostra di pi&ugrave;
+            Show more
         </button>
     </div>
 </div>
@@ -189,21 +231,21 @@ fetch('/tracking/api/workflow/' + WORKFLOW_ID + '/status-flow')
         renderStatusFlow(data);
     })
     .catch(function(e) {
-        document.getElementById('statusFlow').innerHTML = '<div style="color:var(--tk-error)">Errore caricamento status flow</div>';
+        document.getElementById('statusFlow').innerHTML = '<div style="color:var(--tk-error)">Error loading status flow</div>';
     });
 
 function renderStatusFlow(data) {
     var container = document.getElementById('statusFlow');
     if (!data.steps || data.steps.length === 0) {
-        container.innerHTML = '<div class="tk-empty" style="padding:12px"><i class="bi bi-diagram-3"></i> Nessuno step</div>';
+        container.innerHTML = '<div class="tk-empty" style="padding:12px"><i class="bi bi-diagram-3"></i> No steps</div>';
         return;
     }
 
     var html = '';
     var statusLabels = {
-        'scheduled': 'Schedulato', 'sent': 'Inviato', 'opened': 'Aperto', 'clicked': 'Cliccato',
-        'landing_opened': 'Landing aperta', 'form_submitted': 'Form inviato', 'survey_submitted': 'Survey',
-        'completed': 'Completato', 'failed': 'Fallito', 'skipped': 'Saltato'
+        'scheduled': 'Scheduled', 'sent': 'Sent', 'opened': 'Opened', 'clicked': 'Clicked',
+        'landing_opened': 'Landing Opened', 'form_submitted': 'Form Submitted', 'survey_submitted': 'Survey Submitted',
+        'completed': 'Completed', 'failed': 'Failed', 'skipped': 'Skipped'
     };
 
     data.steps.forEach(function(step, idx) {
@@ -236,7 +278,7 @@ fetch('/tracking/api/workflow/' + WORKFLOW_ID + '/timeline')
         renderTimeline();
     })
     .catch(function(e) {
-        document.getElementById('timeline').innerHTML = '<div style="color:var(--tk-error)">Errore caricamento timeline</div>';
+        document.getElementById('timeline').innerHTML = '<div style="color:var(--tk-error)">Error loading timeline</div>';
     });
 
 function renderTimeline() {
@@ -248,7 +290,7 @@ function renderTimeline() {
     }
 
     if (items.length === 0) {
-        container.innerHTML = '<div class="tk-empty" style="padding:12px"><i class="bi bi-clock-history"></i> Nessun evento</div>';
+        container.innerHTML = '<div class="tk-empty" style="padding:12px"><i class="bi bi-clock-history"></i> No events</div>';
         document.getElementById('timelineMore').style.display = 'none';
         return;
     }
@@ -292,6 +334,31 @@ function showMoreTimeline() {
     renderTimeline();
 }
 
+function renderDataPanel(containerId, data) {
+    var el = document.getElementById(containerId);
+    if (!data || Object.keys(data).length === 0) {
+        el.innerHTML = '<span style="font-size:12px;color:#999">—</span>';
+        return;
+    }
+    var html = '<dl style="margin:0;font-size:12px">';
+    Object.keys(data).forEach(function(k) {
+        var val = data[k];
+        if (val === null || val === undefined || val === '') return;
+        // Render file links
+        if (typeof val === 'object' && val.filename) {
+            val = '<i class="bi bi-paperclip"></i> ' + escHtml(val.filename);
+        } else if (typeof val === 'object') {
+            val = '<code style="font-size:11px">' + escHtml(JSON.stringify(val)) + '</code>';
+        } else {
+            val = escHtml(String(val));
+        }
+        html += '<dt style="font-weight:600;color:var(--tk-on-surface-variant);margin-top:6px">' + escHtml(k) + '</dt>';
+        html += '<dd style="margin:0 0 0 0;color:var(--tk-on-surface)">' + val + '</dd>';
+    });
+    html += '</dl>';
+    el.innerHTML = html;
+}
+
 function showParticipantTimeline(pid, rowEl) {
     filterParticipantId = pid;
     timelineShown = 50;
@@ -300,20 +367,54 @@ function showParticipantTimeline(pid, rowEl) {
     document.querySelectorAll('.participant-row').forEach(function(r) { r.style.background = ''; });
     if (rowEl) rowEl.style.background = '#f5efe6';
 
-    var name = rowEl ? rowEl.querySelector('strong').textContent.trim() : '#' + pid;
-    document.getElementById('timelineFilterLabel').textContent = 'Filtro: ' + name;
+    var name = rowEl ? (rowEl.getAttribute('data-name') || '').trim() : '#' + pid;
+    document.getElementById('timelineFilterLabel').textContent = 'Filter: ' + name;
     document.getElementById('btnClearFilter').style.display = '';
 
+    // Show participant detail panel
+    if (rowEl) {
+        var panel = document.getElementById('participantDetail');
+        document.getElementById('pdTitle').textContent = name || 'Participant #' + pid;
+
+        // Info
+        var email = rowEl.getAttribute('data-email') || '';
+        var phone = rowEl.getAttribute('data-phone') || '';
+        var status = rowEl.getAttribute('data-status') || '';
+        var enrolled = rowEl.getAttribute('data-enrolled') || '';
+        var infoHtml = '<div style="font-size:12px">';
+        if (email) infoHtml += '<div style="margin-bottom:4px"><i class="bi bi-envelope" style="color:var(--tk-primary)"></i> ' + escHtml(email) + '</div>';
+        if (phone) infoHtml += '<div style="margin-bottom:4px"><i class="bi bi-telephone" style="color:var(--tk-primary)"></i> ' + escHtml(phone) + '</div>';
+        if (status) infoHtml += '<div style="margin-bottom:4px"><span class="tk-badge tk-badge-' + status + '">' + status.replace(/_/g, ' ') + '</span></div>';
+        if (enrolled) infoHtml += '<div style="margin-bottom:4px"><i class="bi bi-calendar-plus" style="color:var(--tk-primary)"></i> Enrolled: ' + escHtml(enrolled) + '</div>';
+        infoHtml += '</div>';
+        document.getElementById('pdInfo').innerHTML = infoHtml;
+
+        // Collected data
+        try { var collected = JSON.parse(rowEl.getAttribute('data-collected') || '{}'); } catch(e) { var collected = {}; }
+        renderDataPanel('pdCollected', collected);
+
+        // Sabaform data
+        try { var sabaform = JSON.parse(rowEl.getAttribute('data-sabaform') || '{}'); } catch(e) { var sabaform = {}; }
+        renderDataPanel('pdSabaform', sabaform);
+
+        panel.style.display = '';
+    }
+
     renderTimeline();
-    document.getElementById('timeline').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('participantDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function hideParticipantDetail() {
+    document.getElementById('participantDetail').style.display = 'none';
 }
 
 function clearTimelineFilter() {
     filterParticipantId = null;
     timelineShown = 50;
     document.querySelectorAll('.participant-row').forEach(function(r) { r.style.background = ''; });
-    document.getElementById('timelineFilterLabel').textContent = 'Tutti i partecipanti';
+    document.getElementById('timelineFilterLabel').textContent = 'All participants';
     document.getElementById('btnClearFilter').style.display = 'none';
+    document.getElementById('participantDetail').style.display = 'none';
     renderTimeline();
 }
 
