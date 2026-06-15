@@ -95,25 +95,65 @@ def workflow_detail(workflow_id):
             }
 
     # 2. For participants without a scheduled execution, show the next step by order
+    #    Also calculate timeout/expiry for current step
+    from datetime import timedelta
     step_by_id = {s.id: s for s in steps}
+    timeout_map = {}  # participant_id -> {timeout_at, if_timeout, if_timeout_step_name}
+
     for p in participants:
+        # Calculate timeout for current step
+        if p.current_step_id and p.current_step_id in step_by_id and p.status == ParticipantStatus.IN_PROGRESS:
+            current = step_by_id[p.current_step_id]
+            config = current.landing_page_config or {}
+            timeout_days = config.get('landing_timeout_days')
+
+            if timeout_days:
+                # Find when email was sent for this step
+                last_exec = (
+                    db.query(Execution)
+                    .filter_by(participant_id=p.id, step_id=current.id)
+                    .filter(Execution.status.in_([
+                        ExecutionStatus.SENT, ExecutionStatus.DELIVERED,
+                        ExecutionStatus.OPENED, ExecutionStatus.CLICKED,
+                    ]))
+                    .order_by(Execution.sent_at.desc())
+                    .first()
+                )
+                if last_exec and last_exec.sent_at:
+                    timeout_at = last_exec.sent_at + timedelta(days=timeout_days)
+                    if_timeout = config.get('landing_if_timeout', 'continue')
+                    if_timeout_step = config.get('landing_if_timeout_step', 0)
+                    timeout_step_name = None
+                    if if_timeout == 'jump' and if_timeout_step:
+                        ts = next((s for s in steps if s.order == if_timeout_step), None)
+                        timeout_step_name = ts.name if ts else f'Step {if_timeout_step}'
+                    elif if_timeout == 'continue':
+                        ns = next((s for s in steps if s.order > current.order), None)
+                        timeout_step_name = ns.name if ns else 'End'
+
+                    timeout_map[p.id] = {
+                        'timeout_at': timeout_at,
+                        'if_timeout': if_timeout,
+                        'timeout_step_name': timeout_step_name,
+                    }
+
+        # Next step by order (for participants without scheduled execution)
         if p.id in next_step_map:
             continue
         if p.status == ParticipantStatus.COMPLETED or p.status == ParticipantStatus.PENDING:
             continue
         if p.current_step_id and p.current_step_id in step_by_id:
             current = step_by_id[p.current_step_id]
-            # Find next step by order
             next_s = next((s for s in steps if s.order > current.order), None)
             if next_s:
                 next_step_map[p.id] = {
                     'step_name': next_s.name,
-                    'scheduled_at': None,  # not yet scheduled
+                    'scheduled_at': None,
                 }
 
     return render_template('tracking/workflow_detail.html',
                            workflow=wf, steps=steps, participants=participants,
-                           next_step_map=next_step_map, user=g.user)
+                           next_step_map=next_step_map, timeout_map=timeout_map, user=g.user)
 
 
 @tracking_bp.route('/api/workflow/<int:workflow_id>/timeline')
