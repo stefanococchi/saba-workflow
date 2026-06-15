@@ -2496,6 +2496,7 @@ function initEmailEditor() {
             disableDragAndDrop: true,
             fontNames: ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Courier New'],
             fontNamesIgnoreCheck: ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Courier New'],
+            fontSizes: ['8', '9', '10', '11', '12', '13', '14', '15', '16', '18', '20', '24', '28', '32', '36'],
             toolbar: [
                 ['style', ['style']],
                 ['fontname', ['fontname', 'fontsize']],
