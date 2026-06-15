@@ -73,7 +73,8 @@ def workflow_detail(workflow_id):
     steps = sorted(wf.steps, key=lambda s: s.order)
     participants = db.query(Participant).filter_by(workflow_id=workflow_id).order_by(Participant.id).all()
 
-    # Build next scheduled execution per participant
+    # Build next step info per participant
+    # 1. Check for scheduled executions first
     scheduled_execs = (
         db.query(Execution)
         .join(Participant)
@@ -85,7 +86,6 @@ def workflow_detail(workflow_id):
         .order_by(Execution.scheduled_at)
         .all()
     )
-    # Keep only the earliest per participant
     next_step_map = {}  # participant_id -> {step_name, scheduled_at}
     for ex in scheduled_execs:
         if ex.participant_id not in next_step_map:
@@ -93,6 +93,23 @@ def workflow_detail(workflow_id):
                 'step_name': ex.step.name if ex.step else '?',
                 'scheduled_at': ex.scheduled_at,
             }
+
+    # 2. For participants without a scheduled execution, show the next step by order
+    step_by_id = {s.id: s for s in steps}
+    for p in participants:
+        if p.id in next_step_map:
+            continue
+        if p.status == ParticipantStatus.COMPLETED or p.status == ParticipantStatus.PENDING:
+            continue
+        if p.current_step_id and p.current_step_id in step_by_id:
+            current = step_by_id[p.current_step_id]
+            # Find next step by order
+            next_s = next((s for s in steps if s.order > current.order), None)
+            if next_s:
+                next_step_map[p.id] = {
+                    'step_name': next_s.name,
+                    'scheduled_at': None,  # not yet scheduled
+                }
 
     return render_template('tracking/workflow_detail.html',
                            workflow=wf, steps=steps, participants=participants,

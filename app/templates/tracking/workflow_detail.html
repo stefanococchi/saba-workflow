@@ -110,9 +110,15 @@
                         {% set ns = next_step_map.get(p.id) %}
                         {% if ns %}
                         <div style="font-weight:600;color:var(--tk-primary)">{{ ns.step_name }}</div>
+                        {% if ns.scheduled_at %}
                         <div style="font-size:11px;color:var(--tk-on-surface-variant)">
                             <i class="bi bi-clock"></i> {{ ns.scheduled_at.strftime('%d/%m/%Y %H:%M') }}
                         </div>
+                        {% else %}
+                        <div style="font-size:11px;color:var(--tk-on-surface-variant)">
+                            <i class="bi bi-hourglass-split"></i> on completion
+                        </div>
+                        {% endif %}
                         {% else %}
                         <span style="color:#999">—</span>
                         {% endif %}
