@@ -198,11 +198,7 @@ def login():
             return redirect(url_for('tracking.index'))
         return redirect(url_for('admin.dashboard'))
 
-    # Auto-redirect to SSO if configured (unless ?mode=local)
-    if request.method == 'GET' and request.args.get('mode') != 'local':
-        if _sso_enabled():
-            get_flashed_messages()
-            return redirect(url_for('auth.microsoft_login', next=request.args.get('next', '')))
+    # Show login page with SSO button (no auto-redirect, so local login is always accessible)
 
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
