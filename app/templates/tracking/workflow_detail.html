@@ -65,6 +65,7 @@
                     <th>Company</th>
                     <th>Current Step</th>
                     <th>Status</th>
+                    <th>Next Step</th>
                     <th>Progress</th>
                     <th>Last Interaction</th>
                 </tr>
@@ -104,6 +105,17 @@
                     </td>
                     <td>
                         <span class="tk-badge tk-badge-{{ p.status.value }}">{{ p.status.value|replace('_', ' ') }}</span>
+                    </td>
+                    <td style="font-size:12px">
+                        {% set ns = next_step_map.get(p.id) %}
+                        {% if ns %}
+                        <div style="font-weight:600;color:var(--tk-primary)">{{ ns.step_name }}</div>
+                        <div style="font-size:11px;color:var(--tk-on-surface-variant)">
+                            <i class="bi bi-clock"></i> {{ ns.scheduled_at.strftime('%d/%m/%Y %H:%M') }}
+                        </div>
+                        {% else %}
+                        <span style="color:#999">—</span>
+                        {% endif %}
                     </td>
                     <td style="width:120px">
                         {% set total_steps = steps|length %}

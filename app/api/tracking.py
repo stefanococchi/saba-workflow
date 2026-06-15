@@ -73,8 +73,30 @@ def workflow_detail(workflow_id):
     steps = sorted(wf.steps, key=lambda s: s.order)
     participants = db.query(Participant).filter_by(workflow_id=workflow_id).order_by(Participant.id).all()
 
+    # Build next scheduled execution per participant
+    scheduled_execs = (
+        db.query(Execution)
+        .join(Participant)
+        .join(WorkflowStep)
+        .filter(
+            Participant.workflow_id == workflow_id,
+            Execution.status == ExecutionStatus.SCHEDULED,
+        )
+        .order_by(Execution.scheduled_at)
+        .all()
+    )
+    # Keep only the earliest per participant
+    next_step_map = {}  # participant_id -> {step_name, scheduled_at}
+    for ex in scheduled_execs:
+        if ex.participant_id not in next_step_map:
+            next_step_map[ex.participant_id] = {
+                'step_name': ex.step.name if ex.step else '?',
+                'scheduled_at': ex.scheduled_at,
+            }
+
     return render_template('tracking/workflow_detail.html',
-                           workflow=wf, steps=steps, participants=participants, user=g.user)
+                           workflow=wf, steps=steps, participants=participants,
+                           next_step_map=next_step_map, user=g.user)
 
 
 @tracking_bp.route('/api/workflow/<int:workflow_id>/timeline')
