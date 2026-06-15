@@ -248,6 +248,16 @@ function renderStatusFlow(data) {
         'completed': 'Completed', 'failed': 'Failed', 'skipped': 'Skipped'
     };
 
+    // Pending box
+    if (data.pending > 0) {
+        html += '<div class="tk-flow-step">' +
+                '<div class="tk-flow-step-name">PENDING</div>' +
+                '<div class="tk-flow-step-count" style="color:var(--tk-on-surface-variant)">' + data.pending + '</div>' +
+                '<div class="tk-flow-step-sub"><span class="tk-badge tk-badge-pending" style="font-size:10px">Waiting to start</span></div>' +
+                '</div>';
+        html += '<div class="tk-flow-arrow"><i class="bi bi-chevron-right"></i></div>';
+    }
+
     data.steps.forEach(function(step, idx) {
         if (idx > 0) html += '<div class="tk-flow-arrow"><i class="bi bi-chevron-right"></i></div>';
 
@@ -266,6 +276,16 @@ function renderStatusFlow(data) {
                 '<div class="tk-flow-step-sub">' + subHtml + '</div>' +
                 '</div>';
     });
+
+    // Completed box
+    if (data.completed > 0) {
+        html += '<div class="tk-flow-arrow"><i class="bi bi-chevron-right"></i></div>';
+        html += '<div class="tk-flow-step active" style="border-color:var(--tk-success)">' +
+                '<div class="tk-flow-step-name">COMPLETED</div>' +
+                '<div class="tk-flow-step-count" style="color:var(--tk-success)">' + data.completed + '</div>' +
+                '<div class="tk-flow-step-sub"><span class="tk-badge tk-badge-completed" style="font-size:10px">Finished</span></div>' +
+                '</div>';
+    }
 
     container.innerHTML = html;
 }

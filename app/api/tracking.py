@@ -163,32 +163,52 @@ def api_status_flow(workflow_id):
         'form_submitted': 6, 'survey_submitted': 6, 'completed': 7,
     }
 
+    # Build a set of participant IDs currently at each step
+    # Completed participants go to a virtual "completed" bucket
+    pids_at_step = {}  # step_id -> set of participant_ids
+    pids_completed = set()
+    pids_pending = set()
+    for p in participants:
+        if p.status == ParticipantStatus.COMPLETED:
+            pids_completed.add(p.id)
+        elif p.status == ParticipantStatus.PENDING:
+            pids_pending.add(p.id)
+        elif p.current_step_id:
+            pids_at_step.setdefault(p.current_step_id, set()).add(p.id)
+
     flow = []
     for step in steps:
-        # For each step, find the best substate per participant
-        step_execs = db.query(Execution).filter_by(step_id=step.id).all()
+        # Only count participants whose current step is this one
+        current_pids = pids_at_step.get(step.id, set())
 
-        # Also get activity logs for richer substates
+        # For those participants, find their best substate at this step
+        step_execs = db.query(Execution).filter_by(step_id=step.id).all()
         step_activities = db.query(ActivityLog).filter_by(step_id=step.id).all()
 
-        # Build best substate per participant
         best = {}  # participant_id -> best_status
         for ex in step_execs:
+            if ex.participant_id not in current_pids:
+                continue
             cur = best.get(ex.participant_id, '')
             if SUBSTATE_RANK.get(ex.status.value, 0) > SUBSTATE_RANK.get(cur, -1):
                 best[ex.participant_id] = ex.status.value
 
         for act in step_activities:
-            if act.participant_id:
-                cur = best.get(act.participant_id, '')
-                evt = act.event_type.replace('email_', '')  # normalize
-                if SUBSTATE_RANK.get(evt, 0) > SUBSTATE_RANK.get(cur, -1):
-                    best[act.participant_id] = evt
+            if not act.participant_id or act.participant_id not in current_pids:
+                continue
+            cur = best.get(act.participant_id, '')
+            evt = act.event_type.replace('email_', '')  # normalize
+            if SUBSTATE_RANK.get(evt, 0) > SUBSTATE_RANK.get(cur, -1):
+                best[act.participant_id] = evt
+
+        # Participants at this step with no execution yet → scheduled
+        for pid in current_pids:
+            if pid not in best:
+                best[pid] = 'scheduled'
 
         # Count substates
         counts = {}
         for pid, st in best.items():
-            # Normalize delivered → sent
             if st == 'delivered':
                 st = 'sent'
             counts[st] = counts.get(st, 0) + 1
@@ -197,11 +217,13 @@ def api_status_flow(workflow_id):
             'step_order': step.order,
             'step_name': step.name,
             'step_type': step.type.value,
-            'total': len(best),
+            'total': len(current_pids),
             'substates': counts,
         })
 
     return jsonify({
         'steps': flow,
         'total_participants': len(participants),
+        'pending': len(pids_pending),
+        'completed': len(pids_completed),
     })
