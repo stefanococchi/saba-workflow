@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, session
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage, Attachment, User, user_workflows
+from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage, Attachment, User, UserRole, user_workflows
 from app.api.auth import superuser_required
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload, subqueryload, aliased
@@ -2028,7 +2028,12 @@ def user_create():
         username = request.form.get('username', '').strip()
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '')
-        is_superuser = request.form.get('is_superuser') == 'on'
+        role_str = request.form.get('role', 'user')
+        try:
+            role = UserRole(role_str)
+        except ValueError:
+            role = UserRole.USER
+        is_superuser = (role == UserRole.SUPERUSER)
 
         if not username or not password:
             flash('Username and password required', 'danger')
@@ -2038,7 +2043,7 @@ def user_create():
             flash(f'Username "{username}" already exists', 'danger')
             return redirect(url_for('admin.users_list'))
 
-        user = User(username=username, email=email, is_superuser=is_superuser)
+        user = User(username=username, email=email, is_superuser=is_superuser, role=role)
         user.set_password(password)
         db.add(user)
         db.commit()
@@ -2082,16 +2087,29 @@ def user_delete(user_id):
 @admin_bp.route('/users/<int:user_id>/toggle-role', methods=['POST'])
 @superuser_required
 def toggle_user_role(user_id):
-    """Toggle user between superuser and regular user"""
+    """Cycle user role: user → superuser → client → user"""
     try:
         user = db.get(User, user_id)
         if not user:
             return jsonify({'error': 'Not found'}), 404
         if user.id == session.get('user_id'):
             return jsonify({'error': 'Cannot change your own role'}), 400
-        user.is_superuser = not user.is_superuser
+
+        # If request has explicit role, use it; otherwise cycle
+        data = request.get_json(silent=True) or {}
+        if 'role' in data:
+            try:
+                new_role = UserRole(data['role'])
+            except ValueError:
+                return jsonify({'error': 'Invalid role'}), 400
+        else:
+            cycle = {UserRole.USER: UserRole.SUPERUSER, UserRole.SUPERUSER: UserRole.CLIENT, UserRole.CLIENT: UserRole.USER}
+            new_role = cycle.get(user.role, UserRole.USER)
+
+        user.role = new_role
+        user.is_superuser = (new_role == UserRole.SUPERUSER)
         db.commit()
-        return jsonify({'is_superuser': user.is_superuser}), 200
+        return jsonify({'role': new_role.value, 'is_superuser': user.is_superuser}), 200
     except Exception as e:
         db.rollback()
         return jsonify({'error': str(e)}), 500

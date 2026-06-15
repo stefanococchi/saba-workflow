@@ -96,9 +96,14 @@ def create_app(config_object=None):
         if not g.user:
             session.clear()
             return redirect(url_for('auth.login'))
+        # Client users cannot access admin — redirect to tracking
+        if session.get('role') == 'client':
+            return redirect(url_for('tracking.index'))
 
+    from app.api.tracking import tracking_bp
     app.register_blueprint(auth_bp)  # Auth (login/logout)
     app.register_blueprint(admin_bp)  # Admin interface
+    app.register_blueprint(tracking_bp)  # Client tracking
     app.register_blueprint(landing_builder_api_bp, url_prefix='/api')  # Landing builder API
     app.register_blueprint(pratiche_bp, url_prefix='/api/ao')  # Pratiche documentali API
     

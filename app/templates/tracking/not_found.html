@@ -1,0 +1,13 @@
+{% extends "tracking/base.html" %}
+
+{% block title %}Non trovato — Tracking{% endblock %}
+
+{% block content %}
+<div class="tk-card tk-empty">
+    <i class="bi bi-exclamation-triangle"></i>
+    <p>Workflow non trovato o non hai accesso.</p>
+    <a href="{{ url_for('tracking.index') }}" class="btn btn-outline-primary btn-sm" style="border-radius:20px">
+        <i class="bi bi-arrow-left"></i> Torna ai tuoi workflow
+    </a>
+</div>
+{% endblock %}

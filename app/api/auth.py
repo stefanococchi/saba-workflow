@@ -4,7 +4,7 @@ from functools import wraps
 from itsdangerous import URLSafeTimedSerializer
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, g, current_app, get_flashed_messages
 from app import db_session as db
-from app.models import User
+from app.models import User, UserRole
 import logging
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,20 @@ def superuser_required(f):
         if not g.user or not g.user.is_superuser:
             flash('Access denied', 'danger')
             return redirect(url_for('admin.dashboard'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def client_login_required(f):
+    """Decorator for client tracking pages — allows client, user, and superuser."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('user_id'):
+            return redirect(url_for('auth.login'))
+        g.user = get_current_user()
+        if not g.user:
+            session.clear()
+            return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
     return decorated
 
@@ -162,6 +176,7 @@ def microsoft_callback():
     session['user_id'] = user.id
     session['username'] = user.username
     session['is_superuser'] = user.is_superuser
+    session['role'] = user.role.value if user.role else 'user'
     logger.info(f"User {user.username} logged in via Microsoft SSO ({ms_email})")
     try:
         from app.services.audit_service import log_user_action
@@ -169,6 +184,8 @@ def microsoft_callback():
     except Exception:
         pass
 
+    if user.role == UserRole.CLIENT:
+        return redirect(url_for('tracking.index'))
     return redirect(next_url or url_for('admin.dashboard'))
 
 
@@ -177,6 +194,8 @@ def microsoft_callback():
 @auth_bp.route('/auth/login', methods=['GET', 'POST'])
 def login():
     if session.get('user_id'):
+        if session.get('role') == 'client':
+            return redirect(url_for('tracking.index'))
         return redirect(url_for('admin.dashboard'))
 
     # Auto-redirect to SSO if configured (unless ?mode=local)
@@ -195,12 +214,15 @@ def login():
             session['user_id'] = user.id
             session['username'] = user.username
             session['is_superuser'] = user.is_superuser
-            logger.info(f"User {username} logged in")
+            session['role'] = user.role.value if user.role else 'user'
+            logger.info(f"User {username} logged in (role={user.role.value})")
             try:
                 from app.services.audit_service import log_user_action
                 log_user_action('LOGIN', 'Auth', user.id, f'User {username} logged in')
             except Exception:
                 pass
+            if user.role == UserRole.CLIENT:
+                return redirect(url_for('tracking.index'))
             return redirect(url_for('admin.dashboard'))
 
         flash('Invalid username or password', 'danger')

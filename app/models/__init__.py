@@ -6,6 +6,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app import Base
 
 
+class UserRole(str, Enum):
+    """Ruoli utente"""
+    SUPERUSER = 'superuser'
+    USER = 'user'
+    CLIENT = 'client'
+
+
 class WorkflowStatus(str, Enum):
     """Stati possibili workflow"""
     DRAFT = 'draft'
@@ -329,6 +336,7 @@ class User(Base):
     email = Column(String(255), nullable=True)
     password_hash = Column(String(255), nullable=True)
     is_superuser = Column(Boolean, default=False, nullable=False)
+    role = Column(SQLEnum(UserRole), default=UserRole.USER, nullable=False, server_default='user')
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Microsoft SSO

@@ -1,0 +1,333 @@
+{% extends "tracking/base.html" %}
+
+{% block title %}{{ workflow.name }} — Tracking{% endblock %}
+
+{% block content %}
+<div class="tk-breadcrumb">
+    <a href="{{ url_for('tracking.index') }}"><i class="bi bi-arrow-left"></i> Tutti i workflow</a>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 style="font-weight:700;margin:0">{{ workflow.name }}</h4>
+    <span class="tk-badge tk-badge-{{ workflow.status.value }}" style="font-size:12px">{{ workflow.status.value }}</span>
+</div>
+
+{% if workflow.description %}
+<p style="font-size:13px;color:var(--tk-on-surface-variant);margin-bottom:20px">{{ workflow.description }}</p>
+{% endif %}
+
+<!-- Summary stats -->
+<div class="tk-card">
+    <div class="row text-center">
+        <div class="col-3 tk-stat">
+            <div class="tk-stat-value" id="statTotal">{{ participants|length }}</div>
+            <div class="tk-stat-label">Totali</div>
+        </div>
+        <div class="col-3 tk-stat">
+            <div class="tk-stat-value" style="color:var(--tk-info)" id="statPending">—</div>
+            <div class="tk-stat-label">Pending</div>
+        </div>
+        <div class="col-3 tk-stat">
+            <div class="tk-stat-value" style="color:var(--tk-primary)" id="statInProgress">—</div>
+            <div class="tk-stat-label">In corso</div>
+        </div>
+        <div class="col-3 tk-stat">
+            <div class="tk-stat-value" style="color:var(--tk-success)" id="statCompleted">—</div>
+            <div class="tk-stat-label">Completati</div>
+        </div>
+    </div>
+</div>
+
+<!-- Status Flow -->
+<div class="tk-card">
+    <div class="tk-card-title"><i class="bi bi-funnel"></i> Status Flow</div>
+    <div id="statusFlow" class="tk-flow">
+        <div style="text-align:center;color:var(--tk-on-surface-variant);width:100%;padding:20px">
+            <span class="spinner-border spinner-border-sm"></span> Caricamento...
+        </div>
+    </div>
+</div>
+
+<!-- Participants table -->
+<div class="tk-card">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="tk-card-title" style="margin-bottom:0"><i class="bi bi-people"></i> Partecipanti</div>
+        <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Cerca..."
+               style="width:220px;border-radius:20px;font-size:12px" oninput="filterTable()">
+    </div>
+
+    {% if participants %}
+    <div class="table-responsive">
+        <table class="tk-table" id="participantsTable">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Azienda</th>
+                    <th>Step attuale</th>
+                    <th>Stato</th>
+                    <th>Progresso</th>
+                    <th>Ultima interazione</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in participants %}
+                {% set step_name = '' %}
+                {% if p.current_step_id %}
+                    {% for s in steps %}
+                        {% if s.id == p.current_step_id %}
+                            {% set step_name = s.name %}
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+                {% set company = (p.sabaform_data or {}).get('company', '') %}
+                <tr class="participant-row"
+                    data-search="{{ (p.first_name or '')|lower }} {{ (p.last_name or '')|lower }} {{ company|lower }} {{ (p.email or '')|lower }}"
+                    data-pid="{{ p.id }}" style="cursor:pointer" onclick="showParticipantTimeline({{ p.id }}, this)">
+                    <td>
+                        <strong>{{ p.first_name or '' }} {{ p.last_name or '' }}</strong>
+                    </td>
+                    <td style="font-size:12px;color:var(--tk-on-surface-variant)">{{ company }}</td>
+                    <td>
+                        {% if step_name %}
+                        <span style="font-size:12px">{{ step_name }}</span>
+                        {% else %}
+                        <span style="font-size:12px;color:#999">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="tk-badge tk-badge-{{ p.status.value }}">{{ p.status.value|replace('_', ' ') }}</span>
+                    </td>
+                    <td style="width:120px">
+                        {% set total_steps = steps|length %}
+                        {% set current_order = 0 %}
+                        {% if p.current_step_id %}
+                            {% for s in steps %}
+                                {% if s.id == p.current_step_id %}
+                                    {% set current_order = s.order %}
+                                {% endif %}
+                            {% endfor %}
+                        {% endif %}
+                        {% if p.status.value == 'completed' %}
+                            {% set pct = 100 %}
+                        {% elif total_steps > 0 and current_order > 0 %}
+                            {% set pct = ((current_order - 1) / total_steps * 100)|int %}
+                        {% else %}
+                            {% set pct = 0 %}
+                        {% endif %}
+                        <div class="tk-progress" title="{{ pct }}%">
+                            <div class="tk-progress-bar" style="width:{{ pct }}%"></div>
+                        </div>
+                    </td>
+                    <td style="font-size:11px;color:var(--tk-on-surface-variant)">
+                        {{ p.last_interaction.strftime('%d/%m/%Y %H:%M') if p.last_interaction else '—' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="tk-empty">
+        <i class="bi bi-people"></i>
+        <p>Nessun partecipante in questo workflow.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Execution Timeline -->
+<div class="tk-card">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="tk-card-title" style="margin-bottom:0"><i class="bi bi-clock-history"></i> Execution Timeline</div>
+        <div class="d-flex gap-2 align-items-center">
+            <span id="timelineFilterLabel" style="font-size:11px;color:var(--tk-on-surface-variant)">Tutti i partecipanti</span>
+            <button class="btn btn-outline-secondary btn-sm" style="font-size:11px;border-radius:20px;padding:2px 12px"
+                    onclick="clearTimelineFilter()" id="btnClearFilter" style="display:none">
+                <i class="bi bi-x"></i> Reset filtro
+            </button>
+        </div>
+    </div>
+    <div id="timeline">
+        <div style="text-align:center;color:var(--tk-on-surface-variant);padding:20px">
+            <span class="spinner-border spinner-border-sm"></span> Caricamento timeline...
+        </div>
+    </div>
+    <div id="timelineMore" style="text-align:center;display:none;padding:8px">
+        <button class="btn btn-outline-primary btn-sm" style="border-radius:20px;font-size:12px" onclick="showMoreTimeline()">
+            Mostra di pi&ugrave;
+        </button>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var WORKFLOW_ID = {{ workflow.id }};
+var allTimeline = [];
+var timelineShown = 50;
+var filterParticipantId = null;
+
+// ── Status Flow ──
+fetch('/tracking/api/workflow/' + WORKFLOW_ID + '/status-flow')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        // Update stats from DOM
+        var rows = document.querySelectorAll('.participant-row');
+        var pending = 0, inProgress = 0, completed = 0;
+        rows.forEach(function(r) {
+            var badge = r.querySelector('.tk-badge');
+            if (!badge) return;
+            var cls = badge.className;
+            if (cls.indexOf('pending') >= 0) pending++;
+            else if (cls.indexOf('in_progress') >= 0) inProgress++;
+            else if (cls.indexOf('completed') >= 0) completed++;
+        });
+        document.getElementById('statPending').textContent = pending;
+        document.getElementById('statInProgress').textContent = inProgress;
+        document.getElementById('statCompleted').textContent = completed;
+
+        renderStatusFlow(data);
+    })
+    .catch(function(e) {
+        document.getElementById('statusFlow').innerHTML = '<div style="color:var(--tk-error)">Errore caricamento status flow</div>';
+    });
+
+function renderStatusFlow(data) {
+    var container = document.getElementById('statusFlow');
+    if (!data.steps || data.steps.length === 0) {
+        container.innerHTML = '<div class="tk-empty" style="padding:12px"><i class="bi bi-diagram-3"></i> Nessuno step</div>';
+        return;
+    }
+
+    var html = '';
+    var statusLabels = {
+        'scheduled': 'Schedulato', 'sent': 'Inviato', 'opened': 'Aperto', 'clicked': 'Cliccato',
+        'landing_opened': 'Landing aperta', 'form_submitted': 'Form inviato', 'survey_submitted': 'Survey',
+        'completed': 'Completato', 'failed': 'Fallito', 'skipped': 'Saltato'
+    };
+
+    data.steps.forEach(function(step, idx) {
+        if (idx > 0) html += '<div class="tk-flow-arrow"><i class="bi bi-chevron-right"></i></div>';
+
+        var subHtml = '';
+        var ordered = ['scheduled', 'sent', 'opened', 'clicked', 'landing_opened', 'form_submitted', 'completed', 'failed', 'skipped'];
+        ordered.forEach(function(st) {
+            if (step.substates[st]) {
+                subHtml += '<div><span class="tk-badge tk-badge-' + st + '" style="font-size:10px">' +
+                           (statusLabels[st] || st) + ': ' + step.substates[st] + '</span></div>';
+            }
+        });
+
+        html += '<div class="tk-flow-step' + (step.total > 0 ? ' active' : '') + '">' +
+                '<div class="tk-flow-step-name">' + escHtml(step.step_name) + '</div>' +
+                '<div class="tk-flow-step-count">' + step.total + '</div>' +
+                '<div class="tk-flow-step-sub">' + subHtml + '</div>' +
+                '</div>';
+    });
+
+    container.innerHTML = html;
+}
+
+// ── Timeline ──
+fetch('/tracking/api/workflow/' + WORKFLOW_ID + '/timeline')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        allTimeline = data;
+        renderTimeline();
+    })
+    .catch(function(e) {
+        document.getElementById('timeline').innerHTML = '<div style="color:var(--tk-error)">Errore caricamento timeline</div>';
+    });
+
+function renderTimeline() {
+    var container = document.getElementById('timeline');
+    var items = allTimeline;
+
+    if (filterParticipantId) {
+        items = items.filter(function(t) { return t.participant_id == filterParticipantId; });
+    }
+
+    if (items.length === 0) {
+        container.innerHTML = '<div class="tk-empty" style="padding:12px"><i class="bi bi-clock-history"></i> Nessun evento</div>';
+        document.getElementById('timelineMore').style.display = 'none';
+        return;
+    }
+
+    var shown = items.slice(0, timelineShown);
+    var html = '';
+
+    var statusIcons = {
+        'scheduled': 'bi-clock', 'sent': 'bi-envelope-check', 'completed': 'bi-check-circle-fill',
+        'opened': 'bi-envelope-open', 'clicked': 'bi-cursor', 'failed': 'bi-x-circle',
+        'skipped': 'bi-skip-forward', 'landing_opened': 'bi-box-arrow-up-right',
+        'form_submitted': 'bi-pencil-square', 'email_sent': 'bi-envelope-check',
+        'email_opened': 'bi-envelope-open', 'email_clicked': 'bi-cursor',
+        'email_delivered': 'bi-envelope-check', 'email_failed': 'bi-x-circle',
+        'workflow_started': 'bi-play-circle', 'status_changed': 'bi-arrow-repeat',
+    };
+
+    shown.forEach(function(t) {
+        var time = t.time ? new Date(t.time).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+        var status = t.status || t.event_type || '';
+        var icon = statusIcons[status] || statusIcons[t.event_type] || 'bi-circle';
+        var desc = t.description || status.replace(/_/g, ' ');
+
+        html += '<div class="tk-timeline-item">' +
+                '<div class="tk-timeline-time">' + time + '</div>' +
+                '<div class="tk-timeline-content">' +
+                '<span class="tk-timeline-participant">' + escHtml(t.participant || '') + '</span> ' +
+                '<span class="tk-badge tk-badge-' + status + '"><i class="bi ' + icon + '"></i> ' + escHtml(status.replace(/_/g, ' ')) + '</span>' +
+                (t.step ? ' <span style="font-size:11px;color:var(--tk-on-surface-variant)">@ ' + escHtml(t.step) + '</span>' : '') +
+                (t.description ? '<div style="font-size:11px;color:var(--tk-on-surface-variant);margin-top:2px">' + escHtml(t.description) + '</div>' : '') +
+                (t.error ? '<div style="font-size:11px;color:var(--tk-error)"><i class="bi bi-exclamation-triangle"></i> ' + escHtml(t.error) + '</div>' : '') +
+                '</div></div>';
+    });
+
+    container.innerHTML = html;
+    document.getElementById('timelineMore').style.display = (items.length > timelineShown) ? '' : 'none';
+}
+
+function showMoreTimeline() {
+    timelineShown += 50;
+    renderTimeline();
+}
+
+function showParticipantTimeline(pid, rowEl) {
+    filterParticipantId = pid;
+    timelineShown = 50;
+
+    // Highlight row
+    document.querySelectorAll('.participant-row').forEach(function(r) { r.style.background = ''; });
+    if (rowEl) rowEl.style.background = '#f5efe6';
+
+    var name = rowEl ? rowEl.querySelector('strong').textContent.trim() : '#' + pid;
+    document.getElementById('timelineFilterLabel').textContent = 'Filtro: ' + name;
+    document.getElementById('btnClearFilter').style.display = '';
+
+    renderTimeline();
+    document.getElementById('timeline').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function clearTimelineFilter() {
+    filterParticipantId = null;
+    timelineShown = 50;
+    document.querySelectorAll('.participant-row').forEach(function(r) { r.style.background = ''; });
+    document.getElementById('timelineFilterLabel').textContent = 'Tutti i partecipanti';
+    document.getElementById('btnClearFilter').style.display = 'none';
+    renderTimeline();
+}
+
+function filterTable() {
+    var q = document.getElementById('searchBox').value.toLowerCase();
+    document.querySelectorAll('.participant-row').forEach(function(row) {
+        row.style.display = row.getAttribute('data-search').indexOf(q) >= 0 ? '' : 'none';
+    });
+}
+
+function escHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+}
+</script>
+{% endblock %}
