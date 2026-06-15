@@ -104,8 +104,8 @@ def workflow_detail(workflow_id):
         # Calculate timeout for current step
         if p.current_step_id and p.current_step_id in step_by_id and p.status == ParticipantStatus.IN_PROGRESS:
             current = step_by_id[p.current_step_id]
-            config = current.landing_page_config or {}
-            timeout_days = config.get('landing_timeout_days')
+            config = current.skip_conditions or {}
+            timeout_days = config.get('landing_timeout_days', 7) if config.get('wait_for_landing') else None
 
             if timeout_days:
                 # Find when email was sent for this step
