@@ -1,11 +1,12 @@
 """Client tracking blueprint — read-only workflow status for external clients."""
 
-from flask import Blueprint, render_template, session, g, jsonify
+from flask import Blueprint, render_template, session, g, jsonify, request
 from app import db_session as db
 from app.models import (
     Workflow, Participant, Execution, ActivityLog, WorkflowStep,
     ParticipantStatus, ExecutionStatus, User, UserRole
 )
+from app.services.scheduler_service import SchedulerService
 from app.api.auth import client_login_required, get_current_user
 import logging
 
@@ -327,4 +328,70 @@ def api_status_flow(workflow_id):
         'total_participants': len(participants),
         'pending': len(pids_pending),
         'completed': len(pids_completed),
+    })
+
+
+@tracking_bp.route('/api/participant/<int:participant_id>/resolve', methods=['POST'])
+def api_resolve_participant(participant_id):
+    """Fix a participant by re-routing them to the correct next step
+    (original landing step's 'on completion' path)."""
+    p = db.get(Participant, participant_id)
+    if not p:
+        return jsonify({'error': 'Participant not found'}), 404
+
+    # Check access
+    workflows = _get_user_workflows()
+    if not any(w.id == p.workflow_id for w in workflows):
+        return jsonify({'error': 'Not found'}), 404
+
+    # Find original landing step
+    original_landing = (
+        db.query(WorkflowStep)
+        .filter(
+            WorkflowStep.workflow_id == p.workflow_id,
+            (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None)) | (WorkflowStep.landing_page_config.isnot(None))
+        )
+        .order_by(WorkflowStep.order)
+        .first()
+    )
+    if not original_landing:
+        return jsonify({'error': 'No landing step found'}), 400
+
+    # Find the correct next step (on completion path)
+    config = original_landing.skip_conditions or {}
+    if_filled = config.get('landing_if_filled', 'continue')
+    if_filled_step = config.get('landing_if_filled_step', 0)
+
+    steps = sorted(
+        db.query(WorkflowStep).filter_by(workflow_id=p.workflow_id).all(),
+        key=lambda s: s.order
+    )
+
+    if if_filled == 'jump' and if_filled_step:
+        target = next((s for s in steps if s.order == if_filled_step), None)
+    elif if_filled == 'stop':
+        # Mark as completed
+        SchedulerService.cancel_scheduled_executions(p.id)
+        p.status = ParticipantStatus.COMPLETED
+        from datetime import datetime
+        p.completed_at = datetime.utcnow()
+        db.commit()
+        return jsonify({'success': True, 'message': f'Participant marked as completed'})
+    else:  # continue
+        target = next((s for s in steps if s.order > original_landing.order), None)
+
+    if not target:
+        return jsonify({'error': 'No target step found'}), 400
+
+    # Cancel existing scheduled executions and re-route
+    SchedulerService.cancel_scheduled_executions(p.id)
+    p.current_step_id = target.id
+    p.status = ParticipantStatus.IN_PROGRESS
+    p.completed_at = None
+    SchedulerService.schedule_step(p, target, delay_hours=0)
+    db.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'Re-routed to step {target.order}: {target.name}'
     })
