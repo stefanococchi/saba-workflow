@@ -283,20 +283,27 @@ def submit_landing_data(token):
         )
 
         if current_step:
-            # If participant is already past the landing step (e.g. received a reminder),
-            # bring them back to the landing step and apply its configured branch
-            if participant.current_step_id and participant.current_step and \
-               participant.current_step.order > current_step.order:
-                SchedulerService.cancel_scheduled_executions(participant.id)
-                participant.current_step_id = current_step.id
+            # Find the original landing step (first step with a landing page).
+            # When a reminder re-sends the same form, we must branch from the
+            # original step so that "continue" goes to THANKS FOR SUBMITTING
+            # (step after the original), not to the step after the reminder.
+            original_landing_step = db.query(WorkflowStep).filter(
+                WorkflowStep.workflow_id == participant.workflow_id,
+                (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None)) | (WorkflowStep.landing_page_config.isnot(None))
+            ).order_by(WorkflowStep.order).first()
+
+            branch_step = original_landing_step or current_step
+
+            if participant.current_step_id != branch_step.id:
+                participant.current_step_id = branch_step.id
                 db.commit()
-                logger.info(f"Partecipante {participant.id} riportato a step {current_step.order} dopo form compilato")
+                logger.info(f"Partecipante {participant.id} riportato a step {branch_step.order} dopo form compilato")
 
             # Usa _handle_landing_branch per rispettare landing_if_filled/jump/stop
-            config = current_step.skip_conditions or {}
+            config = branch_step.skip_conditions or {}
             if_filled = config.get('landing_if_filled', 'continue')
             if_filled_step = config.get('landing_if_filled_step', 0)
-            SchedulerService._handle_landing_branch(participant, current_step, if_filled, if_filled_step)
+            SchedulerService._handle_landing_branch(participant, branch_step, if_filled, if_filled_step)
             logger.info(f"Partecipante {participant.id} completato landing, branch: {if_filled}")
         else:
             # Nessuno step trovato — marca completato come fallback
