@@ -6,7 +6,7 @@ from app.models import (
     Workflow, Participant, Execution, ActivityLog, WorkflowStep,
     ParticipantStatus, ExecutionStatus, User, UserRole
 )
-from app.services.scheduler_service import SchedulerService
+
 from app.api.auth import client_login_required, get_current_user
 import logging
 
@@ -333,9 +333,7 @@ def api_status_flow(workflow_id):
 
 @tracking_bp.route('/api/participant/<int:participant_id>/resolve', methods=['POST'])
 def api_resolve_participant(participant_id):
-    """Fix a participant by re-routing them to the correct next step
-    (original landing step's 'on completion' path).
-    Pass ?preview=1 to get a description without applying changes."""
+    """Show current step and expected next step for a participant (read-only)."""
     p = db.get(Participant, participant_id)
     if not p:
         return jsonify({'error': 'Participant not found'}), 404
@@ -345,7 +343,12 @@ def api_resolve_participant(participant_id):
     if not any(w.id == p.workflow_id for w in workflows):
         return jsonify({'error': 'Not found'}), 404
 
-    preview = request.args.get('preview') == '1'
+    # Current step info
+    current_step_name = '—'
+    if p.current_step_id:
+        cs = db.get(WorkflowStep, p.current_step_id)
+        if cs:
+            current_step_name = cs.name
 
     # Find original landing step
     original_landing = (
@@ -360,13 +363,6 @@ def api_resolve_participant(participant_id):
     if not original_landing:
         return jsonify({'error': 'No landing step found'}), 400
 
-    # Current step info
-    current_step_name = '—'
-    if p.current_step_id:
-        cs = db.get(WorkflowStep, p.current_step_id)
-        if cs:
-            current_step_name = cs.name
-
     # Find the correct next step (on completion path)
     config = original_landing.skip_conditions or {}
     if_filled = config.get('landing_if_filled', 'continue')
@@ -380,51 +376,30 @@ def api_resolve_participant(participant_id):
     if if_filled == 'jump' and if_filled_step:
         target = next((s for s in steps if s.order == if_filled_step), None)
     elif if_filled == 'stop':
-        if preview:
-            return jsonify({
-                'success': True,
-                'preview': True,
-                'current_step': current_step_name,
-                'current_status': p.status.value,
-                'target_step': 'COMPLETED',
-                'description': f'Will mark participant as completed (workflow stop).',
-            })
-        SchedulerService.cancel_scheduled_executions(p.id)
-        p.status = ParticipantStatus.COMPLETED
-        from datetime import datetime
-        p.completed_at = datetime.utcnow()
-        db.commit()
-        return jsonify({'success': True, 'message': f'Participant marked as completed'})
+        return jsonify({
+            'success': True,
+            'description': (
+                f'Current step: {current_step_name}\n'
+                f'Status: {p.status.value}\n\n'
+                f'Next step on form completion:\n'
+                f'→ COMPLETED (workflow stop)'
+            ),
+        })
     else:  # continue
         target = next((s for s in steps if s.order > original_landing.order), None)
 
     if not target:
         return jsonify({'error': 'No target step found'}), 400
 
-    if preview:
-        return jsonify({
-            'success': True,
-            'preview': True,
-            'current_step': current_step_name,
-            'current_status': p.status.value,
-            'target_step': target.name,
-            'description': (
-                f'Current step: {current_step_name}\n'
-                f'Current status: {p.status.value}\n\n'
-                f'Will cancel scheduled executions and re-route to:\n'
-                f'→ {target.name} (step {target.order})\n'
-                f'Status will be set to: in_progress\n'
-                f'Execution will be scheduled immediately.'
-            ),
-        })
-
-    # Cancel existing scheduled executions and re-route
-    SchedulerService.cancel_scheduled_executions(p.id)
-    p.current_step_id = target.id
-    p.status = ParticipantStatus.IN_PROGRESS
-    p.completed_at = None
-    SchedulerService.schedule_step(p, target, delay_hours=0)
-    db.commit()
+    return jsonify({
+        'success': True,
+        'description': (
+            f'Current step: {current_step_name}\n'
+            f'Status: {p.status.value}\n\n'
+            f'Next step on form completion:\n'
+            f'→ {target.name} (step {target.order})'
+        ),
+    })
 
     return jsonify({
         'success': True,

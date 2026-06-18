@@ -1012,7 +1012,6 @@ function resolveParticipant(id, btn) {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:12px;height:12px"></span>';
 
-    // Step 1: preview — show what will happen
     fetch('/tracking/api/participant/' + id + '/resolve?preview=1', { method: 'POST' })
         .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
         .then(function(res) {
@@ -1022,29 +1021,7 @@ function resolveParticipant(id, btn) {
                 alert('Error: ' + (res.data.error || 'Unknown error'));
                 return;
             }
-            var info = 'RESOLVE: ' + name + '\n\n' + res.data.description + '\n\nProceed?';
-            if (!confirm(info)) return;
-
-            // Step 2: apply
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:12px;height:12px"></span>';
-            fetch('/tracking/api/participant/' + id + '/resolve', { method: 'POST' })
-                .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
-                .then(function(res2) {
-                    if (res2.ok && res2.data.success) {
-                        btn.classList.remove('btn-outline-success');
-                        btn.classList.add('btn-success');
-                        btn.innerHTML = '<i class="bi bi-check-lg"></i>';
-                        btn.title = res2.data.message;
-                        if (p) p.status = 'in_progress';
-                        setTimeout(function() { applyFilters(); }, 1500);
-                    } else {
-                        alert('Error: ' + (res2.data.error || 'Unknown error'));
-                        btn.disabled = false;
-                        btn.innerHTML = origHtml;
-                    }
-                })
-                .catch(function() { alert('Network error'); btn.disabled = false; btn.innerHTML = origHtml; });
+            alert(name + '\n\n' + res.data.description);
         })
         .catch(function() { alert('Network error'); btn.disabled = false; btn.innerHTML = origHtml; });
 }
