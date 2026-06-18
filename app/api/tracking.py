@@ -144,7 +144,29 @@ def workflow_detail(workflow_id):
             continue
         if p.current_step_id and p.current_step_id in step_by_id:
             current = step_by_id[p.current_step_id]
-            next_s = next((s for s in steps if s.order > current.order), None)
+            config = current.skip_conditions or {}
+
+            # For wait_for_landing steps, "on completion" means form filled:
+            # branch from the original landing step, not the current (reminder) step
+            if config.get('wait_for_landing'):
+                original_landing = next(
+                    (s for s in steps if s.landing_html or s.landing_gjs_data or s.landing_page_config),
+                    None
+                )
+                branch_step = original_landing or current
+                b_config = branch_step.skip_conditions or {}
+                if_filled = b_config.get('landing_if_filled', 'continue')
+                if_filled_step = b_config.get('landing_if_filled_step', 0)
+
+                if if_filled == 'jump' and if_filled_step:
+                    next_s = next((s for s in steps if s.order == if_filled_step), None)
+                elif if_filled == 'stop':
+                    next_s = None
+                else:  # continue
+                    next_s = next((s for s in steps if s.order > branch_step.order), None)
+            else:
+                next_s = next((s for s in steps if s.order > current.order), None)
+
             if next_s:
                 next_step_map[p.id] = {
                     'step_name': next_s.name,
