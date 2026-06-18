@@ -402,8 +402,18 @@ class SchedulerService:
 
                 # Check if form was submitted
                 if p.collected_data and len(p.collected_data) > 0:
-                    logger.info(f"✓ Landing form submitted by participant {p.id}")
-                    SchedulerService._handle_landing_branch(p, step, if_filled, if_filled_step)
+                    # Use original landing step for branching (not the reminder step)
+                    original_landing = _db().query(WorkflowStep).filter(
+                        WorkflowStep.workflow_id == p.workflow_id,
+                        (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None)) | (WorkflowStep.landing_page_config.isnot(None))
+                    ).order_by(WorkflowStep.order).first()
+                    branch_step = original_landing or step
+                    branch_config = branch_step.skip_conditions or {}
+                    ol_if_filled = branch_config.get('landing_if_filled', 'continue')
+                    ol_if_filled_step = branch_config.get('landing_if_filled_step', 0)
+                    logger.info(f"✓ Landing form submitted by participant {p.id}, branching from step {branch_step.order}")
+                    p.current_step_id = branch_step.id
+                    SchedulerService._handle_landing_branch(p, branch_step, ol_if_filled, ol_if_filled_step)
                     acted += 1
                     continue
 
