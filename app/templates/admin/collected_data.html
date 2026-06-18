@@ -506,6 +506,7 @@ function _doRender() {
         var actions = '<td><div class="btn-group btn-group-sm">' +
             '<button class="btn btn-outline-info" onclick="viewData(' + p.id + ')" title="' + T.data + '"><i class="bi bi-file-text"></i></button>' +
             '<button class="btn btn-outline-primary" onclick="editParticipant(' + p.id + ')" title="' + T.edit + '"><i class="bi bi-pencil"></i></button>' +
+            '<button class="btn btn-outline-success" onclick="resolveParticipant(' + p.id + ', this)" title="Resolve"><i class="bi bi-arrow-repeat"></i></button>' +
             '<button class="btn btn-outline-danger" onclick="deleteParticipant(' + p.id + ')" title="' + T.delete + '"><i class="bi bi-trash"></i></button>' +
             '</div></td>';
         return '<tr>' + cells + actions + '</tr>';
@@ -999,6 +1000,41 @@ function deleteParticipant(id) {
         applyFilters();
     })
     .catch(function(e) { alert('Errore: ' + e.message); });
+}
+
+// =============================================
+// RESOLVE
+// =============================================
+function resolveParticipant(id, btn) {
+    var p = ALL_DATA.find(function(x) { return x.id === id; });
+    var name = p ? (((p.first_name || '') + ' ' + (p.last_name || '')).trim() || p.email) : '#' + id;
+    if (!confirm('Re-route "' + name + '" to the correct next step?')) return;
+
+    var origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:12px;height:12px"></span>';
+
+    fetch('/tracking/api/participant/' + id + '/resolve', { method: 'POST' })
+        .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+        .then(function(res) {
+            if (res.ok && res.data.success) {
+                btn.classList.remove('btn-outline-success');
+                btn.classList.add('btn-success');
+                btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+                btn.title = res.data.message;
+                if (p) p.status = 'in_progress';
+                setTimeout(function() { applyFilters(); }, 1500);
+            } else {
+                alert('Error: ' + (res.data.error || 'Unknown error'));
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+        })
+        .catch(function() {
+            alert('Network error');
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+        });
 }
 
 // =============================================

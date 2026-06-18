@@ -193,11 +193,6 @@
                 <i class="bi bi-collection"></i> Collected Data
             </h6>
             <div id="pdCollected"></div>
-            <button class="btn btn-sm mt-2" id="btnResolve"
-                    style="background:var(--tk-primary);color:#fff;border-radius:20px;font-size:11px;padding:4px 16px;display:none"
-                    onclick="resolveParticipant()">
-                <i class="bi bi-arrow-repeat"></i> Resolve
-            </button>
         </div>
         <!-- Import Data -->
         <div class="col-md-4 mb-3">
@@ -446,11 +441,6 @@ function showParticipantTimeline(pid, rowEl) {
         try { var collected = JSON.parse(rowEl.getAttribute('data-collected') || '{}'); } catch(e) { var collected = {}; }
         renderDataPanel('pdCollected', collected);
 
-        // Show Resolve button for in_progress or completed participants with collected data
-        var hasData = collected && Object.keys(collected).length > 0;
-        var resolvable = hasData && (status === 'in_progress' || status === 'completed');
-        document.getElementById('btnResolve').style.display = resolvable ? '' : 'none';
-
         // Sabaform data
         try { var sabaform = JSON.parse(rowEl.getAttribute('data-sabaform') || '{}'); } catch(e) { var sabaform = {}; }
         renderDataPanel('pdSabaform', sabaform);
@@ -460,37 +450,6 @@ function showParticipantTimeline(pid, rowEl) {
 
     renderTimeline();
     document.getElementById('participantDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function resolveParticipant() {
-    if (!filterParticipantId) return;
-    if (!confirm('Re-route this participant to the correct next step?')) return;
-
-    var btn = document.getElementById('btnResolve');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Resolving...';
-
-    fetch('/tracking/api/participant/' + filterParticipantId + '/resolve', { method: 'POST' })
-        .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
-        .then(function(res) {
-            if (res.ok && res.data.success) {
-                btn.innerHTML = '<i class="bi bi-check-circle"></i> ' + res.data.message;
-                btn.style.background = 'var(--tk-success, #4caf50)';
-                setTimeout(function() { location.reload(); }, 1500);
-            } else {
-                btn.innerHTML = '<i class="bi bi-x-circle"></i> ' + (res.data.error || 'Error');
-                btn.style.background = 'var(--tk-error, #d32f2f)';
-                btn.disabled = false;
-                setTimeout(function() {
-                    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Resolve';
-                    btn.style.background = 'var(--tk-primary)';
-                }, 3000);
-            }
-        })
-        .catch(function() {
-            btn.innerHTML = '<i class="bi bi-x-circle"></i> Network error';
-            btn.disabled = false;
-        });
 }
 
 function hideParticipantDetail() {
