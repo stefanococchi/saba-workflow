@@ -334,7 +334,8 @@ def api_status_flow(workflow_id):
 @tracking_bp.route('/api/participant/<int:participant_id>/resolve', methods=['POST'])
 def api_resolve_participant(participant_id):
     """Fix a participant by re-routing them to the correct next step
-    (original landing step's 'on completion' path)."""
+    (original landing step's 'on completion' path).
+    Pass ?preview=1 to get a description without applying changes."""
     p = db.get(Participant, participant_id)
     if not p:
         return jsonify({'error': 'Participant not found'}), 404
@@ -343,6 +344,8 @@ def api_resolve_participant(participant_id):
     workflows = _get_user_workflows()
     if not any(w.id == p.workflow_id for w in workflows):
         return jsonify({'error': 'Not found'}), 404
+
+    preview = request.args.get('preview') == '1'
 
     # Find original landing step
     original_landing = (
@@ -357,6 +360,13 @@ def api_resolve_participant(participant_id):
     if not original_landing:
         return jsonify({'error': 'No landing step found'}), 400
 
+    # Current step info
+    current_step_name = '—'
+    if p.current_step_id:
+        cs = db.get(WorkflowStep, p.current_step_id)
+        if cs:
+            current_step_name = cs.name
+
     # Find the correct next step (on completion path)
     config = original_landing.skip_conditions or {}
     if_filled = config.get('landing_if_filled', 'continue')
@@ -370,7 +380,15 @@ def api_resolve_participant(participant_id):
     if if_filled == 'jump' and if_filled_step:
         target = next((s for s in steps if s.order == if_filled_step), None)
     elif if_filled == 'stop':
-        # Mark as completed
+        if preview:
+            return jsonify({
+                'success': True,
+                'preview': True,
+                'current_step': current_step_name,
+                'current_status': p.status.value,
+                'target_step': 'COMPLETED',
+                'description': f'Will mark participant as completed (workflow stop).',
+            })
         SchedulerService.cancel_scheduled_executions(p.id)
         p.status = ParticipantStatus.COMPLETED
         from datetime import datetime
@@ -382,6 +400,23 @@ def api_resolve_participant(participant_id):
 
     if not target:
         return jsonify({'error': 'No target step found'}), 400
+
+    if preview:
+        return jsonify({
+            'success': True,
+            'preview': True,
+            'current_step': current_step_name,
+            'current_status': p.status.value,
+            'target_step': target.name,
+            'description': (
+                f'Current step: {current_step_name}\n'
+                f'Current status: {p.status.value}\n\n'
+                f'Will cancel scheduled executions and re-route to:\n'
+                f'→ {target.name} (step {target.order})\n'
+                f'Status will be set to: in_progress\n'
+                f'Execution will be scheduled immediately.'
+            ),
+        })
 
     # Cancel existing scheduled executions and re-route
     SchedulerService.cancel_scheduled_executions(p.id)
