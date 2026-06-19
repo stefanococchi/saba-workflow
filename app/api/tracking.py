@@ -7,6 +7,7 @@ from app.models import (
     ParticipantStatus, ExecutionStatus, User, UserRole
 )
 
+from sqlalchemy import case
 from app.api.auth import client_login_required, get_current_user
 import logging
 
@@ -72,7 +73,10 @@ def workflow_detail(workflow_id):
         return render_template('tracking/not_found.html'), 404
 
     steps = sorted(wf.steps, key=lambda s: s.order)
-    participants = db.query(Participant).filter_by(workflow_id=workflow_id).order_by(Participant.id).all()
+    participants = db.query(Participant).filter_by(workflow_id=workflow_id).order_by(
+        case((Participant.last_interaction.is_(None), 1), else_=0),
+        Participant.last_interaction.desc(),
+    ).all()
 
     # Build next step info per participant
     # 1. Check for scheduled executions first

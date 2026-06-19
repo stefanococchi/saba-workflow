@@ -110,23 +110,23 @@
                         {% set ns = next_step_map.get(p.id) %}
                         {% set to = timeout_map.get(p.id) %}
                         {% if ns %}
-                        <div style="font-weight:600;color:var(--tk-primary)"><i class="bi bi-check-circle" style="font-size:10px"></i> {{ ns.step_name }}</div>
+                        <div style="font-weight:600;color:var(--tk-primary)"><i class="bi bi-arrow-right-circle" style="font-size:10px"></i> {{ ns.step_name }}</div>
                         {% if ns.scheduled_at %}
                         <div style="font-size:11px;color:var(--tk-on-surface-variant)">
-                            <i class="bi bi-clock"></i> {{ ns.scheduled_at.strftime('%d/%m/%Y %H:%M') }}
+                            <i class="bi bi-clock"></i> Scheduled {{ ns.scheduled_at.strftime('%d/%m/%Y %H:%M') }}
                         </div>
                         {% else %}
                         <div style="font-size:11px;color:var(--tk-on-surface-variant)">
-                            <i class="bi bi-hourglass-split"></i> on completion
+                            <i class="bi bi-hourglass-split"></i> Awaiting form completion
                         </div>
                         {% endif %}
                         {% endif %}
                         {% if to %}
                         <div style="font-weight:600;color:var(--tk-error);{% if ns %}margin-top:4px;padding-top:4px;border-top:1px solid #f0ebe3{% endif %}">
-                            <i class="bi bi-clock-history" style="font-size:10px"></i> {{ to.timeout_step_name or 'Next' }}
+                            <i class="bi bi-clock-history" style="font-size:10px"></i> On timeout → {{ to.timeout_step_name or 'Next' }}
                         </div>
                         <div style="font-size:11px;color:var(--tk-error)">
-                            <i class="bi bi-alarm"></i> timeout {{ to.timeout_at.strftime('%d/%m/%Y %H:%M') }}
+                            <i class="bi bi-alarm"></i> Expires {{ to.timeout_at.strftime('%d/%m/%Y %H:%M') }}
                         </div>
                         {% endif %}
                         {% if not ns and not to %}
