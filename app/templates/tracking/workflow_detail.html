@@ -389,7 +389,14 @@ function renderDataPanel(containerId, data) {
         return;
     }
     var html = '<dl style="margin:0;font-size:12px">';
+    // Show payment as simple YES/NO
+    if ('_payment' in data || '_payment_pending' in data) {
+        var paid = data._payment && data._payment.status === 'completed';
+        html += '<dt style="font-weight:600;color:var(--tk-on-surface-variant);margin-top:6px">Payment</dt>';
+        html += '<dd style="margin:0;color:' + (paid ? 'var(--tk-success)' : 'var(--tk-error)') + ';font-weight:600">' + (paid ? 'YES' : 'NO') + '</dd>';
+    }
     Object.keys(data).forEach(function(k) {
+        if (k.charAt(0) === '_') return;  // skip internal fields
         var val = data[k];
         if (val === null || val === undefined || val === '') return;
         // Render file links
