@@ -479,6 +479,40 @@ def delete_participant(participant_id):
         return jsonify({'error': str(e)}), 500
 
 
+@participant_bp.route('/participants/<int:participant_id>/regenerate-token', methods=['POST'])
+def regenerate_token(participant_id):
+    """Rigenera JWT token per un partecipante"""
+    try:
+        participant = db.get(Participant, participant_id)
+        if not participant:
+            return jsonify({'error': 'Partecipante non trovato'}), 404
+
+        token = TokenService.generate_token(
+            participant_id=participant.id,
+            workflow_id=participant.workflow_id,
+            step_id=participant.current_step_id
+        )
+        participant.token = token
+        db.commit()
+
+        landing_url = request.host_url.rstrip('/') + '/landing/' + token
+        logger.info(f"Rigenerato token per partecipante {participant_id}")
+
+        log_activity(
+            workflow_id=participant.workflow_id,
+            participant_id=participant.id,
+            action='token_regenerated',
+            details='Token rigenerato manualmente da admin'
+        )
+
+        return jsonify({'token': token, 'landing_url': landing_url}), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore rigenerazione token: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @participant_bp.route('/participants/<int:participant_id>/rollback', methods=['POST'])
 def rollback_participant(participant_id):
     """Riporta un partecipante a uno step precedente (o a PENDING)"""
