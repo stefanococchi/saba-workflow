@@ -805,8 +805,11 @@ function copyUrl(token) {
 
 function regenerateToken(pid) {
     if (!confirm('Regenerate link for this participant? The old link will stop working.')) return;
-    fetch('/participants/' + pid + '/regenerate-token', { method: 'POST' })
-    .then(function(r) { return r.json(); })
+    fetch('/api/participants/' + pid + '/regenerate-token', { method: 'POST' })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error('HTTP ' + r.status + ': ' + t); });
+        return r.json();
+    })
     .then(function(data) {
         if (data.error) { alert('Error: ' + data.error); return; }
         navigator.clipboard.writeText(data.landing_url).then(function() {
@@ -814,7 +817,7 @@ function regenerateToken(pid) {
         });
         loadParticipants();
     })
-    .catch(function() { alert('Error regenerating token'); });
+    .catch(function(e) { alert('Error regenerating token: ' + e.message); });
 }
 
 function exportCSV() {

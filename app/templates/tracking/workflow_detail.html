@@ -91,6 +91,7 @@
                     data-enrolled="{{ p.enrolled_at.strftime('%d/%m/%Y %H:%M') if p.enrolled_at else '' }}"
                     data-collected='{{ (p.collected_data or {})|tojson }}'
                     data-sabaform='{{ (p.sabaform_data or {})|tojson }}'
+                    data-token="{{ p.token or '' }}"
                     style="cursor:pointer" onclick="showParticipantTimeline({{ p.id }}, this)">
                     <td>
                         <strong>{{ p.first_name or '' }} {{ p.last_name or '' }}</strong>
@@ -441,6 +442,8 @@ function showParticipantTimeline(pid, rowEl) {
         if (phone) infoHtml += '<div style="margin-bottom:4px"><i class="bi bi-telephone" style="color:var(--tk-primary)"></i> ' + escHtml(phone) + '</div>';
         if (status) infoHtml += '<div style="margin-bottom:4px"><span class="tk-badge tk-badge-' + status + '">' + status.replace(/_/g, ' ') + '</span></div>';
         if (enrolled) infoHtml += '<div style="margin-bottom:4px"><i class="bi bi-calendar-plus" style="color:var(--tk-primary)"></i> Enrolled: ' + escHtml(enrolled) + '</div>';
+        var token = rowEl.getAttribute('data-token') || '';
+        if (token) infoHtml += '<div style="margin-top:8px"><button class="btn btn-outline-primary btn-sm" style="font-size:11px;border-radius:20px;padding:2px 12px" onclick="event.stopPropagation();copyLandingUrl(\'' + token + '\')"><i class="bi bi-link-45deg"></i> Copy link</button></div>';
         infoHtml += '</div>';
         document.getElementById('pdInfo').innerHTML = infoHtml;
 
@@ -477,6 +480,13 @@ function filterTable() {
     var q = document.getElementById('searchBox').value.toLowerCase();
     document.querySelectorAll('.participant-row').forEach(function(row) {
         row.style.display = row.getAttribute('data-search').indexOf(q) >= 0 ? '' : 'none';
+    });
+}
+
+function copyLandingUrl(token) {
+    var url = window.location.origin + '/landing/' + token;
+    navigator.clipboard.writeText(url).then(function() {
+        alert('Link copied!\n\n' + url);
     });
 }
 
