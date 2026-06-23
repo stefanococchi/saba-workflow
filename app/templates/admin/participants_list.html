@@ -815,7 +815,7 @@ function regenerateToken(pid) {
         navigator.clipboard.writeText(data.landing_url).then(function() {
             alert('New link generated and copied to clipboard!\n\n' + data.landing_url);
         });
-        loadParticipants();
+        location.reload();
     })
     .catch(function(e) { alert('Error regenerating token: ' + e.message); });
 }
