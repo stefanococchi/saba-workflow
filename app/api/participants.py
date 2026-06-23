@@ -501,8 +501,8 @@ def regenerate_token(participant_id):
         log_activity(
             workflow_id=participant.workflow_id,
             participant_id=participant.id,
-            action='token_regenerated',
-            details='Token rigenerato manualmente da admin'
+            event_type='token_regenerated',
+            description='Token rigenerato manualmente da admin'
         )
 
         return jsonify({'token': token, 'landing_url': landing_url}), 200
