@@ -455,7 +455,7 @@ def collected_data_api():
             Participant.id, Participant.first_name, Participant.last_name,
             Participant.email, Participant.phone, Participant.workflow_id,
             Participant.status, Participant.completed_at, Participant.collected_data,
-            Participant.sabaform_data
+            Participant.sabaform_data, Participant.completion_type
         ).filter(
             Participant.collected_data.isnot(None)
         )
@@ -486,7 +486,7 @@ def collected_data_api():
             return light
 
         participants = []
-        for pid, fn, ln, email, phone, wf_id, status, completed_at, cd, sf in rows:
+        for pid, fn, ln, email, phone, wf_id, status, completed_at, cd, sf, ctype in rows:
             participants.append({
                 'id': pid,
                 'first_name': fn or '',
@@ -496,6 +496,7 @@ def collected_data_api():
                 'workflow_id': wf_id,
                 'workflow': wf_names.get(wf_id, ''),
                 'status': status.value,
+                'completion_type': ctype.value if ctype else None,
                 'completed_at': _fmt_time(completed_at),
                 'collected_data': _strip_file_data(cd),
             })

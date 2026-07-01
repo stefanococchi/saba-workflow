@@ -121,6 +121,15 @@
                 </select>
             </div>
 
+            <div>
+                <label class="form-label" style="font-size:12px;margin-bottom:4px">Completion</label>
+                <select class="form-select form-select-sm" id="filterCompletion" style="min-width:150px" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="participated">Participated</option>
+                    <option value="expired">Expired</option>
+                </select>
+            </div>
+
             <div class="search-input" style="flex:1;min-width:200px">
                 <label class="form-label" style="font-size:12px;margin-bottom:4px">{{ t.search }}</label>
                 <i class="bi bi-search"></i>
@@ -277,6 +286,7 @@ var ALL_COLUMNS = [
     { key: 'phone', label: T.phone, default: false },
     { key: 'workflow', label: T.workflow, default: true },
     { key: 'status', label: T.status, default: true },
+    { key: 'completion_type', label: 'Completion', default: true },
     { key: 'completed_at', label: T.completed, default: true },
 ];
 
@@ -401,9 +411,13 @@ function updateOpVis(idx) { var v = document.getElementById('qval' + idx); if (v
 // =============================================
 function applyFilters() {
     var search = document.getElementById('filterSearch').value.toLowerCase().trim();
+    var completionFilter = document.getElementById('filterCompletion').value;
     var rows = ALL_DATA.slice();
 
-    // Workflow filter is now server-side (reload on change)
+    // Completion type filter
+    if (completionFilter) {
+        rows = rows.filter(function(p) { return p.completion_type === completionFilter; });
+    }
 
     if (search) {
         rows = rows.filter(function(p) {
@@ -497,6 +511,11 @@ function _doRender() {
     tbody.innerHTML = visible.map(function(p) {
         var cells = cols.map(function(c) {
             var val = getFieldValue(p, c.key);
+            if (c.key === 'completion_type') {
+                if (!val) return '<td>—</td>';
+                var ctColor = val === 'participated' ? 'color:#2e7d32;background:#e8f5e9' : 'color:#999;background:#f5f5f5';
+                return '<td><span class="status-badge" style="' + ctColor + '">' + val + '</span></td>';
+            }
             if (c.key === 'status') return '<td><span class="status-badge status-' + val + '">' + val + '</span></td>';
             if (c.key === 'workflow') return '<td><small>' + esc(val) + '</small></td>';
             if (isFileObj(val)) return '<td>' + renderFileValue(val, 'cell') + '</td>';
