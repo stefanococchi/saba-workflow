@@ -698,7 +698,7 @@ def export_completed_excel():
         # Get completed participants
         rows = db.query(
             Participant.id, Participant.first_name, Participant.last_name,
-            Participant.email, Participant.collected_data
+            Participant.email, Participant.collected_data, Participant.completion_type
         ).filter(
             Participant.workflow_id == workflow_id,
             Participant.status == ParticipantStatus.COMPLETED
@@ -749,7 +749,7 @@ def export_completed_excel():
         if not ordered_fields:
             all_keys = []
             keys_seen = set()
-            for _, _, _, _, cd in rows:
+            for _, _, _, _, cd, _ in rows:
                 if cd and isinstance(cd, dict):
                     for k in cd.keys():
                         if k not in keys_seen:
@@ -767,8 +767,8 @@ def export_completed_excel():
         thin_border = Border(bottom=Side(style='thin', color='D7CCC8'))
         from openpyxl.styles.numbers import FORMAT_TEXT
 
-        # Header: Nome, Cognome, Email + landing fields + Sottostato + Data Sottostato
-        headers = ['Nome', 'Cognome', 'Email'] + [f['label'] for f in ordered_fields] + ['Sottostato', 'Data Sottostato']
+        # Header: Nome, Cognome, Email, Completion + landing fields + Sottostato + Data Sottostato
+        headers = ['Nome', 'Cognome', 'Email', 'Completion'] + [f['label'] for f in ordered_fields] + ['Sottostato', 'Data Sottostato']
         for col, h in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=h)
             cell.font = header_font
@@ -787,10 +787,11 @@ def export_completed_excel():
             utc_dt = pytz.utc.localize(ts)
             return utc_dt.astimezone(local_tz).strftime('%d-%m-%Y %H:%M')
 
-        for row_idx, (pid, fn, ln, email, cd) in enumerate(rows, 2):
+        for row_idx, (pid, fn, ln, email, cd, ctype) in enumerate(rows, 2):
             ws.cell(row=row_idx, column=1, value=fn or '')
             ws.cell(row=row_idx, column=2, value=ln or '')
             ws.cell(row=row_idx, column=3, value=email or '')
+            ws.cell(row=row_idx, column=4, value=ctype.value if ctype else '')
 
             cd = cd or {}
             for col_offset, field in enumerate(ordered_fields):
@@ -803,7 +804,7 @@ def export_completed_excel():
                 # File uploads: show filename only
                 if isinstance(val, dict) and 'filename' in val:
                     val = val.get('filename', '[file]')
-                cell = ws.cell(row=row_idx, column=4 + col_offset, value=str(val) if val else '')
+                cell = ws.cell(row=row_idx, column=5 + col_offset, value=str(val) if val else '')
                 # Phone fields: format as text so Excel doesn't strip leading zeros
                 if field['name'].lower() in phone_field_names:
                     cell.number_format = FORMAT_TEXT
