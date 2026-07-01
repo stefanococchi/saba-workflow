@@ -54,10 +54,19 @@
 
 <!-- Participants table -->
 <div class="tk-card">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div class="tk-card-title" style="margin-bottom:0"><i class="bi bi-people"></i> Participants</div>
-        <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Search..."
-               style="width:220px;border-radius:20px;font-size:12px" oninput="filterTable()">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <select id="filterStatus" class="form-select form-select-sm" style="width:auto;border-radius:20px;font-size:12px" onchange="filterTable()">
+                <option value="">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="in_progress">In Progress</option>
+                <option value="participated">Participated</option>
+                <option value="expired">Expired</option>
+            </select>
+            <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Search name, company, data..."
+                   style="width:250px;border-radius:20px;font-size:12px" oninput="filterTable()">
+        </div>
     </div>
 
     {% if participants %}
@@ -85,8 +94,13 @@
                     {% endfor %}
                 {% endif %}
                 {% set company = (p.sabaform_data or {}).get('company', '') %}
+                {% set collected_values = [] %}
+                {% for k, v in (p.collected_data or {}).items() if not k.startswith('_') and v %}
+                    {% if collected_values.append((k ~ ' ' ~ v)|string|lower) %}{% endif %}
+                {% endfor %}
                 <tr class="participant-row"
-                    data-search="{{ (p.first_name or '')|lower }} {{ (p.last_name or '')|lower }} {{ company|lower }} {{ (p.email or '')|lower }}"
+                    data-search="{{ (p.first_name or '')|lower }} {{ (p.last_name or '')|lower }} {{ company|lower }} {{ (p.email or '')|lower }} {{ collected_values|join(' ') }}"
+                    data-filter-status="{{ p.completion_type.value if p.status.value == 'completed' and p.completion_type else p.status.value }}"
                     data-pid="{{ p.id }}"
                     data-name="{{ (p.first_name or '') }} {{ (p.last_name or '') }}"
                     data-email="{{ p.email or '' }}"
@@ -496,8 +510,11 @@ function clearTimelineFilter() {
 
 function filterTable() {
     var q = document.getElementById('searchBox').value.toLowerCase();
+    var statusFilter = document.getElementById('filterStatus').value;
     document.querySelectorAll('.participant-row').forEach(function(row) {
-        row.style.display = row.getAttribute('data-search').indexOf(q) >= 0 ? '' : 'none';
+        var matchText = !q || row.getAttribute('data-search').indexOf(q) >= 0;
+        var matchStatus = !statusFilter || row.getAttribute('data-filter-status') === statusFilter;
+        row.style.display = (matchText && matchStatus) ? '' : 'none';
     });
 }
 
