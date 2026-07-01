@@ -199,7 +199,7 @@ class Participant(Base):
     sabaform_data = Column(JSON, default={})
 
     # Completamento
-    completion_type = Column(SQLEnum(CompletionType), nullable=True)
+    completion_type = Column(SQLEnum(CompletionType, values_callable=lambda e: [s.value for s in e]), nullable=True)
 
     # Metadata
     enrolled_at = Column(DateTime, default=datetime.utcnow)
