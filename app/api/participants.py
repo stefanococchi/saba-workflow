@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, ParticipantStatus, WorkflowStatus, Execution, ExecutionStatus, ActivityLog, PaymentLog
+from app.models import Workflow, WorkflowStep, Participant, ParticipantStatus, WorkflowStatus, Execution, ExecutionStatus, ActivityLog, PaymentLog, CompletionType
 from app.services.activity_service import log_activity
 from app.services import TokenService, SchedulerService
 from app.services.sabaform_service import get_events, get_participants, get_event_by_id
@@ -529,6 +529,7 @@ def rollback_participant(participant_id):
 
         if target_step_order == 'end':
             participant.status = ParticipantStatus.COMPLETED
+            participant.completion_type = CompletionType.PARTICIPATED if (participant.collected_data and isinstance(participant.collected_data, dict) and len(participant.collected_data) > 0) else CompletionType.EXPIRED
             participant.completed_at = datetime.utcnow()
             db.commit()
             log_activity(

@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, session, g, jsonify, request
 from app import db_session as db
 from app.models import (
     Workflow, Participant, Execution, ActivityLog, WorkflowStep,
-    ParticipantStatus, ExecutionStatus, User, UserRole
+    ParticipantStatus, ExecutionStatus, User, UserRole, CompletionType
 )
 
 from sqlalchemy import case
@@ -46,6 +46,8 @@ def index():
         participants = db.query(Participant).filter_by(workflow_id=wf.id).all()
         total = len(participants)
         completed = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED)
+        participated = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED and p.completion_type == CompletionType.PARTICIPATED)
+        expired = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED and p.completion_type == CompletionType.EXPIRED)
         in_progress = sum(1 for p in participants if p.status == ParticipantStatus.IN_PROGRESS)
         pending = sum(1 for p in participants if p.status == ParticipantStatus.PENDING)
         bounced = sum(1 for p in participants if p.status in (ParticipantStatus.BOUNCED, ParticipantStatus.UNSUBSCRIBED))
@@ -54,6 +56,8 @@ def index():
             'workflow': wf,
             'total': total,
             'completed': completed,
+            'participated': participated,
+            'expired': expired,
             'in_progress': in_progress,
             'pending': pending,
             'bounced': bounced,
@@ -327,11 +331,16 @@ def api_status_flow(workflow_id):
             'substates': counts,
         })
 
+    participated = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED and p.completion_type == CompletionType.PARTICIPATED)
+    expired = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED and p.completion_type == CompletionType.EXPIRED)
+
     return jsonify({
         'steps': flow,
         'total_participants': len(participants),
         'pending': len(pids_pending),
         'completed': len(pids_completed),
+        'participated': participated,
+        'expired': expired,
     })
 
 

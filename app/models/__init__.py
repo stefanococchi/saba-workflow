@@ -63,6 +63,12 @@ class ExecutionStatus(str, Enum):
     SKIPPED = 'skipped'
 
 
+class CompletionType(str, Enum):
+    """Tipo di completamento partecipante"""
+    PARTICIPATED = 'participated'   # Ha compilato il form
+    EXPIRED = 'expired'             # Non ha fatto nulla
+
+
 class PaymentStatus(str, Enum):
     """Stati pagamento Stripe"""
     INITIATED = 'initiated'
@@ -191,6 +197,9 @@ class Participant(Base):
 
     # Dati originali importati da Saba Form (JSON)
     sabaform_data = Column(JSON, default={})
+
+    # Completamento
+    completion_type = Column(SQLEnum(CompletionType), nullable=True)
 
     # Metadata
     enrolled_at = Column(DateTime, default=datetime.utcnow)

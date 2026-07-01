@@ -4,7 +4,7 @@ from io import BytesIO
 from flask import Blueprint, request, jsonify, Response
 from app.services import ao_service
 from app import db_session as db
-from app.models import PracticeResult, PracticeFile, Participant, WorkflowStep, StepType, ParticipantStatus, ExecutionStatus, Execution
+from app.models import PracticeResult, PracticeFile, Participant, WorkflowStep, StepType, ParticipantStatus, ExecutionStatus, Execution, CompletionType
 import json
 import logging
 import re
@@ -1183,6 +1183,7 @@ def document_check_verdict(practice_id):
             if_validated = config.get('if_validated', 'continue')
             if if_validated == 'complete':
                 participant.status = ParticipantStatus.COMPLETED
+                participant.completion_type = CompletionType.PARTICIPATED if (participant.collected_data and isinstance(participant.collected_data, dict) and len(participant.collected_data) > 0) else CompletionType.EXPIRED
                 participant.completed_at = datetime.utcnow()
                 SchedulerService.cancel_scheduled_executions(participant.id)
             elif if_validated == 'jump' and config.get('if_validated_step'):
@@ -1203,6 +1204,7 @@ def document_check_verdict(practice_id):
                     SchedulerService.schedule_step(participant, target_step, delay_hours=0)
             else:
                 participant.status = ParticipantStatus.COMPLETED
+                participant.completion_type = CompletionType.PARTICIPATED if (participant.collected_data and isinstance(participant.collected_data, dict) and len(participant.collected_data) > 0) else CompletionType.EXPIRED
                 participant.completed_at = datetime.utcnow()
                 SchedulerService.cancel_scheduled_executions(participant.id)
 

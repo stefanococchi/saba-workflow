@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify, render_template, render_template_
 from markupsafe import Markup
 from app import db_session as db
 from app import limiter
-from app.models import Participant, WorkflowStep, ParticipantStatus, StepType, ActivityLog, PaymentStatus
+from app.models import Participant, WorkflowStep, ParticipantStatus, StepType, ActivityLog, PaymentStatus, CompletionType
 from app.services import TokenService, SchedulerService
 from app.services.activity_service import log_activity
 from app.services.payment_service import PaymentService, PaymentError
@@ -308,6 +308,7 @@ def submit_landing_data(token):
         else:
             # Nessuno step trovato — marca completato come fallback
             participant.status = ParticipantStatus.COMPLETED
+            participant.completion_type = CompletionType.PARTICIPATED if (participant.collected_data and isinstance(participant.collected_data, dict) and len(participant.collected_data) > 0) else CompletionType.EXPIRED
             participant.completed_at = datetime.utcnow()
             db.commit()
             logger.info(f"Partecipante {participant.id} completato workflow (nessuno step successivo)")
@@ -496,6 +497,7 @@ def payment_success(token):
             SchedulerService._handle_landing_branch(participant, current_step, if_success, if_success_step)
         else:
             participant.status = ParticipantStatus.COMPLETED
+            participant.completion_type = CompletionType.PARTICIPATED if (participant.collected_data and isinstance(participant.collected_data, dict) and len(participant.collected_data) > 0) else CompletionType.EXPIRED
             participant.completed_at = datetime.utcnow()
             db.commit()
 

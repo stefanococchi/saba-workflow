@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import threading
 import app as _app
-from app.models import Execution, ExecutionStatus, ParticipantStatus, WorkflowStep
+from app.models import Execution, ExecutionStatus, ParticipantStatus, WorkflowStep, CompletionType
 from app.services.email_service import EmailService
 from app.services.token_service import TokenService
 import logging
@@ -12,6 +12,14 @@ def _db():
     return _app.db_session
 
 logger = logging.getLogger(__name__)
+
+
+def _calc_completion_type(participant):
+    """Determina se il partecipante ha effettivamente partecipato (compilato form) o è scaduto."""
+    data = participant.collected_data
+    if data and isinstance(data, dict) and len(data) > 0:
+        return CompletionType.PARTICIPATED
+    return CompletionType.EXPIRED
 
 
 class SchedulerService:
@@ -438,6 +446,7 @@ class SchedulerService:
             # jump to 'end' or no valid target → stop workflow
             SchedulerService.cancel_scheduled_executions(participant.id)
             participant.status = ParticipantStatus.COMPLETED
+            participant.completion_type = _calc_completion_type(participant)
             participant.completed_at = datetime.utcnow()
             _db().commit()
             logger.info(f"✓ Workflow stopped for participant {participant.id} (jump to end)")
@@ -458,6 +467,7 @@ class SchedulerService:
         elif action == 'stop':
             SchedulerService.cancel_scheduled_executions(participant.id)
             participant.status = ParticipantStatus.COMPLETED
+            participant.completion_type = _calc_completion_type(participant)
             participant.completed_at = datetime.utcnow()
             _db().commit()
             logger.info(f"✓ Workflow stopped for participant {participant.id}")

@@ -19,21 +19,25 @@
 <!-- Summary stats -->
 <div class="tk-card">
     <div class="row text-center">
-        <div class="col-3 tk-stat">
+        <div class="col tk-stat">
             <div class="tk-stat-value" id="statTotal">{{ participants|length }}</div>
             <div class="tk-stat-label">Total</div>
         </div>
-        <div class="col-3 tk-stat">
+        <div class="col tk-stat">
             <div class="tk-stat-value" style="color:var(--tk-info)" id="statPending">—</div>
             <div class="tk-stat-label">Pending</div>
         </div>
-        <div class="col-3 tk-stat">
+        <div class="col tk-stat">
             <div class="tk-stat-value" style="color:var(--tk-primary)" id="statInProgress">—</div>
             <div class="tk-stat-label">In Progress</div>
         </div>
-        <div class="col-3 tk-stat">
-            <div class="tk-stat-value" style="color:var(--tk-success)" id="statCompleted">—</div>
-            <div class="tk-stat-label">Completed</div>
+        <div class="col tk-stat">
+            <div class="tk-stat-value" style="color:var(--tk-success)" id="statParticipated">—</div>
+            <div class="tk-stat-label">Participated</div>
+        </div>
+        <div class="col tk-stat">
+            <div class="tk-stat-value" style="color:#999" id="statExpired">—</div>
+            <div class="tk-stat-label">Expired</div>
         </div>
     </div>
 </div>
@@ -105,7 +109,11 @@
                         {% endif %}
                     </td>
                     <td>
+                        {% if p.status.value == 'completed' and p.completion_type %}
+                        <span class="tk-badge tk-badge-{{ p.completion_type.value }}">{{ p.completion_type.value }}</span>
+                        {% else %}
                         <span class="tk-badge tk-badge-{{ p.status.value }}">{{ p.status.value|replace('_', ' ') }}</span>
+                        {% endif %}
                     </td>
                     <td style="font-size:12px">
                         {% set ns = next_step_map.get(p.id) %}
@@ -244,18 +252,21 @@ fetch('/tracking/api/workflow/' + WORKFLOW_ID + '/status-flow')
     .then(function(data) {
         // Update stats from DOM
         var rows = document.querySelectorAll('.participant-row');
-        var pending = 0, inProgress = 0, completed = 0;
+        var pending = 0, inProgress = 0, participated = 0, expired = 0;
         rows.forEach(function(r) {
             var badge = r.querySelector('.tk-badge');
             if (!badge) return;
             var cls = badge.className;
             if (cls.indexOf('pending') >= 0) pending++;
             else if (cls.indexOf('in_progress') >= 0) inProgress++;
-            else if (cls.indexOf('completed') >= 0) completed++;
+            else if (cls.indexOf('participated') >= 0) participated++;
+            else if (cls.indexOf('expired') >= 0) expired++;
+            else if (cls.indexOf('completed') >= 0) participated++;  // legacy fallback
         });
         document.getElementById('statPending').textContent = pending;
         document.getElementById('statInProgress').textContent = inProgress;
-        document.getElementById('statCompleted').textContent = completed;
+        document.getElementById('statParticipated').textContent = participated;
+        document.getElementById('statExpired').textContent = expired;
 
         renderStatusFlow(data);
     })
@@ -306,13 +317,20 @@ function renderStatusFlow(data) {
                 '</div>';
     });
 
-    // Completed box
+    // Completed box — split into participated/expired
     if (data.completed > 0) {
         html += '<div class="tk-flow-arrow"><i class="bi bi-chevron-right"></i></div>';
+        var subHtml = '';
+        if (data.participated > 0) {
+            subHtml += '<div><span class="tk-badge tk-badge-participated" style="font-size:10px">Participated: ' + data.participated + '</span></div>';
+        }
+        if (data.expired > 0) {
+            subHtml += '<div><span class="tk-badge tk-badge-expired" style="font-size:10px">Expired: ' + data.expired + '</span></div>';
+        }
         html += '<div class="tk-flow-step active" style="border-color:var(--tk-success)">' +
                 '<div class="tk-flow-step-name">COMPLETED</div>' +
                 '<div class="tk-flow-step-count" style="color:var(--tk-success)">' + data.completed + '</div>' +
-                '<div class="tk-flow-step-sub"><span class="tk-badge tk-badge-completed" style="font-size:10px">Finished</span></div>' +
+                '<div class="tk-flow-step-sub">' + subHtml + '</div>' +
                 '</div>';
     }
 
