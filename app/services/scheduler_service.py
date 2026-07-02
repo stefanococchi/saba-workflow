@@ -15,9 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 def _calc_completion_type(participant):
-    """Determina se il partecipante ha effettivamente partecipato (compilato form) o è scaduto."""
+    """Determina se il partecipante ha effettivamente partecipato (compilato form o pagato) o è scaduto."""
     data = participant.collected_data
     if data and isinstance(data, dict) and len(data) > 0:
+        return CompletionType.PARTICIPATED
+    # Controlla se ha un pagamento completato
+    from app.models import PaymentLog, PaymentStatus
+    has_payment = _db().query(PaymentLog.id).filter_by(
+        participant_id=participant.id,
+        status=PaymentStatus.COMPLETED
+    ).first()
+    if has_payment:
         return CompletionType.PARTICIPATED
     return CompletionType.EXPIRED
 
