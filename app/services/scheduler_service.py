@@ -1367,6 +1367,7 @@ class SchedulerService:
                 # Explicit END
                 logger.info(f"✓ Workflow completed for participant {participant.id} (explicit END)")
                 participant.status = ParticipantStatus.COMPLETED
+                participant.completion_type = _calc_completion_type(participant)
                 participant.completed_at = datetime.utcnow()
                 _db().commit()
                 return
@@ -1403,6 +1404,7 @@ class SchedulerService:
             else:
                 logger.info(f"✓ Workflow completed for participant {participant.id} (no more steps)")
                 participant.status = ParticipantStatus.COMPLETED
+                participant.completion_type = _calc_completion_type(participant)
                 participant.completed_at = datetime.utcnow()
                 _db().commit()
 
