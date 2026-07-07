@@ -449,14 +449,11 @@ def _col_index(letter):
 
 def _detect_mapping(headers):
     """Auto-detect mapping from header strings to participant fields.
-    Returns dict: {col_index: field_name} for core fields,
-    and list of (col_index, header) for extra fields → sabaform_data.
+    Returns dict: {col_index: field_name}. Unmatched columns are ignored.
     """
-    mapping = {}  # col_idx → 'first_name'|'last_name'|'email'|'phone'
-    extra = []    # [(col_idx, header_string)]
+    mapping = {}
     used = set()
 
-    # Normalize headers
     norm_headers = [(i, h, h.strip().lower().replace('*', '').replace(' ', ' ').strip())
                     for i, h in enumerate(headers)]
 
@@ -469,12 +466,7 @@ def _detect_mapping(headers):
                 used.add(i)
                 break
 
-    # Everything else → sabaform_data
-    for i, orig, norm in norm_headers:
-        if i not in used and norm:
-            extra.append((i, orig.strip()))
-
-    return mapping, extra
+    return mapping
 
 
 @participant_bp.route('/workflows/<int:workflow_id>/import-xlsx', methods=['POST'])
@@ -500,7 +492,7 @@ def import_participants_xlsx(workflow_id):
         col_letters = sorted(header_row.keys(), key=_col_index)
         headers = [header_row.get(c, '') for c in col_letters]
 
-        mapping, extra = _detect_mapping(headers)
+        mapping = _detect_mapping(headers)
 
         # Check if we want preview only
         if request.form.get('preview') == '1':
@@ -511,7 +503,6 @@ def import_participants_xlsx(workflow_id):
             return jsonify({
                 'headers': headers,
                 'mapping': {str(i): f for i, f in mapping.items()},
-                'extra': [{'col': i, 'header': h} for i, h in extra],
                 'preview': preview_rows,
                 'total_rows': len(rows) - 1,
             }), 200
@@ -522,9 +513,6 @@ def import_participants_xlsx(workflow_id):
             import json
             m = json.loads(custom_mapping)
             mapping = {int(k): v for k, v in m.items() if v in ('first_name', 'last_name', 'email', 'phone')}
-            # Recalc extra
-            extra = [(i, headers[i]) for i in range(len(headers))
-                     if i not in mapping and headers[i].strip()]
 
         imported = 0
         updated = 0
@@ -538,7 +526,6 @@ def import_participants_xlsx(workflow_id):
             email = ''
             phone = ''
 
-            # Extract core fields
             for col_i, field in mapping.items():
                 v = vals[col_i] if col_i < len(vals) else ''
                 if field == 'first_name':
@@ -554,13 +541,6 @@ def import_participants_xlsx(workflow_id):
             if not first_name and not last_name and not email:
                 continue
 
-            # Build collected_data from extra columns
-            extra_data = {}
-            for col_i, header in extra:
-                v = vals[col_i] if col_i < len(vals) else ''
-                if v:
-                    extra_data[header] = str(v)
-
             # Deduplication by email, then by name
             existing = None
             if email:
@@ -574,10 +554,6 @@ def import_participants_xlsx(workflow_id):
                 ).first()
 
             if existing:
-                if extra_data:
-                    merged = existing.collected_data or {}
-                    merged.update(extra_data)
-                    existing.collected_data = merged
                 if not existing.phone and phone:
                     existing.phone = phone
                 updated += 1
@@ -589,7 +565,6 @@ def import_participants_xlsx(workflow_id):
                 first_name=first_name or 'Partecipante',
                 last_name=last_name or '',
                 phone=phone,
-                collected_data=extra_data if extra_data else None,
             )
             db.add(participant)
             db.flush()
