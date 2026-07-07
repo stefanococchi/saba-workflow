@@ -554,12 +554,12 @@ def import_participants_xlsx(workflow_id):
             if not first_name and not last_name and not email:
                 continue
 
-            # Build sabaform_data from extra columns
-            sabaform_data = {}
+            # Build collected_data from extra columns
+            extra_data = {}
             for col_i, header in extra:
                 v = vals[col_i] if col_i < len(vals) else ''
                 if v:
-                    sabaform_data[header] = str(v)
+                    extra_data[header] = str(v)
 
             # Deduplication by email, then by name
             existing = None
@@ -574,10 +574,10 @@ def import_participants_xlsx(workflow_id):
                 ).first()
 
             if existing:
-                if sabaform_data:
-                    merged = existing.sabaform_data or {}
-                    merged.update(sabaform_data)
-                    existing.sabaform_data = merged
+                if extra_data:
+                    merged = existing.collected_data or {}
+                    merged.update(extra_data)
+                    existing.collected_data = merged
                 if not existing.phone and phone:
                     existing.phone = phone
                 updated += 1
@@ -589,7 +589,7 @@ def import_participants_xlsx(workflow_id):
                 first_name=first_name or 'Partecipante',
                 last_name=last_name or '',
                 phone=phone,
-                sabaform_data=sabaform_data if sabaform_data else None,
+                collected_data=extra_data if extra_data else None,
             )
             db.add(participant)
             db.flush()
