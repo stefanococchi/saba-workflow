@@ -95,19 +95,19 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'admin.participants_list' %}active{% endif %}"
-                           href="{{ url_for('admin.participants_list') }}">
+                           href="{{ url_for('admin.participants_list') }}" data-wf-link>
                             <i class="bi bi-people"></i> {{ t.participants }}
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'admin.executions_monitor' %}active{% endif %}"
-                           href="{{ url_for('admin.executions_monitor') }}">
+                           href="{{ url_for('admin.executions_monitor') }}" data-wf-link>
                             <i class="bi bi-activity"></i> {{ t.executions }}
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'admin.collected_data' %}active{% endif %}"
-                           href="{{ url_for('admin.collected_data') }}">
+                           href="{{ url_for('admin.collected_data') }}" data-wf-link>
                             <i class="bi bi-database"></i> {{ t.collected_data }}
                         </a>
                     </li>
@@ -251,6 +251,28 @@
             document.removeEventListener('mousemove', onDrag);
             document.removeEventListener('mouseup', stopDrag);
             localStorage.setItem('sidebarWidth', sidebar.offsetWidth);
+        }
+    })();
+    </script>
+
+    <!-- Persist selected workflow across pages -->
+    <script>
+    (function() {
+        // Append workflow_id to sidebar links that use it
+        var wfId = localStorage.getItem('selectedWorkflowId');
+        if (wfId) {
+            document.querySelectorAll('[data-wf-link]').forEach(function(a) {
+                var url = new URL(a.href, location.origin);
+                if (!url.searchParams.get('workflow_id')) {
+                    url.searchParams.set('workflow_id', wfId);
+                    a.href = url.toString();
+                }
+            });
+        }
+        // Save workflow_id from current page URL
+        var params = new URLSearchParams(location.search);
+        if (params.get('workflow_id')) {
+            localStorage.setItem('selectedWorkflowId', params.get('workflow_id'));
         }
     })();
     </script>
