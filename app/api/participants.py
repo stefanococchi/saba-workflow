@@ -7,6 +7,10 @@ from app.services.sabaform_service import get_events, get_participants, get_even
 from sqlalchemy.orm import joinedload
 from datetime import datetime
 import logging
+import io
+import re
+import zipfile
+import xml.etree.ElementTree as ET
 
 logger = logging.getLogger(__name__)
 
@@ -392,6 +396,223 @@ def import_participants_from_sabaform(workflow_id):
     except Exception as e:
         db.rollback()
         logger.error(f"Errore import partecipanti sabaform: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ── XLSX flexible import ─────────────────────────────────────────
+
+# Aliases for fuzzy header matching → participant core fields
+_FIELD_ALIASES = {
+    'first_name': ['nome', 'name', 'first name', 'first_name', 'firstname', 'prénom'],
+    'last_name': ['cognome', 'surname', 'last name', 'last_name', 'lastname', 'family name', 'nom'],
+    'email': ['email', 'e-mail', 'mail', 'email address', 'indirizzo email', 'posta elettronica'],
+    'phone': ['telefono', 'phone', 'tel', 'cellulare', 'mobile', 'cell', 'phone number', 'numero telefono'],
+}
+
+
+def _read_xlsx_bytes(data):
+    """Parse XLSX from bytes, return list of dicts with col letters as keys."""
+    z = zipfile.ZipFile(io.BytesIO(data))
+    ns = {'s': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+    # Shared strings
+    ss = []
+    try:
+        tree = ET.parse(z.open('xl/sharedStrings.xml'))
+        for si in tree.findall('.//s:si', ns):
+            texts = si.findall('.//s:t', ns)
+            ss.append(''.join(t.text or '' for t in texts))
+    except KeyError:
+        pass
+    # Sheet data
+    tree = ET.parse(z.open('xl/worksheets/sheet1.xml'))
+    rows = []
+    for row in tree.findall('.//s:sheetData/s:row', ns):
+        cells = {}
+        for c in row.findall('s:c', ns):
+            ref = c.get('r')
+            col = re.match(r'([A-Z]+)', ref).group(1)
+            t_attr = c.get('t')
+            v = c.find('s:v', ns)
+            if v is not None and v.text:
+                cells[col] = ss[int(v.text)] if t_attr == 's' else v.text
+        rows.append(cells)
+    return rows
+
+
+def _col_index(letter):
+    """A→0, B→1, ..., Z→25, AA→26..."""
+    result = 0
+    for ch in letter:
+        result = result * 26 + (ord(ch) - 64)
+    return result - 1
+
+
+def _detect_mapping(headers):
+    """Auto-detect mapping from header strings to participant fields.
+    Returns dict: {col_index: field_name} for core fields,
+    and list of (col_index, header) for extra fields → sabaform_data.
+    """
+    mapping = {}  # col_idx → 'first_name'|'last_name'|'email'|'phone'
+    extra = []    # [(col_idx, header_string)]
+    used = set()
+
+    # Normalize headers
+    norm_headers = [(i, h, h.strip().lower().replace('*', '').replace(' ', ' ').strip())
+                    for i, h in enumerate(headers)]
+
+    for field, aliases in _FIELD_ALIASES.items():
+        for i, orig, norm in norm_headers:
+            if i in used:
+                continue
+            if norm in aliases or any(a in norm for a in aliases):
+                mapping[i] = field
+                used.add(i)
+                break
+
+    # Everything else → sabaform_data
+    for i, orig, norm in norm_headers:
+        if i not in used and norm:
+            extra.append((i, orig.strip()))
+
+    return mapping, extra
+
+
+@participant_bp.route('/workflows/<int:workflow_id>/import-xlsx', methods=['POST'])
+def import_participants_xlsx(workflow_id):
+    """Import partecipanti da file XLSX con mapping flessibile degli header."""
+    try:
+        workflow = db.get(Workflow, workflow_id)
+        if not workflow:
+            return jsonify({'error': 'Workflow non trovato'}), 404
+
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'error': 'Nessun file caricato'}), 400
+
+        data = file.read()
+        rows = _read_xlsx_bytes(data)
+        if not rows:
+            return jsonify({'error': 'File vuoto'}), 400
+
+        # First row = headers
+        header_row = rows[0]
+        # Build ordered list of columns
+        col_letters = sorted(header_row.keys(), key=_col_index)
+        headers = [header_row.get(c, '') for c in col_letters]
+
+        mapping, extra = _detect_mapping(headers)
+
+        # Check if we want preview only
+        if request.form.get('preview') == '1':
+            preview_rows = []
+            for row in rows[1:6]:  # max 5 rows preview
+                vals = [row.get(c, '') for c in col_letters]
+                preview_rows.append(vals)
+            return jsonify({
+                'headers': headers,
+                'mapping': {str(i): f for i, f in mapping.items()},
+                'extra': [{'col': i, 'header': h} for i, h in extra],
+                'preview': preview_rows,
+                'total_rows': len(rows) - 1,
+            }), 200
+
+        # Accept custom mapping override from form
+        custom_mapping = request.form.get('mapping')
+        if custom_mapping:
+            import json
+            m = json.loads(custom_mapping)
+            mapping = {int(k): v for k, v in m.items() if v in ('first_name', 'last_name', 'email', 'phone')}
+            # Recalc extra
+            extra = [(i, headers[i]) for i in range(len(headers))
+                     if i not in mapping and headers[i].strip()]
+
+        imported = 0
+        updated = 0
+        data_rows = rows[1:]
+
+        for row in data_rows:
+            vals = [row.get(c, '') for c in col_letters]
+
+            first_name = vals[mapping.get(list(mapping.keys())[0], 0)] if mapping else ''
+            last_name = ''
+            email = ''
+            phone = ''
+
+            # Extract core fields
+            for col_i, field in mapping.items():
+                v = vals[col_i] if col_i < len(vals) else ''
+                if field == 'first_name':
+                    first_name = str(v).strip()
+                elif field == 'last_name':
+                    last_name = str(v).strip()
+                elif field == 'email':
+                    email = str(v).strip()
+                elif field == 'phone':
+                    phone = str(v).strip()
+
+            # Skip empty rows
+            if not first_name and not last_name and not email:
+                continue
+
+            # Build sabaform_data from extra columns
+            sabaform_data = {}
+            for col_i, header in extra:
+                v = vals[col_i] if col_i < len(vals) else ''
+                if v:
+                    sabaform_data[header] = str(v)
+
+            # Deduplication by email, then by name
+            existing = None
+            if email:
+                existing = db.query(Participant).filter_by(
+                    workflow_id=workflow_id, email=email
+                ).first()
+            elif first_name or last_name:
+                existing = db.query(Participant).filter_by(
+                    workflow_id=workflow_id,
+                    first_name=first_name, last_name=last_name
+                ).first()
+
+            if existing:
+                if sabaform_data:
+                    merged = existing.sabaform_data or {}
+                    merged.update(sabaform_data)
+                    existing.sabaform_data = merged
+                if not existing.phone and phone:
+                    existing.phone = phone
+                updated += 1
+                continue
+
+            participant = Participant(
+                workflow_id=workflow_id,
+                email=email or None,
+                first_name=first_name or 'Partecipante',
+                last_name=last_name or '',
+                phone=phone,
+                sabaform_data=sabaform_data if sabaform_data else None,
+            )
+            db.add(participant)
+            db.flush()
+
+            token = TokenService.generate_token(
+                participant.id, workflow_id,
+                expires_hours=workflow.token_expiration_hours
+            )
+            participant.token = token
+            imported += 1
+
+        db.commit()
+        logger.info(f"Import XLSX: {imported} nuovi, {updated} aggiornati per workflow {workflow_id}")
+
+        return jsonify({
+            'imported': imported,
+            'updated': updated,
+            'total_rows': len(data_rows),
+        }), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore import XLSX: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
