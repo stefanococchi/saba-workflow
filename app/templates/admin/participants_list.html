@@ -167,8 +167,8 @@
                 <button class="btn btn-outline-primary btn-sm" onclick="toggleQueryBuilder()">
                     <i class="bi bi-funnel"></i> {{ t.query }}
                 </button>
-                <button class="btn btn-primary btn-sm" onclick="exportCSV()">
-                    <i class="bi bi-download"></i> {{ t.export_csv }}
+                <button class="btn btn-primary btn-sm" onclick="exportXLSX()">
+                    <i class="bi bi-download"></i> Export XLSX
                 </button>
                 <button class="btn btn-primary btn-sm" onclick="newParticipant()">
                     <i class="bi bi-person-plus"></i> {{ t.new_participant }}
@@ -344,6 +344,7 @@ var T = {{ t|tojson }};
 // DATA
 // =============================================
 var ALL_PARTICIPANTS = [];
+var FILTERED_ROWS = [];
 
 // =============================================
 // COLUMNS CONFIG
@@ -575,6 +576,7 @@ function applyFilters() {
         });
     }
 
+    FILTERED_ROWS = rows;
     renderTable(rows);
 }
 
@@ -820,37 +822,21 @@ function regenerateToken(pid) {
     .catch(function(e) { alert('Error regenerating token: ' + e.message); });
 }
 
-function exportCSV() {
-    var rows = getFilteredRows();
+function exportXLSX() {
+    var rows = FILTERED_ROWS.length ? FILTERED_ROWS : ALL_PARTICIPANTS;
     var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
 
-    var csv = cols.map(function(c) { return '"' + c.label + '"'; }).join(',') + '\n';
+    var data = [cols.map(function(c) { return c.label; })];
     rows.forEach(function(p) {
-        csv += cols.map(function(c) {
-            var val = getFieldValue(p, c.key);
-            return '"' + String(val || '').replace(/"/g, '""') + '"';
-        }).join(',') + '\n';
+        data.push(cols.map(function(c) {
+            return getFieldValue(p, c.key) || '';
+        }));
     });
 
-    var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    var link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'partecipanti_' + new Date().toISOString().slice(0, 10) + '.csv';
-    link.click();
-}
-
-function getFilteredRows() {
-    // Re-apply filters to get current view
-    var rows = ALL_PARTICIPANTS;
-    var wf = document.getElementById('filterWorkflow').value;
-    var search = document.getElementById('filterSearch').value.toLowerCase().trim();
-    if (wf) rows = rows.filter(function(p) { return String(p.workflow_id) === wf; });
-    if (currentStatus !== 'all') rows = rows.filter(function(p) { return p.status === currentStatus; });
-    if (search) rows = rows.filter(function(p) {
-        var fullName = ((p.first_name || '') + ' ' + (p.last_name || '')).toLowerCase();
-        return fullName.indexOf(search)!==-1 || (p.email||'').toLowerCase().indexOf(search)!==-1;
-    });
-    return rows;
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Partecipanti');
+    XLSX.writeFile(wb, 'partecipanti_' + new Date().toISOString().slice(0, 10) + '.xlsx');
 }
 
 // =============================================
@@ -1174,4 +1160,5 @@ function createParticipant() {
     .catch(function(e) { alert('Errore: ' + e.message); });
 }
 </script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 {% endblock %}
