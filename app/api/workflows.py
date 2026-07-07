@@ -541,20 +541,22 @@ def simulate_workflow(workflow_id):
                 })
                 continue
 
-            # Genera landing URL — usa il token esistente del partecipante o ne genera uno nuovo
-            from flask import current_app
-            base_url = current_app.config.get('LANDING_BASE_URL', 'http://localhost:5001/landing')
-            if participant.token:
-                landing_url = f"{base_url}/{participant.token}"
-            else:
-                exp_hours = workflow.token_expiration_hours or current_app.config.get('JWT_EXPIRATION_HOURS', 72)
-                sim_token = TokenService.generate_token(
-                    participant.id, workflow.id, step_id=step.id,
-                    expires_hours=exp_hours
-                )
-                participant.token = sim_token
-                db.commit()
-                landing_url = f"{base_url}/{sim_token}"
+            # Genera landing URL solo se lo step ha una landing page configurata
+            landing_url = None
+            if step.landing_page_config:
+                from flask import current_app
+                base_url = current_app.config.get('LANDING_BASE_URL', 'http://localhost:5001/landing')
+                if participant.token:
+                    landing_url = f"{base_url}/{participant.token}"
+                else:
+                    exp_hours = workflow.token_expiration_hours or current_app.config.get('JWT_EXPIRATION_HOURS', 72)
+                    sim_token = TokenService.generate_token(
+                        participant.id, workflow.id, step_id=step.id,
+                        expires_hours=exp_hours
+                    )
+                    participant.token = sim_token
+                    db.commit()
+                    landing_url = f"{base_url}/{sim_token}"
 
             # Contesto template
             context = {
