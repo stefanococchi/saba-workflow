@@ -527,7 +527,7 @@ def simulate_workflow(workflow_id):
         if not participant:
             return jsonify({'error': 'Nessun partecipante nel workflow. Aggiungine almeno uno.'}), 400
 
-        # Simula ogni step email
+        # Simula ogni step — usa le stesse routine dell'esecuzione reale
         steps_preview = []
         for step in workflow.steps:
             if step.type.value != 'email':
@@ -541,46 +541,32 @@ def simulate_workflow(workflow_id):
                 })
                 continue
 
-            # Genera landing URL solo se lo step ha una landing page configurata
+            # Stessa logica di landing URL di _execute_email_step
             landing_url = None
-            if step.landing_page_config:
+            body = step.body_template or ''
+            skip_cond = step.skip_conditions or {}
+            has_landing = (step.landing_page_config
+                          or skip_cond.get('has_landing')
+                          or '{{ landing_url }}' in body
+                          or '{{landing_url}}' in body)
+            if has_landing:
                 from flask import current_app
-                base_url = current_app.config.get('LANDING_BASE_URL', 'http://localhost:5001/landing')
-                if participant.token:
-                    landing_url = f"{base_url}/{participant.token}"
-                else:
-                    exp_hours = workflow.token_expiration_hours or current_app.config.get('JWT_EXPIRATION_HOURS', 72)
-                    sim_token = TokenService.generate_token(
-                        participant.id, workflow.id, step_id=step.id,
-                        expires_hours=exp_hours
-                    )
-                    participant.token = sim_token
-                    db.commit()
-                    landing_url = f"{base_url}/{sim_token}"
+                exp_hours = workflow.token_expiration_hours or current_app.config.get('JWT_EXPIRATION_HOURS', 72)
+                participant.token = TokenService.generate_token(
+                    participant.id, workflow.id, step_id=step.id,
+                    expires_hours=exp_hours
+                )
+                db.flush()
+                landing_url = TokenService.generate_landing_url(participant)
 
-            # Contesto template
-            context = {
-                'participant': {
-                    'name': participant.full_name,
-                    'first_name': participant.first_name,
-                    'last_name': participant.last_name,
-                    'email': participant.email,
-                },
-                'landing_url': landing_url or '',
-                'workflow_name': workflow.name,
-                'evento': workflow.name,
-                'step_name': step.name,
-            }
-            if workflow.config:
-                context.update(workflow.config)
-
-            # Renderizza
+            # Usa la stessa routine di rendering dell'invio reale
             try:
-                rendered_subject = EmailService.render_template(step.subject or '', context)
-                rendered_body = EmailService.render_template(step.body_template or '', context)
+                rendered = EmailService.render_workflow_email(participant, step, landing_url)
             except Exception as e:
-                rendered_subject = f'[ERRORE TEMPLATE] {str(e)}'
-                rendered_body = f'<p style="color:red">Errore rendering: {str(e)}</p>'
+                rendered = {
+                    'subject': f'[ERRORE TEMPLATE] {str(e)}',
+                    'body_html': f'<p style="color:red">Errore rendering: {str(e)}</p>',
+                }
 
             steps_preview.append({
                 'step_id': step.id,
@@ -588,8 +574,8 @@ def simulate_workflow(workflow_id):
                 'step_type': step.type.value,
                 'order': step.order,
                 'skipped': False,
-                'subject': rendered_subject,
-                'body_html': rendered_body,
+                'subject': rendered['subject'],
+                'body_html': rendered['body_html'],
                 'landing_url': landing_url,
                 'delay_hours': step.delay_hours,
             })

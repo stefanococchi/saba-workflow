@@ -252,6 +252,55 @@ class EmailService:
             raise
 
     @staticmethod
+    def render_workflow_email(participant, step, landing_url=None):
+        """
+        Renderizza subject e body di una email workflow (senza inviarla).
+        Usato sia dalla simulazione che dall'invio reale per garantire coerenza.
+
+        Returns:
+            dict: {'subject': str, 'body_html': str, 'context': dict}
+        """
+        context = {
+            'participant': {
+                'name': participant.full_name,
+                'full_name': participant.full_name,
+                'first_name': participant.first_name,
+                'last_name': participant.last_name,
+                'email': participant.email,
+                'phone': participant.phone or '',
+            },
+            'landing_url': landing_url or '',
+            'workflow_name': participant.workflow.name,
+            'evento': participant.workflow.name,
+            'step_name': step.name,
+        }
+
+        # Aggiungi dati custom dal workflow config
+        if participant.workflow.config:
+            context.update(participant.workflow.config)
+
+        # Renderizza body
+        body_html = EmailService.render_template(step.body_template, context)
+
+        # Auto-link: converti URL nudi in hyperlink cliccabili
+        body_html = EmailService._autolink_urls(body_html)
+
+        # Se c'è landing_url ma non è nel template, aggiungilo in fondo
+        if landing_url and '{{ landing_url }}' not in (step.body_template or '') and '{{landing_url}}' not in (step.body_template or '') and landing_url not in body_html:
+            body_html += (
+                '<div style="text-align:center; margin-top:30px; padding:20px;">'
+                f'<a href="{landing_url}" style="background-color:#795548; color:#fff; '
+                'padding:14px 32px; text-decoration:none; border-radius:8px; '
+                'font-size:16px; font-weight:600; display:inline-block;">'
+                'Accedi alla pagina</a></div>'
+            )
+
+        # Renderizza subject
+        subject = EmailService.render_template(step.subject, context)
+
+        return {'subject': subject, 'body_html': body_html, 'context': context}
+
+    @staticmethod
     def send_workflow_email(participant, step, landing_url=None, attachments=None, to_override=None):
         """
         Invia email per uno step del workflow
@@ -266,51 +315,14 @@ class EmailService:
             bool: successo invio
         """
         try:
-            # Context per template
-            context = {
-                'participant': {
-                    'name': participant.full_name,
-                    'full_name': participant.full_name,
-                    'first_name': participant.first_name,
-                    'last_name': participant.last_name,
-                    'email': participant.email,
-                    'phone': participant.phone or '',
-                },
-                'landing_url': landing_url or '',
-                'workflow_name': participant.workflow.name,
-                'evento': participant.workflow.name,
-                'step_name': step.name,
-            }
-
-            # Aggiungi dati custom dal workflow config
-            if participant.workflow.config:
-                context.update(participant.workflow.config)
-
-            # Renderizza body
-            body_html = EmailService.render_template(step.body_template, context)
-
-            # Auto-link: converti URL nudi in hyperlink cliccabili
-            body_html = EmailService._autolink_urls(body_html)
-
-            # Se c'è landing_url ma non è nel template, aggiungilo in fondo
-            if landing_url and '{{ landing_url }}' not in (step.body_template or '') and '{{landing_url}}' not in (step.body_template or '') and landing_url not in body_html:
-                body_html += (
-                    '<div style="text-align:center; margin-top:30px; padding:20px;">'
-                    f'<a href="{landing_url}" style="background-color:#795548; color:#fff; '
-                    'padding:14px 32px; text-decoration:none; border-radius:8px; '
-                    'font-size:16px; font-weight:600; display:inline-block;">'
-                    'Accedi alla pagina</a></div>'
-                )
-
-            # Renderizza subject
-            subject = EmailService.render_template(step.subject, context)
+            rendered = EmailService.render_workflow_email(participant, step, landing_url)
 
             # Invia (usa mittente per-workflow se configurato)
             workflow = participant.workflow
             return EmailService.send_email(
                 to_email=to_override or participant.email,
-                subject=subject,
-                body_html=body_html,
+                subject=rendered['subject'],
+                body_html=rendered['body_html'],
                 from_email=workflow.mail_from_email or None,
                 from_name=workflow.mail_from_name or None,
                 file_attachments=attachments
