@@ -533,7 +533,7 @@ def import_participants_xlsx(workflow_id):
         for row in data_rows:
             vals = [row.get(c, '') for c in col_letters]
 
-            first_name = vals[mapping.get(list(mapping.keys())[0], 0)] if mapping else ''
+            first_name = ''
             last_name = ''
             email = ''
             phone = ''
