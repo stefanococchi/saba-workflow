@@ -709,6 +709,84 @@ def regenerate_token(participant_id):
         return jsonify({'error': str(e)}), 500
 
 
+@participant_bp.route('/workflows/<int:workflow_id>/batch-regenerate-tokens', methods=['POST'])
+def batch_regenerate_tokens(workflow_id):
+    """Rigenera link per partecipanti expired: li riporta IN_PROGRESS sullo step landing con token nuovo."""
+    try:
+        workflow = db.get(Workflow, workflow_id)
+        if not workflow:
+            return jsonify({'error': 'Workflow non trovato'}), 404
+
+        # Trova lo step con landing page
+        landing_step = db.query(WorkflowStep).filter(
+            WorkflowStep.workflow_id == workflow_id,
+            (WorkflowStep.landing_html.isnot(None)) |
+            (WorkflowStep.landing_gjs_data.isnot(None)) |
+            (WorkflowStep.landing_page_config.isnot(None))
+        ).order_by(WorkflowStep.order).first()
+
+        if not landing_step:
+            return jsonify({'error': 'Nessuno step con landing page trovato nel workflow'}), 400
+
+        data = request.get_json() or {}
+        participant_ids = data.get('participant_ids')
+
+        # Se non specificati, prendi tutti gli expired del workflow
+        query = db.query(Participant).filter_by(
+            workflow_id=workflow_id,
+            status=ParticipantStatus.COMPLETED,
+            completion_type=CompletionType.EXPIRED
+        )
+        if participant_ids:
+            query = query.filter(Participant.id.in_(participant_ids))
+
+        participants = query.all()
+        if not participants:
+            return jsonify({'error': 'Nessun partecipante expired trovato'}), 404
+
+        base_url = request.host_url.rstrip('/')
+        results = []
+
+        for p in participants:
+            token = TokenService.generate_token(
+                participant_id=p.id,
+                workflow_id=workflow_id,
+                step_id=landing_step.id,
+                expires_hours=workflow.token_expiration_hours
+            )
+            p.token = token
+            p.status = ParticipantStatus.IN_PROGRESS
+            p.current_step_id = landing_step.id
+            p.completed_at = None
+            p.completion_type = None
+
+            results.append({
+                'id': p.id,
+                'first_name': p.first_name,
+                'last_name': p.last_name,
+                'email': p.email,
+                'phone': p.phone,
+                'landing_url': f"{base_url}/landing/{token}"
+            })
+
+        db.commit()
+
+        log_activity(
+            workflow_id=workflow_id,
+            event_type='batch_token_regenerated',
+            description=f'Rigenerati link per {len(results)} partecipanti expired',
+            details={'count': len(results), 'landing_step': landing_step.name}
+        )
+
+        logger.info(f"Rigenerati {len(results)} token per workflow {workflow_id}")
+        return jsonify({'participants': results, 'count': len(results)}), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore batch regenerate tokens: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @participant_bp.route('/participants/<int:participant_id>/rollback', methods=['POST'])
 def rollback_participant(participant_id):
     """Riporta un partecipante a uno step precedente (o a PENDING)"""

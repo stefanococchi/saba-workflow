@@ -170,6 +170,9 @@
                 <button class="btn btn-primary btn-sm" onclick="exportXLSX()">
                     <i class="bi bi-download"></i> Export XLSX
                 </button>
+                <button class="btn btn-warning btn-sm" onclick="regenerateExpiredLinks()" title="Rigenera link per expired e scarica XLSX">
+                    <i class="bi bi-arrow-repeat"></i> Rigenera link expired
+                </button>
                 <button class="btn btn-success btn-sm" onclick="document.getElementById('importXlsxModal').style.display='flex'">
                     <i class="bi bi-upload"></i> Import XLSX
                 </button>
@@ -883,6 +886,51 @@ function exportXLSX() {
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Partecipanti');
     XLSX.writeFile(wb, 'partecipanti_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+}
+
+function regenerateExpiredLinks() {
+    // Conta expired visibili
+    var expiredRows = ALL_PARTICIPANTS.filter(function(p) {
+        return p.status === 'completed' && p.completion_type === 'expired';
+    });
+    if (!expiredRows.length) {
+        alert('Nessun partecipante expired trovato in questo workflow.');
+        return;
+    }
+    if (!confirm('Rigenerare link per ' + expiredRows.length + ' partecipanti expired?\n\nVerranno riportati a IN_PROGRESS e verrà scaricato un XLSX con i nuovi link.')) return;
+
+    var ids = expiredRows.map(function(p) { return p.id; });
+
+    var wfId = {{ current_workflow_id | tojson }};
+    if (!wfId) { alert('Seleziona prima un workflow.'); return; }
+
+    fetch('/api/workflows/' + wfId + '/batch-regenerate-tokens', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({participant_ids: ids})
+    })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'HTTP ' + r.status); });
+        return r.json();
+    })
+    .then(function(data) {
+        // Genera XLSX con i link
+        var header = ['Nome', 'Cognome', 'Email', 'Telefono', 'Link'];
+        var rows = [header];
+        data.participants.forEach(function(p) {
+            rows.push([p.first_name || '', p.last_name || '', p.email || '', p.phone || '', p.landing_url]);
+        });
+        var ws = XLSX.utils.aoa_to_sheet(rows);
+        // Colonna link larga
+        ws['!cols'] = [{wch:15}, {wch:20}, {wch:30}, {wch:15}, {wch:80}];
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Link Rigenerati');
+        XLSX.writeFile(wb, 'expired_links_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+
+        alert('Rigenerati ' + data.count + ' link. File XLSX scaricato.');
+        location.reload();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
 }
 
 // =============================================
