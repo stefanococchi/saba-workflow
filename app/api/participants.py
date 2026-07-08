@@ -788,6 +788,31 @@ def batch_regenerate_tokens(workflow_id):
         return jsonify({'error': str(e)}), 500
 
 
+@participant_bp.route('/participants/batch-mark-reactivated', methods=['POST'])
+def batch_mark_reactivated():
+    """Marca partecipanti come riattivati (solo flag, nessun cambio stato/token)."""
+    try:
+        data = request.get_json() or {}
+        participant_ids = data.get('participant_ids', [])
+        if not participant_ids:
+            return jsonify({'error': 'Nessun partecipante selezionato'}), 400
+
+        count = 0
+        for pid in participant_ids:
+            p = db.get(Participant, pid)
+            if p:
+                p.reactivated_at = datetime.utcnow()
+                count += 1
+        db.commit()
+
+        return jsonify({'updated': count}), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore batch mark reactivated: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @participant_bp.route('/participants/<int:participant_id>/rollback', methods=['POST'])
 def rollback_participant(participant_id):
     """Riporta un partecipante a uno step precedente (o a PENDING)"""

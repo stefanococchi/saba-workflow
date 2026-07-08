@@ -192,6 +192,15 @@
             <div class="status-chip" data-status="bounced" onclick="filterByStatus('bounced')">{{ t.bounced }}</div>
         </div>
 
+        <!-- Selection bar -->
+        <div id="selectionBar" style="display:none" class="mt-2 p-2 rounded d-flex align-items-center gap-2"
+             style="background:var(--md-sys-color-surface-variant)">
+            <span id="selectionCount" class="fw-bold"></span>
+            <button class="btn btn-warning btn-sm" onclick="markSelectedReactivated()">
+                <i class="bi bi-check2-all"></i> Marca riattivati
+            </button>
+        </div>
+
         <!-- Column toggles (hidden by default) -->
         <div id="columnToggles" style="display:none">
             <div class="col-chips" id="colChips"></div>
@@ -670,7 +679,7 @@ function _doRender() {
 
     // Header
     var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
-    thead.innerHTML = cols.map(function(c) {
+    thead.innerHTML = '<th><input type="checkbox" onchange="toggleSelectAll(this)"></th>' + cols.map(function(c) {
         var sorted = sortCol === c.key;
         var icon = sorted ? (sortDir === 'asc' ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-down';
         return '<th class="' + (sorted ? 'sorted' : '') + '" onclick="sortBy(\'' + c.key + '\')">' +
@@ -710,7 +719,8 @@ function _doRender() {
         actions += '<button class="btn btn-outline-success" onclick="regenerateToken(' + p.id + ')" title="Rigenera link"><i class="bi bi-arrow-repeat"></i></button>';
         actions += '</div></td>';
 
-        return '<tr>' + cells + actions + '</tr>';
+        var cb = '<td><input type="checkbox" class="row-select" value="' + p.id + '" onchange="updateSelectionBar()"></td>';
+        return '<tr>' + cb + cells + actions + '</tr>';
     }).join('');
 }
 
@@ -890,6 +900,44 @@ function exportXLSX() {
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Partecipanti');
     XLSX.writeFile(wb, 'partecipanti_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+}
+
+function toggleSelectAll(master) {
+    var boxes = document.querySelectorAll('.row-select');
+    boxes.forEach(function(cb) { cb.checked = master.checked; });
+    updateSelectionBar();
+}
+
+function updateSelectionBar() {
+    var checked = document.querySelectorAll('.row-select:checked');
+    var bar = document.getElementById('selectionBar');
+    if (checked.length > 0) {
+        bar.style.display = 'flex';
+        document.getElementById('selectionCount').textContent = checked.length + ' selezionati';
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function markSelectedReactivated() {
+    var ids = Array.from(document.querySelectorAll('.row-select:checked')).map(function(cb) { return parseInt(cb.value); });
+    if (!ids.length) return;
+    if (!confirm('Marcare ' + ids.length + ' partecipanti come riattivati?')) return;
+
+    fetch('/api/participants/batch-mark-reactivated', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({participant_ids: ids})
+    })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'HTTP ' + r.status); });
+        return r.json();
+    })
+    .then(function(data) {
+        alert(data.updated + ' partecipanti marcati come riattivati.');
+        location.reload();
+    })
+    .catch(function(e) { alert('Errore: ' + e.message); });
 }
 
 function regenerateExpiredLinks() {
