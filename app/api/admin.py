@@ -344,7 +344,7 @@ def participants_list_api():
             Participant.email, Participant.phone, Participant.workflow_id,
             Participant.status, Participant.enrolled_at, Participant.last_interaction,
             Participant.completed_at, Participant.token,
-            Participant.current_step_id, Participant.completion_type,
+            Participant.current_step_id, Participant.completion_type, Participant.reactivated_at,
             WorkflowStep.name.label('step_name'),
             WorkflowStep.order.label('step_order'),
         ).outerjoin(WorkflowStep, Participant.current_step_id == WorkflowStep.id)
@@ -392,6 +392,7 @@ def participants_list_api():
                 'completed_at': _fmt(row.completed_at),
                 'token': row.token or '',
                 'completion_type': row.completion_type.value if row.completion_type else None,
+                'reactivated_at': _fmt(row.reactivated_at),
             })
 
         return jsonify({

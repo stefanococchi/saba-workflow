@@ -759,6 +759,7 @@ def batch_regenerate_tokens(workflow_id):
             p.current_step_id = landing_step.id
             p.completed_at = None
             p.completion_type = None
+            p.reactivated_at = datetime.utcnow()
 
             results.append({
                 'id': p.id,

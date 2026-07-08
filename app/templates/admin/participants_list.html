@@ -683,7 +683,11 @@ function _doRender() {
         var cells = cols.map(function(c) {
             var val = getFieldValue(p, c.key);
             if (c.key === 'id') return '<td><strong>#' + val + '</strong></td>';
-            if (c.key === 'status') return '<td><span class="status-badge status-' + val + '">' + val + '</span></td>';
+            if (c.key === 'status') {
+                var badge = '<span class="status-badge status-' + val + '">' + val + '</span>';
+                if (p.reactivated_at) badge += ' <span class="badge bg-warning text-dark" style="font-size:10px" title="Riattivato il ' + p.reactivated_at + '">riattivato</span>';
+                return '<td>' + badge + '</td>';
+            }
             if (c.key === 'current_step') {
                 if (!val) return '<td><small class="text-muted">—</small></td>';
                 return '<td><small><i class="bi bi-signpost-split" style="opacity:0.5"></i> ' + esc(val) + '</small></td>';

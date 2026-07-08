@@ -205,6 +205,7 @@ class Participant(Base):
     enrolled_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime)
     last_interaction = Column(DateTime)
+    reactivated_at = Column(DateTime)
     
     # Relazioni
     workflow = relationship('Workflow', back_populates='participants')
