@@ -166,6 +166,9 @@
                 <button class="btn btn-success w-100 mb-2" onclick="startWorkflow()">
                     <i class="bi bi-play-circle"></i> Avvia Workflow
                 </button>
+                <button class="btn btn-outline-success w-100 mb-2" onclick="testWorkflow()">
+                    <i class="bi bi-person-check"></i> Test — Solo 1° partecipante
+                </button>
                 {% elif workflow.status.value == 'active' %}
                 <button class="btn btn-warning w-100 mb-2" onclick="pauseWorkflow()">
                     <i class="bi bi-pause-circle"></i> Metti in Pausa
@@ -261,13 +264,29 @@
 const workflowId = {{ workflow.id }};
 
 function startWorkflow() {
-    if (!confirm('Avviare il workflow? Verranno inviate email ai partecipanti.')) return;
-    
+    if (!confirm('Avviare il workflow? Verranno inviate email a TUTTI i partecipanti.')) return;
+
     fetch(`/api/workflows/${workflowId}/start`, { method: 'POST' })
         .then(response => response.json())
         .then(data => {
             alert('Workflow avviato!');
             location.reload();
+        })
+        .catch(error => alert('Errore: ' + error));
+}
+
+function testWorkflow() {
+    if (!confirm('Inviare email solo al PRIMO partecipante? Il workflow resterà in stato Draft.')) return;
+
+    fetch(`/api/workflows/${workflowId}/start?test=1`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Errore: ' + data.error);
+            } else {
+                alert('Test avviato! Email inviata a 1 partecipante.');
+                location.reload();
+            }
         })
         .catch(error => alert('Errore: ' + error));
 }

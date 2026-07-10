@@ -184,12 +184,20 @@ def start_workflow(workflow_id):
         # Get first step
         first_step = sorted(workflow.steps, key=lambda s: s.order)[0]
         
+        # Test mode: only first participant
+        test_mode = request.args.get('test', '').lower() == '1'
+
         # Get pending participants
-        participants = db.query(Participant).filter_by(
+        query = db.query(Participant).filter_by(
             workflow_id=workflow_id,
             status=ParticipantStatus.PENDING
-        ).all()
-        
+        ).order_by(Participant.id)
+
+        if test_mode:
+            participants = query.limit(1).all()
+        else:
+            participants = query.all()
+
         if not participants:
             return jsonify({'error': 'No pending participants'}), 400
         
@@ -213,18 +221,20 @@ def start_workflow(workflow_id):
             participant.current_step_id = first_step.id
             scheduled_count += 1
         
-        # Activate workflow
-        workflow.status = WorkflowStatus.ACTIVE
-        
+        # Activate workflow (skip in test mode to keep draft)
+        if not test_mode:
+            workflow.status = WorkflowStatus.ACTIVE
+
         db.commit()
-        
-        logger.info(f"Started workflow {workflow_id} for {scheduled_count} participants")
+
+        mode_label = 'TEST' if test_mode else 'FULL'
+        logger.info(f"[{mode_label}] Started workflow {workflow_id} for {scheduled_count} participants")
 
         log_activity(
             workflow_id=workflow_id,
             event_type='workflow_started',
-            description=f'Workflow avviato per {scheduled_count} partecipanti',
-            details={'scheduled_count': scheduled_count, 'first_step': first_step.name}
+            description=f'Workflow avviato ({mode_label}) per {scheduled_count} partecipanti',
+            details={'scheduled_count': scheduled_count, 'first_step': first_step.name, 'test_mode': test_mode}
         )
 
         return jsonify({
