@@ -102,6 +102,11 @@
                                    title="{{ t.edit }}">
                                     <i class="bi bi-pencil"></i>
                                 </a>
+                                <button class="btn btn-outline-secondary"
+                                        onclick="duplicateWorkflow({{ workflow.id }})"
+                                        title="Duplica">
+                                    <i class="bi bi-copy"></i>
+                                </button>
                                 {% if workflow.status.value != 'active' %}
                                 <button class="btn btn-outline-danger"
                                         onclick="deleteWorkflow({{ workflow.id }})"
@@ -139,6 +144,27 @@
 
 {% block extra_js %}
 <script>
+function duplicateWorkflow(id) {
+    if (!confirm('Duplicare questo workflow? Verrà creata una copia in stato Draft senza partecipanti.')) {
+        return;
+    }
+
+    fetch('/api/workflows/' + id + '/duplicate', {
+        method: 'POST'
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (data.workflow_id) {
+            location.reload();
+        } else {
+            alert('{{ t.error }}: ' + (data.error || 'Errore durante la duplicazione'));
+        }
+    })
+    .catch(function(error) {
+        alert('{{ t.error }}: ' + error);
+    });
+}
+
 function deleteWorkflow(id) {
     if (!confirm('{{ t.confirm_delete_workflow }}')) {
         return;

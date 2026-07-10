@@ -1214,9 +1214,9 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
                     </label>
                     <div class="row g-2">
                         <div class="col-7">
-                            <input type="email" class="form-control" id="mailFromEmail"
+                            <input type="email" class="form-control" id="mailFromEmail" required
                                    value="{% if workflow and workflow.mail_from_email %}{{ workflow.mail_from_email }}{% endif %}"
-                                   placeholder="Email mittente (default globale se vuoto)">
+                                   placeholder="Email mittente">
                         </div>
                         <div class="col-5">
                             <input type="text" class="form-control" id="mailFromName"
@@ -1224,7 +1224,7 @@ body.canvas-warm-dark .workflow-canvas, body.canvas-warm-dark .step-palette {
                                    placeholder="Nome mittente">
                         </div>
                     </div>
-                    <div class="form-text">Se vuoto, usa la casella di posta globale configurata nel sistema.</div>
+                    <div class="form-text">Casella Exchange da cui verranno inviate le email del workflow.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">

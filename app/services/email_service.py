@@ -279,6 +279,12 @@ class EmailService:
         if participant.workflow.config:
             context.update(participant.workflow.config)
 
+        # Aggiungi dati custom del partecipante (sabaform_data + collected_data)
+        if participant.sabaform_data:
+            context.update(participant.sabaform_data)
+        if participant.collected_data:
+            context.update(participant.collected_data)
+
         # Renderizza body
         body_html = EmailService.render_template(step.body_template, context)
 

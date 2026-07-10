@@ -503,6 +503,66 @@ def delete_workflow(workflow_id):
         return jsonify({'error': str(e)}), 500
 
 
+@workflow_bp.route('/workflows/<int:workflow_id>/duplicate', methods=['POST'])
+def duplicate_workflow(workflow_id):
+    """Duplica workflow con tutti gli step, senza partecipanti"""
+    try:
+        original = db.get(Workflow, workflow_id)
+        if not original:
+            return jsonify({'error': 'Workflow non trovato'}), 404
+
+        clone = Workflow(
+            name=f"{original.name} (copia)",
+            description=original.description,
+            status=WorkflowStatus.DRAFT,
+            config=original.config,
+            token_expiration_hours=original.token_expiration_hours,
+            mail_from_email=original.mail_from_email,
+            mail_from_name=original.mail_from_name,
+            sabaform_event_id=original.sabaform_event_id,
+            sabaform_event_name=original.sabaform_event_name,
+            ao_agent_id=original.ao_agent_id,
+            ao_agent_name=original.ao_agent_name,
+        )
+        db.add(clone)
+        db.flush()
+
+        for step in original.steps:
+            clone_step = WorkflowStep(
+                workflow_id=clone.id,
+                order=step.order,
+                name=step.name,
+                type=step.type,
+                template_name=step.template_name,
+                subject=step.subject,
+                body_template=step.body_template,
+                delay_hours=step.delay_hours,
+                skip_conditions=step.skip_conditions,
+                landing_page_config=step.landing_page_config,
+                landing_html=step.landing_html,
+                landing_css=step.landing_css,
+                landing_gjs_data=step.landing_gjs_data,
+            )
+            db.add(clone_step)
+
+        db.commit()
+
+        logger.info(f"Duplicato workflow {workflow_id} -> {clone.id}")
+        from app.services.audit_service import log_user_action
+        log_user_action('CREATE', 'Workflow', clone.id,
+                        f'Duplicated from workflow {workflow_id} "{original.name}"')
+
+        return jsonify({
+            'message': f'Workflow duplicato come "{clone.name}"',
+            'workflow_id': clone.id
+        }), 201
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore duplicate workflow: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @workflow_bp.route('/workflows/<int:workflow_id>/simulate', methods=['POST'])
 def simulate_workflow(workflow_id):
     """Simula l'invio email senza SMTP — renderizza template e genera landing URL"""

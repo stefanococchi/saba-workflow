@@ -3544,6 +3544,13 @@ function generateReview() {
 
 // Save workflow
 function saveWorkflow() {
+    const mailFromEmail = document.getElementById('mailFromEmail').value.trim();
+    if (!mailFromEmail) {
+        showToast('Inserisci la casella di posta mittente', 'warning');
+        document.getElementById('mailFromEmail').focus();
+        return;
+    }
+
     const data = {
         name: document.getElementById('workflowName').value,
         description: document.getElementById('workflowDescription').value,
@@ -3551,7 +3558,7 @@ function saveWorkflow() {
         token_expiration_hours: parseInt(document.getElementById('tokenExpiration').value) || null,
         sabaform_event_id: selectedSabaformEventId || null,
         sabaform_event_name: selectedSabaformEventName || null,
-        mail_from_email: document.getElementById('mailFromEmail').value.trim() || null,
+        mail_from_email: mailFromEmail,
         mail_from_name: document.getElementById('mailFromName').value.trim() || null,
         ao_agent_id: document.getElementById('wfAoAgent')?.value || null,
         ao_agent_name: document.getElementById('wfAoAgent')?.selectedOptions?.[0]?.dataset?.name || null,
