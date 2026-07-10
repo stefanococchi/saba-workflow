@@ -184,19 +184,27 @@ def start_workflow(workflow_id):
         # Get first step
         first_step = sorted(workflow.steps, key=lambda s: s.order)[0]
         
-        # Test mode: only first participant
+        # Test mode: single participant
         test_mode = request.args.get('test', '').lower() == '1'
+        test_participant_id = request.args.get('participant_id', type=int)
 
         # Get pending participants
-        query = db.query(Participant).filter_by(
-            workflow_id=workflow_id,
-            status=ParticipantStatus.PENDING
-        ).order_by(Participant.id)
-
-        if test_mode:
-            participants = query.limit(1).all()
+        if test_mode and test_participant_id:
+            p = db.get(Participant, test_participant_id)
+            if not p or p.workflow_id != workflow_id:
+                return jsonify({'error': 'Partecipante non trovato'}), 404
+            if p.status != ParticipantStatus.PENDING:
+                return jsonify({'error': 'Partecipante non è in stato pending'}), 400
+            participants = [p]
         else:
-            participants = query.all()
+            query = db.query(Participant).filter_by(
+                workflow_id=workflow_id,
+                status=ParticipantStatus.PENDING
+            ).order_by(Participant.id)
+            if test_mode:
+                participants = query.limit(1).all()
+            else:
+                participants = query.all()
 
         if not participants:
             return jsonify({'error': 'No pending participants'}), 400

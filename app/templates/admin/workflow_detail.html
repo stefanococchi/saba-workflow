@@ -166,9 +166,16 @@
                 <button class="btn btn-success w-100 mb-2" onclick="startWorkflow()">
                     <i class="bi bi-play-circle"></i> Avvia Workflow
                 </button>
-                <button class="btn btn-outline-success w-100 mb-2" onclick="testWorkflow()">
-                    <i class="bi bi-person-check"></i> Test — Solo 1° partecipante
-                </button>
+                <div class="input-group input-group-sm mb-2">
+                    <select class="form-select" id="testParticipant">
+                        {% for p in workflow.participants|sort(attribute='id') if p.status.value == 'pending' %}
+                        <option value="{{ p.id }}">{{ p.full_name }} ({{ p.email }})</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-outline-success" onclick="testWorkflow()" title="Invia test">
+                        <i class="bi bi-person-check"></i> Test
+                    </button>
+                </div>
                 {% elif workflow.status.value == 'active' %}
                 <button class="btn btn-warning w-100 mb-2" onclick="pauseWorkflow()">
                     <i class="bi bi-pause-circle"></i> Metti in Pausa
@@ -276,15 +283,21 @@ function startWorkflow() {
 }
 
 function testWorkflow() {
-    if (!confirm('Inviare email solo al PRIMO partecipante? Il workflow resterà in stato Draft.')) return;
+    const sel = document.getElementById('testParticipant');
+    if (!sel || !sel.value) {
+        alert('Nessun partecipante pending disponibile per il test.');
+        return;
+    }
+    const name = sel.selectedOptions[0].text;
+    if (!confirm(`Inviare email di test a ${name}? Il workflow resterà in stato Draft.`)) return;
 
-    fetch(`/api/workflows/${workflowId}/start?test=1`, { method: 'POST' })
+    fetch(`/api/workflows/${workflowId}/start?test=1&participant_id=${sel.value}`, { method: 'POST' })
         .then(response => response.json())
         .then(data => {
             if (data.error) {
                 alert('Errore: ' + data.error);
             } else {
-                alert('Test avviato! Email inviata a 1 partecipante.');
+                alert(`Test avviato! Email inviata a ${name}.`);
                 location.reload();
             }
         })
