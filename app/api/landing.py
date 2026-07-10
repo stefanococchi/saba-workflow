@@ -66,10 +66,10 @@ def show_landing_page(token):
             return render_template('landing/error.html', 
                                  error='Link expired or invalid'), 400
         
-        # Recupera partecipante
+        # Recupera partecipante e verifica che appartenga al workflow del token
         participant = db.get(Participant, payload['participant_id'])
-        
-        if not participant:
+
+        if not participant or participant.workflow_id != payload.get('workflow_id'):
             return render_template('landing/error.html',
                                  error='Participant not found'), 404
         

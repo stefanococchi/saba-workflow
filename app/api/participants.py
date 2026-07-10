@@ -504,17 +504,20 @@ def import_participants_xlsx(workflow_id):
 
         mapping = _detect_mapping(headers)
 
+        # Filter out empty rows for counting
+        non_empty_rows = [r for r in rows[1:] if any(v.strip() for v in r.values())]
+
         # Check if we want preview only
         if request.form.get('preview') == '1':
             preview_rows = []
-            for row in rows[1:6]:  # max 5 rows preview
+            for row in non_empty_rows[:5]:  # max 5 rows preview
                 vals = [row.get(c, '') for c in col_letters]
                 preview_rows.append(vals)
             return jsonify({
                 'headers': headers,
                 'mapping': {str(i): f for i, f in mapping.items()},
                 'preview': preview_rows,
-                'total_rows': len(rows) - 1,
+                'total_rows': len(non_empty_rows),
             }), 200
 
         # Accept custom mapping override from form
@@ -526,7 +529,7 @@ def import_participants_xlsx(workflow_id):
 
         imported = 0
         updated = 0
-        data_rows = rows[1:]
+        data_rows = [r for r in rows[1:] if any(v.strip() for v in r.values())]
 
         for row in data_rows:
             vals = [row.get(c, '') for c in col_letters]
