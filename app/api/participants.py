@@ -5,6 +5,7 @@ from app.services.activity_service import log_activity
 from app.services import TokenService, SchedulerService
 from app.services.sabaform_service import get_events, get_participants, get_event_by_id
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm.attributes import flag_modified
 from datetime import datetime
 import logging
 import io
@@ -673,6 +674,49 @@ def update_participant(participant_id):
     except Exception as e:
         db.rollback()
         logger.error(f"Errore update partecipante: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@participant_bp.route('/workflows/<int:workflow_id>/batch-add-field', methods=['POST'])
+def batch_add_collected_field(workflow_id):
+    """Aggiunge un campo collected_data a tutti i partecipanti del workflow"""
+    try:
+        workflow = db.get(Workflow, workflow_id)
+        if not workflow:
+            return jsonify({'error': 'Workflow non trovato'}), 404
+
+        data = request.get_json()
+        field_name = (data.get('field_name') or '').strip()
+        default_value = data.get('default_value', '')
+
+        if not field_name:
+            return jsonify({'error': 'Nome campo obbligatorio'}), 400
+
+        participants = db.query(Participant).filter(
+            Participant.workflow_id == workflow_id
+        ).all()
+
+        updated = 0
+        for p in participants:
+            cd = dict(p.collected_data or {})
+            if field_name not in cd:
+                cd[field_name] = default_value
+                p.collected_data = cd
+                flag_modified(p, 'collected_data')
+                updated += 1
+
+        db.commit()
+        logger.info(f"Batch add field '{field_name}' to {updated}/{len(participants)} participants in workflow {workflow_id}")
+
+        return jsonify({
+            'message': f'Campo "{field_name}" aggiunto a {updated} partecipanti',
+            'updated': updated,
+            'total': len(participants)
+        }), 200
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore batch add field: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

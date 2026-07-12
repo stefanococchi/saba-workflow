@@ -176,6 +176,9 @@
                 <button class="btn btn-success btn-sm" onclick="document.getElementById('importXlsxModal').style.display='flex'">
                     <i class="bi bi-upload"></i> Import XLSX
                 </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="batchAddField()" {% if not current_workflow_id %}disabled title="Seleziona un workflow"{% endif %}>
+                    <i class="bi bi-plus-square"></i> Aggiungi campo a tutti
+                </button>
                 <button class="btn btn-primary btn-sm" onclick="newParticipant()">
                     <i class="bi bi-person-plus"></i> {{ t.new_participant }}
                 </button>
@@ -1304,6 +1307,81 @@ function createParticipant() {
         location.reload();
     })
     .catch(function(e) { alert('Errore: ' + e.message); });
+}
+
+// =============================================
+// BATCH ADD FIELD
+// =============================================
+function batchAddField() {
+    var wfId = {{ current_workflow_id | tojson }};
+    if (!wfId) { alert('Seleziona prima un workflow.'); return; }
+
+    // Build picker: suggest existing cd_keys, or custom
+    var existing = window._allCdKeys || [];
+
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--md-surface,#fff);border-radius:16px;padding:24px;min-width:360px;max-width:460px;box-shadow:0 8px 32px rgba(0,0,0,.2)';
+    box.innerHTML = '<h6 style="color:var(--md-primary);margin-bottom:4px"><i class="bi bi-plus-square"></i> Aggiungi campo a tutti i partecipanti</h6>' +
+        '<p style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:16px">Il campo verr\u00e0 aggiunto solo ai partecipanti che non lo hanno gi\u00e0.</p>' +
+        '<div style="margin-bottom:12px"><label class="form-label" style="font-size:13px">Nome campo</label>' +
+        '<input type="text" class="form-control form-control-sm" id="_batchFieldName" placeholder="es. PARTECIPAZIONE"></div>' +
+        (existing.length > 0 ? '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--md-on-surface-variant)">Campi esistenti:</label>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px" id="_batchExistingKeys"></div></div>' : '') +
+        '<div style="margin-bottom:16px"><label class="form-label" style="font-size:13px">Valore predefinito <small class="text-muted">(opzionale)</small></label>' +
+        '<input type="text" class="form-control form-control-sm" id="_batchFieldValue" placeholder="lascia vuoto per campo vuoto"></div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+        '<button type="button" class="btn btn-sm btn-outline-secondary" id="_batchCancel">Annulla</button>' +
+        '<button type="button" class="btn btn-sm btn-primary" id="_batchConfirm"><i class="bi bi-check-lg"></i> Aggiungi a tutti</button></div>';
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    // Render existing keys as clickable chips
+    if (existing.length > 0) {
+        var keysEl = box.querySelector('#_batchExistingKeys');
+        existing.forEach(function(k) {
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'btn btn-sm btn-outline-secondary';
+            chip.style.cssText = 'border-radius:12px;padding:2px 10px;font-size:12px';
+            chip.textContent = k;
+            chip.onclick = function() { document.getElementById('_batchFieldName').value = k; };
+            keysEl.appendChild(chip);
+        });
+    }
+
+    box.querySelector('#_batchCancel').onclick = function() { document.body.removeChild(overlay); };
+    overlay.onclick = function(e) { if (e.target === overlay) document.body.removeChild(overlay); };
+
+    box.querySelector('#_batchConfirm').onclick = function() {
+        var fieldName = document.getElementById('_batchFieldName').value.trim();
+        if (!fieldName) { alert('Inserisci il nome del campo.'); return; }
+        var defaultValue = document.getElementById('_batchFieldValue').value;
+
+        box.querySelector('#_batchConfirm').disabled = true;
+        box.querySelector('#_batchConfirm').innerHTML = '<i class="bi bi-hourglass-split"></i> Aggiornamento...';
+
+        fetch('/api/workflows/' + wfId + '/batch-add-field', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ field_name: fieldName, default_value: defaultValue })
+        })
+        .then(function(r) {
+            if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Errore'); });
+            return r.json();
+        })
+        .then(function(data) {
+            document.body.removeChild(overlay);
+            alert(data.message);
+            location.reload();
+        })
+        .catch(function(e) {
+            alert('Errore: ' + e.message);
+            box.querySelector('#_batchConfirm').disabled = false;
+            box.querySelector('#_batchConfirm').innerHTML = '<i class="bi bi-check-lg"></i> Aggiungi a tutti';
+        });
+    };
 }
 
 // =============================================
