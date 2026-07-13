@@ -611,7 +611,12 @@ def simulate_workflow(workflow_id):
                           or '{{landing_url}}' in body)
             if has_landing:
                 from flask import current_app
-                exp_hours = workflow.token_expiration_hours or current_app.config.get('JWT_EXPIRATION_HOURS', 72)
+                # Align token expiry with landing_timeout_days when wait_for_landing is active
+                timeout_days = skip_cond.get('landing_timeout_days')
+                if skip_cond.get('wait_for_landing') and timeout_days:
+                    exp_hours = timeout_days * 24
+                else:
+                    exp_hours = workflow.token_expiration_hours or current_app.config.get('JWT_EXPIRATION_HOURS', 72)
                 participant.token = TokenService.generate_token(
                     participant.id, workflow.id, step_id=step.id,
                     expires_hours=exp_hours

@@ -286,16 +286,16 @@ def resume_stuck_participants(workflow_id):
             step = p.current_step
             if not step:
                 continue
-            # For landing wait steps: skip only if email was already sent (cron handles those)
+            # For landing wait steps: skip if email was already sent in any status
+            # (cron handles timeout/form-check — re-scheduling would resend the email)
             config = step.skip_conditions or {}
             if step.type.value == 'email' and config.get('wait_for_landing'):
-                has_sent = db.query(Execution).filter(
+                has_exec = db.query(Execution).filter(
                     Execution.participant_id == p.id,
                     Execution.step_id == step.id,
-                    Execution.status.in_([ExecutionStatus.SENT, ExecutionStatus.DELIVERED,
-                                          ExecutionStatus.OPENED, ExecutionStatus.CLICKED])
+                    Execution.status != ExecutionStatus.FAILED
                 ).first()
-                if has_sent:
+                if has_exec:
                     continue
 
             SchedulerService.schedule_step(p, step, delay_hours=0)
@@ -812,12 +812,20 @@ def batch_regenerate_tokens(workflow_id):
         base_url = request.host_url.rstrip('/')
         results = []
 
+        # Align token expiry with landing_timeout_days when wait_for_landing is active
+        landing_config = landing_step.skip_conditions or {}
+        timeout_days = landing_config.get('landing_timeout_days')
+        if landing_config.get('wait_for_landing') and timeout_days:
+            regen_exp_hours = timeout_days * 24
+        else:
+            regen_exp_hours = workflow.token_expiration_hours
+
         for p in participants:
             token = TokenService.generate_token(
                 participant_id=p.id,
                 workflow_id=workflow_id,
                 step_id=landing_step.id,
-                expires_hours=workflow.token_expiration_hours
+                expires_hours=regen_exp_hours
             )
             p.token = token
             p.status = ParticipantStatus.IN_PROGRESS
@@ -955,9 +963,13 @@ def rollback_participant(participant_id):
                 ).delete(synchronize_session='fetch')
 
             # Rigenera token (il vecchio potrebbe essere scaduto)
+            # Align token expiry with landing_timeout_days when wait_for_landing is active
+            _cfg = target_step.skip_conditions or {}
+            _td = _cfg.get('landing_timeout_days')
+            _exp = _td * 24 if _cfg.get('wait_for_landing') and _td else participant.workflow.token_expiration_hours
             participant.token = TokenService.generate_token(
                 participant.id, participant.workflow_id,
-                expires_hours=participant.workflow.token_expiration_hours
+                expires_hours=_exp
             )
 
             # Aggiorna partecipante — reset collected_data e stato pagamento
@@ -1059,9 +1071,12 @@ def batch_rollback():
                             Execution.step_id.in_(step_ids)
                         ).delete(synchronize_session='fetch')
 
+                    _cfg = target_step.skip_conditions or {}
+                    _td = _cfg.get('landing_timeout_days')
+                    _exp = _td * 24 if _cfg.get('wait_for_landing') and _td else participant.workflow.token_expiration_hours
                     participant.token = TokenService.generate_token(
                         participant.id, participant.workflow_id,
-                        expires_hours=participant.workflow.token_expiration_hours
+                        expires_hours=_exp
                     )
                     participant.status = ParticipantStatus.IN_PROGRESS
                     participant.current_step_id = target_step.id
