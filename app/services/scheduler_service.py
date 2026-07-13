@@ -429,6 +429,7 @@ class SchedulerService:
                     ol_if_filled = branch_config.get('landing_if_filled', 'continue')
                     ol_if_filled_step = branch_config.get('landing_if_filled_step', 0)
                     logger.info(f"✓ Landing form submitted by participant {p.id}, branching from step {branch_step.order}")
+                    p.completion_type = CompletionType.PARTICIPATED
                     p.current_step_id = branch_step.id
                     SchedulerService._handle_landing_branch(p, branch_step, ol_if_filled, ol_if_filled_step)
                     acted += 1
@@ -438,6 +439,7 @@ class SchedulerService:
                 timeout_at = last_exec.sent_at + timedelta(days=timeout_days)
                 if datetime.utcnow() >= timeout_at:
                     logger.info(f"⏰ Landing wait timeout for participant {p.id}")
+                    p.completion_type = CompletionType.EXPIRED
                     SchedulerService._handle_landing_branch(p, step, if_timeout, if_timeout_step)
                     acted += 1
 
@@ -1472,6 +1474,7 @@ class SchedulerService:
 
             # Form already submitted?
             if p.collected_data and len(p.collected_data) > 0:
+                p.completion_type = CompletionType.PARTICIPATED
                 SchedulerService._handle_landing_branch(p, step, if_filled, if_filled_step)
                 return {'action': 'form_filled_branch', 'branch': if_filled,
                         'target': if_filled_step if if_filled == 'jump' else if_filled}
@@ -1480,6 +1483,7 @@ class SchedulerService:
             if last_exec and last_exec.sent_at:
                 timeout_at = last_exec.sent_at + timedelta(days=timeout_days)
                 if datetime.utcnow() >= timeout_at:
+                    p.completion_type = CompletionType.EXPIRED
                     SchedulerService._handle_landing_branch(p, step, if_timeout, if_timeout_step)
                     return {'action': 'timeout_branch', 'branch': if_timeout,
                             'target': if_timeout_step if if_timeout == 'jump' else if_timeout}

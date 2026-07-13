@@ -252,6 +252,7 @@ def submit_landing_data(token):
         existing = dict(participant.collected_data or {})
         existing.update(form_data)
         participant.collected_data = existing
+        participant.completion_type = CompletionType.PARTICIPATED
         participant.last_interaction = datetime.utcnow()
         
         # Cancella follow-up schedulati (ha risposto)

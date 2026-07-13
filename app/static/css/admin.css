@@ -460,6 +460,10 @@ main h1.h2 {
     background: var(--md-tertiary-container);
     color: var(--md-on-tertiary-container);
 }
+.status-expired {
+    background: #FFE0B2;
+    color: #E65100;
+}
 
 /* ========== BOOTSTRAP BADGE M3 OVERRIDES ========== */
 .badge.bg-primary {

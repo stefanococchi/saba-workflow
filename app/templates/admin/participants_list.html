@@ -71,6 +71,7 @@
     .status-chip[data-status="pending"].active { background: var(--md-tertiary-container); color: var(--md-tertiary); }
     .status-chip[data-status="in_progress"].active { background: #C3E7FF; color: #00497B; }
     .status-chip[data-status="completed"].active { background: var(--md-primary-container); color: var(--md-primary); }
+    .status-chip[data-status="expired"].active { background: #FFE0B2; color: #E65100; }
     .status-chip[data-status="unsubscribed"].active { background: var(--md-error-container); color: var(--md-error); }
     .status-chip[data-status="bounced"].active { background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
 
@@ -191,6 +192,7 @@
             <div class="status-chip" data-status="pending" onclick="filterByStatus('pending')">{{ t.pending }}</div>
             <div class="status-chip" data-status="in_progress" onclick="filterByStatus('in_progress')">{{ t.in_progress }}</div>
             <div class="status-chip" data-status="completed" onclick="filterByStatus('completed')">{{ t.completed }}</div>
+            <div class="status-chip" data-status="expired" onclick="filterByStatus('expired')">{{ t.expired_unsuccessfully or 'Expired' }}</div>
             <div class="status-chip" data-status="unsubscribed" onclick="filterByStatus('unsubscribed')">{{ t.unsubscribed }}</div>
             <div class="status-chip" data-status="bounced" onclick="filterByStatus('bounced')">{{ t.bounced }}</div>
         </div>
@@ -582,7 +584,16 @@ function applyFilters() {
     // Workflow filter is now server-side (reload on change)
 
     // Status filter
-    if (currentStatus !== 'all') {
+    if (currentStatus === 'completed') {
+        // Completed = participated (form filled)
+        rows = rows.filter(function(p) { return p.completion_type === 'participated' || (p.status === 'completed' && p.completion_type !== 'expired'); });
+    } else if (currentStatus === 'expired') {
+        // Expired = timed out without filling form (any status)
+        rows = rows.filter(function(p) { return p.completion_type === 'expired'; });
+    } else if (currentStatus === 'in_progress') {
+        // In Progress = still active, no completion_type set
+        rows = rows.filter(function(p) { return p.status === 'in_progress' && !p.completion_type; });
+    } else if (currentStatus !== 'all') {
         rows = rows.filter(function(p) { return p.status === currentStatus; });
     }
 
@@ -696,7 +707,16 @@ function _doRender() {
             var val = getFieldValue(p, c.key);
             if (c.key === 'id') return '<td><strong>#' + val + '</strong></td>';
             if (c.key === 'status') {
-                var badge = '<span class="status-badge status-' + val + '">' + val + '</span>';
+                var displayStatus = val;
+                var badgeClass = val;
+                if (p.completion_type === 'expired') {
+                    displayStatus = 'expired';
+                    badgeClass = 'expired';
+                } else if (p.completion_type === 'participated') {
+                    displayStatus = 'completed';
+                    badgeClass = 'completed';
+                }
+                var badge = '<span class="status-badge status-' + badgeClass + '">' + displayStatus + '</span>';
                 if (p.reactivated_at) badge += ' <span class="badge bg-warning text-dark" style="font-size:10px" title="Riattivato il ' + p.reactivated_at + '">riattivato</span>';
                 return '<td>' + badge + '</td>';
             }
