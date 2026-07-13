@@ -441,7 +441,7 @@ var SF_LABELS = {
 // Dynamic columns will be added after AJAX load
 
 var visibleColumns = ALL_COLUMNS.filter(function(c) { return c.default; }).map(function(c) { return c.key; });
-var currentStatus = 'all';
+var activeStatuses = new Set();  // empty = all
 var sortCol = null;
 var sortDir = 'asc';
 var PAGE_SIZE = 50;
@@ -570,9 +570,23 @@ function updateOpVis(idx) {
 // FILTERING & SORTING
 // =============================================
 function filterByStatus(status) {
-    currentStatus = status;
+    if (status === 'all') {
+        activeStatuses.clear();
+    } else {
+        if (activeStatuses.has(status)) {
+            activeStatuses.delete(status);
+        } else {
+            activeStatuses.add(status);
+        }
+    }
+    // Update chip visuals
     document.querySelectorAll('.status-chip').forEach(function(c) {
-        c.classList.toggle('active', c.dataset.status === status);
+        var s = c.dataset.status;
+        if (s === 'all') {
+            c.classList.toggle('active', activeStatuses.size === 0);
+        } else {
+            c.classList.toggle('active', activeStatuses.has(s));
+        }
     });
     applyFilters();
 }
@@ -583,18 +597,17 @@ function applyFilters() {
 
     // Workflow filter is now server-side (reload on change)
 
-    // Status filter
-    if (currentStatus === 'completed') {
-        // Completed = participated (form filled)
-        rows = rows.filter(function(p) { return p.completion_type === 'participated' || (p.status === 'completed' && p.completion_type !== 'expired'); });
-    } else if (currentStatus === 'expired') {
-        // Expired = timed out without filling form (any status)
-        rows = rows.filter(function(p) { return p.completion_type === 'expired'; });
-    } else if (currentStatus === 'in_progress') {
-        // In Progress = still active, no completion_type set
-        rows = rows.filter(function(p) { return p.status === 'in_progress' && !p.completion_type; });
-    } else if (currentStatus !== 'all') {
-        rows = rows.filter(function(p) { return p.status === currentStatus; });
+    // Status filter (multi-select)
+    if (activeStatuses.size > 0) {
+        rows = rows.filter(function(p) {
+            if (activeStatuses.has('completed') && (p.completion_type === 'participated' || (p.status === 'completed' && p.completion_type !== 'expired'))) return true;
+            if (activeStatuses.has('expired') && p.completion_type === 'expired') return true;
+            if (activeStatuses.has('in_progress') && p.status === 'in_progress' && !p.completion_type) return true;
+            if (activeStatuses.has('pending') && p.status === 'pending') return true;
+            if (activeStatuses.has('unsubscribed') && p.status === 'unsubscribed') return true;
+            if (activeStatuses.has('bounced') && p.status === 'bounced') return true;
+            return false;
+        });
     }
 
     // Text search
@@ -911,17 +924,32 @@ function regenerateToken(pid) {
 function exportXLSX() {
     var rows = FILTERED_ROWS.length ? FILTERED_ROWS : ALL_PARTICIPANTS;
     var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
+    var header = cols.map(function(c) { return c.label; });
 
-    var data = [cols.map(function(c) { return c.label; })];
-    rows.forEach(function(p) {
-        data.push(cols.map(function(c) {
-            return getFieldValue(p, c.key) || '';
-        }));
+    function makeSheet(list) {
+        var data = [header];
+        list.forEach(function(p) {
+            data.push(cols.map(function(c) { return getFieldValue(p, c.key) || ''; }));
+        });
+        return XLSX.utils.aoa_to_sheet(data);
+    }
+
+    // Split by effective status
+    var completed = rows.filter(function(p) { return p.completion_type === 'participated' || (p.status === 'completed' && p.completion_type !== 'expired'); });
+    var expired = rows.filter(function(p) { return p.completion_type === 'expired'; });
+    var other = rows.filter(function(p) {
+        var isCompleted = p.completion_type === 'participated' || (p.status === 'completed' && p.completion_type !== 'expired');
+        var isExpired = p.completion_type === 'expired';
+        return !isCompleted && !isExpired;
     });
 
-    var ws = XLSX.utils.aoa_to_sheet(data);
     var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Partecipanti');
+    if (completed.length) XLSX.utils.book_append_sheet(wb, makeSheet(completed), 'Completed');
+    if (expired.length) XLSX.utils.book_append_sheet(wb, makeSheet(expired), 'Non compilato');
+    if (other.length) XLSX.utils.book_append_sheet(wb, makeSheet(other), 'In Progress');
+    // Fallback: if no sheets (shouldn't happen)
+    if (!wb.SheetNames.length) XLSX.utils.book_append_sheet(wb, makeSheet(rows), 'Partecipanti');
+
     XLSX.writeFile(wb, 'partecipanti_' + new Date().toISOString().slice(0, 10) + '.xlsx');
 }
 
