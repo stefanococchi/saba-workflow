@@ -1018,19 +1018,33 @@ function regenerateExpiredLinks() {
     })
     .then(function(data) {
         // Genera XLSX con i link
-        var header = ['Nome', 'Cognome', 'Email', 'Telefono', 'Link'];
+        // Calcola scadenza leggibile
+        var expiryLabel = '';
+        var expiryDate = '';
+        if (data.token_expiry_hours) {
+            var h = data.token_expiry_hours;
+            expiryLabel = h >= 24 ? Math.round(h / 24) + ' giorni' : h + ' ore';
+            var exp = new Date(Date.now() + h * 3600000);
+            expiryDate = exp.toLocaleDateString('it-IT') + ' ' + exp.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+        }
+
+        var header = ['Nome', 'Cognome', 'Email', 'Telefono', 'Link', 'Validità', 'Scadenza'];
         var rows = [header];
         data.participants.forEach(function(p) {
-            rows.push([p.first_name || '', p.last_name || '', p.email || '', p.phone || '', p.landing_url]);
+            rows.push([p.first_name || '', p.last_name || '', p.email || '', p.phone || '', p.landing_url, expiryLabel, expiryDate]);
         });
         var ws = XLSX.utils.aoa_to_sheet(rows);
-        // Colonna link larga
-        ws['!cols'] = [{wch:15}, {wch:20}, {wch:30}, {wch:15}, {wch:80}];
+        ws['!cols'] = [{wch:15}, {wch:20}, {wch:30}, {wch:15}, {wch:80}, {wch:12}, {wch:18}];
         var wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Link Rigenerati');
         XLSX.writeFile(wb, 'expired_links_' + new Date().toISOString().slice(0, 10) + '.xlsx');
 
-        alert('Rigenerati ' + data.count + ' link. File XLSX scaricato.');
+        var expiryMsg = '';
+        if (data.token_expiry_hours) {
+            var h = data.token_expiry_hours;
+            expiryMsg = h >= 24 ? ' (validità: ' + Math.round(h / 24) + ' giorni)' : ' (validità: ' + h + ' ore)';
+        }
+        alert('Rigenerati ' + data.count + ' link' + expiryMsg + '. File XLSX scaricato.');
         location.reload();
     })
     .catch(function(e) { alert('Errore: ' + e.message); });

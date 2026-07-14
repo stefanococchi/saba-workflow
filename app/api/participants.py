@@ -194,8 +194,14 @@ def start_workflow(workflow_id):
             p = db.get(Participant, test_participant_id)
             if not p or p.workflow_id != workflow_id:
                 return jsonify({'error': 'Partecipante non trovato'}), 404
+            # In test mode, reset participant to pending so the step executes
             if p.status != ParticipantStatus.PENDING:
-                return jsonify({'error': 'Partecipante non è in stato pending'}), 400
+                SchedulerService.cancel_scheduled_executions(p.id)
+                p.status = ParticipantStatus.PENDING
+                p.current_step_id = None
+                p.completed_at = None
+                p.completion_type = None
+                db.flush()
             participants = [p]
         else:
             query = db.query(Participant).filter_by(
@@ -853,7 +859,11 @@ def batch_regenerate_tokens(workflow_id):
         )
 
         logger.info(f"Rigenerati {len(results)} token per workflow {workflow_id}")
-        return jsonify({'participants': results, 'count': len(results)}), 200
+        return jsonify({
+            'participants': results,
+            'count': len(results),
+            'token_expiry_hours': regen_exp_hours,
+        }), 200
 
     except Exception as e:
         db.rollback()

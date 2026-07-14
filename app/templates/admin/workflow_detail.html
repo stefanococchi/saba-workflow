@@ -166,16 +166,6 @@
                 <button class="btn btn-success w-100 mb-2" onclick="startWorkflow()">
                     <i class="bi bi-play-circle"></i> Avvia Workflow
                 </button>
-                <div class="input-group input-group-sm mb-2">
-                    <select class="form-select" id="testParticipant">
-                        {% for p in workflow.participants|sort(attribute='id') if p.status.value == 'pending' %}
-                        <option value="{{ p.id }}">{{ p.full_name }} ({{ p.email }})</option>
-                        {% endfor %}
-                    </select>
-                    <button class="btn btn-outline-success" onclick="testWorkflow()" title="Invia test">
-                        <i class="bi bi-person-check"></i> Test
-                    </button>
-                </div>
                 {% elif workflow.status.value == 'active' %}
                 <button class="btn btn-warning w-100 mb-2" onclick="pauseWorkflow()">
                     <i class="bi bi-pause-circle"></i> Metti in Pausa
@@ -184,6 +174,19 @@
                 <button class="btn btn-success w-100 mb-2" onclick="resumeWorkflow()">
                     <i class="bi bi-play-circle"></i> Riprendi
                 </button>
+                {% endif %}
+
+                {% if workflow.status.value in ('draft', 'active') %}
+                <div class="input-group input-group-sm mb-2">
+                    <select class="form-select" id="testParticipant">
+                        {% for p in workflow.participants|sort(attribute='id') %}
+                        <option value="{{ p.id }}">{{ p.full_name }} ({{ p.email }}) — {{ p.status.value }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-outline-success" onclick="testWorkflow()" title="Invia test a singolo partecipante">
+                        <i class="bi bi-person-check"></i> Test
+                    </button>
+                </div>
                 {% endif %}
                 
                 {% if workflow.status.value != 'active' %}
