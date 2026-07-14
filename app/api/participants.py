@@ -802,14 +802,17 @@ def batch_regenerate_tokens(workflow_id):
         data = request.get_json() or {}
         participant_ids = data.get('participant_ids')
 
-        # Se non specificati, prendi tutti gli expired del workflow
-        query = db.query(Participant).filter_by(
-            workflow_id=workflow_id,
-            status=ParticipantStatus.COMPLETED,
-            completion_type=CompletionType.EXPIRED
-        )
+        # Se participant_ids forniti, usa quelli; altrimenti prendi tutti gli expired del workflow
         if participant_ids:
-            query = query.filter(Participant.id.in_(participant_ids))
+            query = db.query(Participant).filter(
+                Participant.workflow_id == workflow_id,
+                Participant.id.in_(participant_ids)
+            )
+        else:
+            query = db.query(Participant).filter_by(
+                workflow_id=workflow_id,
+                completion_type=CompletionType.EXPIRED
+            )
 
         participants = query.all()
         if not participants:

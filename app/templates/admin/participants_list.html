@@ -994,7 +994,7 @@ function markSelectedReactivated() {
 function regenerateExpiredLinks() {
     // Conta expired visibili
     var expiredRows = ALL_PARTICIPANTS.filter(function(p) {
-        return p.status === 'completed' && p.completion_type === 'expired';
+        return p.completion_type === 'expired';
     });
     if (!expiredRows.length) {
         alert('Nessun partecipante expired trovato in questo workflow.');
