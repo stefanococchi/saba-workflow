@@ -264,12 +264,9 @@ class SchedulerService:
                 
                 if step.type.value == 'email':
                     success = SchedulerService._execute_email_step(participant, step, execution)
-                    # Wait for landing if step has a landing page or explicit wait_for_landing
+                    # Wait for landing only if explicitly configured with wait_for_landing
                     email_config = step.skip_conditions or {}
-                    has_landing = bool(step.landing_page_config or step.landing_html or step.landing_gjs_data)
-                    # Skip landing wait if participant already submitted their form
-                    already_participated = (participant.completion_type == CompletionType.PARTICIPATED)
-                    if success and not already_participated and (has_landing or email_config.get('wait_for_landing')):
+                    if success and email_config.get('wait_for_landing'):
                         execution.status = ExecutionStatus.SENT
                         execution.sent_at = datetime.utcnow()
                         participant.last_interaction = datetime.utcnow()
@@ -374,9 +371,30 @@ class SchedulerService:
             if not active_wf_ids:
                 return
 
-            # First pass: fix reactivated participants that were wrongly re-expired.
-            # These may have status=COMPLETED (from _handle_landing_branch after timeout),
-            # so they must be handled separately from the IN_PROGRESS loop.
+            # Cleanup: fix participants wrongly expired by has_landing cron bug.
+            # These have completion_type=EXPIRED but status=IN_PROGRESS (contradictory),
+            # or are reactivated participants that were re-expired.
+            wrongly_expired = _db().query(Participant).filter(
+                Participant.workflow_id.in_(active_wf_ids),
+                Participant.completion_type == CompletionType.EXPIRED,
+                Participant.status == ParticipantStatus.IN_PROGRESS,
+            ).all()
+            for p in wrongly_expired:
+                # Find the wait_for_landing step for this workflow
+                wfl_step = _db().query(WorkflowStep).filter(
+                    WorkflowStep.workflow_id == p.workflow_id,
+                    WorkflowStep.type == 'email',
+                ).all()
+                has_wait_step = any((s.skip_conditions or {}).get('wait_for_landing') for s in wfl_step)
+                if not has_wait_step:
+                    continue
+                # Check if this participant's current step has wait_for_landing
+                cur_config = (p.current_step.skip_conditions or {}) if p.current_step else {}
+                if cur_config.get('wait_for_landing'):
+                    continue  # Legitimately expired on a wait_for_landing step
+                logger.info(f"🔄 Resetting wrongly expired participant {p.id} (no wait_for_landing on current step)")
+                p.completion_type = None
+            # Also fix reactivated participants (any status)
             reactivated_expired = _db().query(Participant).filter(
                 Participant.workflow_id.in_(active_wf_ids),
                 Participant.reactivated_at.isnot(None),
@@ -389,16 +407,16 @@ class SchedulerService:
                 ).order_by(WorkflowStep.order).first()
                 if not original_landing:
                     continue
-                logger.info(f"🔄 Resetting wrongly expired reactivated participant {p.id}")
+                logger.info(f"🔄 Resetting reactivated expired participant {p.id}")
                 p.completion_type = None
                 p.completed_at = None
                 p.status = ParticipantStatus.IN_PROGRESS
                 p.current_step_id = original_landing.id
-            if reactivated_expired:
+            if wrongly_expired or reactivated_expired:
                 _db().commit()
-                logger.info(f"🔄 Reset {len(reactivated_expired)} reactivated participants")
+                logger.info(f"🔄 Reset {len(wrongly_expired)} wrongly expired + {len(reactivated_expired)} reactivated")
 
-            # Second pass: check all IN_PROGRESS participants on active workflows
+            # Main pass: check all IN_PROGRESS participants on active workflows
             participants = _db().query(Participant).filter(
                 Participant.status == ParticipantStatus.IN_PROGRESS,
                 Participant.workflow_id.in_(active_wf_ids)
@@ -412,8 +430,7 @@ class SchedulerService:
                 if not step or step.type.value != 'email':
                     continue
                 config = step.skip_conditions or {}
-                has_landing = bool(step.landing_page_config or step.landing_html or step.landing_gjs_data)
-                if not config.get('wait_for_landing') and not has_landing:
+                if not config.get('wait_for_landing'):
                     continue
 
                 # Skip if participant has scheduled executions (still progressing)
