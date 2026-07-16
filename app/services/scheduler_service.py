@@ -438,12 +438,18 @@ class SchedulerService:
                     acted += 1
                     continue
 
-                # Check timeout
-                timeout_at = last_exec.sent_at + timedelta(days=timeout_days)
+                # Check timeout (use reactivated_at as baseline if participant was reactivated)
+                baseline = p.reactivated_at if p.reactivated_at and p.reactivated_at > last_exec.sent_at else last_exec.sent_at
+                timeout_at = baseline + timedelta(days=timeout_days)
                 if datetime.utcnow() >= timeout_at:
                     logger.info(f"⏰ Landing wait timeout for participant {p.id}")
                     p.completion_type = CompletionType.EXPIRED
                     SchedulerService._handle_landing_branch(p, step, if_timeout, if_timeout_step)
+                    acted += 1
+                elif p.completion_type == CompletionType.EXPIRED and p.reactivated_at and p.reactivated_at > last_exec.sent_at:
+                    # Reactivated participant was wrongly re-expired by old cron — reset
+                    logger.info(f"🔄 Resetting wrongly expired reactivated participant {p.id}")
+                    p.completion_type = None
                     acted += 1
 
             if checked > 0:
