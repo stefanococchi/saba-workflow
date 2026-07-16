@@ -374,7 +374,31 @@ class SchedulerService:
             if not active_wf_ids:
                 return
 
-            # Find all IN_PROGRESS participants on active workflows
+            # First pass: fix reactivated participants that were wrongly re-expired.
+            # These may have status=COMPLETED (from _handle_landing_branch after timeout),
+            # so they must be handled separately from the IN_PROGRESS loop.
+            reactivated_expired = _db().query(Participant).filter(
+                Participant.workflow_id.in_(active_wf_ids),
+                Participant.reactivated_at.isnot(None),
+                Participant.completion_type == CompletionType.EXPIRED,
+            ).all()
+            for p in reactivated_expired:
+                original_landing = _db().query(WorkflowStep).filter(
+                    WorkflowStep.workflow_id == p.workflow_id,
+                    (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None)) | (WorkflowStep.landing_page_config.isnot(None))
+                ).order_by(WorkflowStep.order).first()
+                if not original_landing:
+                    continue
+                logger.info(f"🔄 Resetting wrongly expired reactivated participant {p.id}")
+                p.completion_type = None
+                p.completed_at = None
+                p.status = ParticipantStatus.IN_PROGRESS
+                p.current_step_id = original_landing.id
+            if reactivated_expired:
+                _db().commit()
+                logger.info(f"🔄 Reset {len(reactivated_expired)} reactivated participants")
+
+            # Second pass: check all IN_PROGRESS participants on active workflows
             participants = _db().query(Participant).filter(
                 Participant.status == ParticipantStatus.IN_PROGRESS,
                 Participant.workflow_id.in_(active_wf_ids)
@@ -390,22 +414,6 @@ class SchedulerService:
                 config = step.skip_conditions or {}
                 has_landing = bool(step.landing_page_config or step.landing_html or step.landing_gjs_data)
                 if not config.get('wait_for_landing') and not has_landing:
-                    continue
-
-                # Reactivated participant wrongly re-expired: reset before any other check.
-                # This can happen when the cron ran before the baseline fix and used
-                # the original sent_at (already past) to re-expire a reactivated participant.
-                if p.completion_type == CompletionType.EXPIRED and p.reactivated_at:
-                    logger.info(f"🔄 Resetting wrongly expired reactivated participant {p.id}")
-                    p.completion_type = None
-                    # Also reset to original landing step so timeout is recalculated properly
-                    original_landing = _db().query(WorkflowStep).filter(
-                        WorkflowStep.workflow_id == p.workflow_id,
-                        (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None)) | (WorkflowStep.landing_page_config.isnot(None))
-                    ).order_by(WorkflowStep.order).first()
-                    if original_landing and p.current_step_id != original_landing.id:
-                        p.current_step_id = original_landing.id
-                    acted += 1
                     continue
 
                 # Skip if participant has scheduled executions (still progressing)
