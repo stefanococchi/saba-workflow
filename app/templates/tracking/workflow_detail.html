@@ -100,7 +100,8 @@
                 {% endfor %}
                 <tr class="participant-row"
                     data-search="{{ (p.first_name or '')|lower }} {{ (p.last_name or '')|lower }} {{ company|lower }} {{ (p.email or '')|lower }} {{ collected_values|join(' ') }}"
-                    data-filter-status="{{ p.completion_type.value if p.completion_type else ('participated' if p.status.value == 'completed' else p.status.value) }}"
+                    {% set is_reactivated = p.reactivated_at and (not p.completed_at or p.reactivated_at > p.completed_at) %}
+                    data-filter-status="{{ 'in_progress' if is_reactivated else (p.completion_type.value if p.completion_type else ('participated' if p.status.value == 'completed' else p.status.value)) }}"
                     data-pid="{{ p.id }}"
                     data-name="{{ (p.first_name or '') }} {{ (p.last_name or '') }}"
                     data-email="{{ p.email or '' }}"
@@ -123,7 +124,9 @@
                         {% endif %}
                     </td>
                     <td>
-                        {% if p.completion_type %}
+                        {% if is_reactivated %}
+                        <span class="tk-badge tk-badge-in_progress">in progress</span>
+                        {% elif p.completion_type %}
                         <span class="tk-badge tk-badge-{{ p.completion_type.value }}">{{ p.completion_type.value }}</span>
                         {% elif p.status.value == 'completed' %}
                         <span class="tk-badge tk-badge-participated">participated</span>
@@ -168,7 +171,7 @@
                                 {% endif %}
                             {% endfor %}
                         {% endif %}
-                        {% if p.status.value == 'completed' or p.completion_type %}
+                        {% if (p.status.value == 'completed' or p.completion_type) and not is_reactivated %}
                             {% set pct = 100 %}
                         {% elif total_steps > 0 and current_order > 0 %}
                             {% set pct = ((current_order - 1) / total_steps * 100)|int %}

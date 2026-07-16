@@ -14,15 +14,25 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _is_reactivated(p):
+    """Participant was reactivated and reactivation is more recent than completion."""
+    return p.reactivated_at and (not p.completed_at or p.reactivated_at > p.completed_at)
+
+
 def _is_effectively_completed(p):
-    """Participant is completed if status=completed OR completion_type is set.
-    Matches the same logic used in participant management."""
+    """Participant is completed if status=completed OR completion_type is set,
+    but NOT if they were reactivated after completion."""
+    if _is_reactivated(p):
+        return False
     return (p.status == ParticipantStatus.COMPLETED
             or p.completion_type in (CompletionType.PARTICIPATED, CompletionType.EXPIRED))
 
 
 def _effective_completion_type(p):
-    """Return effective completion type: explicit if set, fallback for status=completed with NULL."""
+    """Return effective completion type: explicit if set, fallback for status=completed with NULL.
+    Returns None for reactivated participants."""
+    if _is_reactivated(p):
+        return None
     if p.completion_type:
         return p.completion_type
     if p.status == ParticipantStatus.COMPLETED:
