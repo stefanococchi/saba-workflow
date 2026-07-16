@@ -45,10 +45,10 @@ def index():
     for wf in workflows:
         participants = db.query(Participant).filter_by(workflow_id=wf.id).all()
         total = len(participants)
-        completed = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED)
-        participated = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED and p.completion_type == CompletionType.PARTICIPATED)
-        expired = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED and p.completion_type == CompletionType.EXPIRED)
-        in_progress = sum(1 for p in participants if p.status == ParticipantStatus.IN_PROGRESS)
+        completed = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED or p.completion_type in (CompletionType.PARTICIPATED, CompletionType.EXPIRED))
+        participated = sum(1 for p in participants if p.completion_type == CompletionType.PARTICIPATED)
+        expired = sum(1 for p in participants if p.completion_type == CompletionType.EXPIRED)
+        in_progress = sum(1 for p in participants if p.status == ParticipantStatus.IN_PROGRESS and p.completion_type not in (CompletionType.PARTICIPATED, CompletionType.EXPIRED))
         pending = sum(1 for p in participants if p.status == ParticipantStatus.PENDING)
         bounced = sum(1 for p in participants if p.status in (ParticipantStatus.BOUNCED, ParticipantStatus.UNSUBSCRIBED))
 
@@ -279,7 +279,7 @@ def api_status_flow(workflow_id):
     pids_completed = set()
     pids_pending = set()
     for p in participants:
-        if p.status == ParticipantStatus.COMPLETED:
+        if p.status == ParticipantStatus.COMPLETED or p.completion_type in (CompletionType.PARTICIPATED, CompletionType.EXPIRED):
             pids_completed.add(p.id)
         elif p.status == ParticipantStatus.PENDING:
             pids_pending.add(p.id)
@@ -331,8 +331,8 @@ def api_status_flow(workflow_id):
             'substates': counts,
         })
 
-    participated = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED and p.completion_type == CompletionType.PARTICIPATED)
-    expired = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED and p.completion_type == CompletionType.EXPIRED)
+    participated = sum(1 for p in participants if p.completion_type == CompletionType.PARTICIPATED)
+    expired = sum(1 for p in participants if p.completion_type == CompletionType.EXPIRED)
 
     return jsonify({
         'steps': flow,

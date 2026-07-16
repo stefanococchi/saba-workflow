@@ -100,7 +100,7 @@
                 {% endfor %}
                 <tr class="participant-row"
                     data-search="{{ (p.first_name or '')|lower }} {{ (p.last_name or '')|lower }} {{ company|lower }} {{ (p.email or '')|lower }} {{ collected_values|join(' ') }}"
-                    data-filter-status="{{ p.completion_type.value if p.status.value == 'completed' and p.completion_type else p.status.value }}"
+                    data-filter-status="{{ p.completion_type.value if p.completion_type else p.status.value }}"
                     data-pid="{{ p.id }}"
                     data-name="{{ (p.first_name or '') }} {{ (p.last_name or '') }}"
                     data-email="{{ p.email or '' }}"
@@ -123,7 +123,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        {% if p.status.value == 'completed' and p.completion_type %}
+                        {% if p.completion_type %}
                         <span class="tk-badge tk-badge-{{ p.completion_type.value }}">{{ p.completion_type.value }}</span>
                         {% else %}
                         <span class="tk-badge tk-badge-{{ p.status.value }}">{{ p.status.value|replace('_', ' ') }}</span>
@@ -166,7 +166,7 @@
                                 {% endif %}
                             {% endfor %}
                         {% endif %}
-                        {% if p.status.value == 'completed' %}
+                        {% if p.status.value == 'completed' or p.completion_type %}
                             {% set pct = 100 %}
                         {% elif total_steps > 0 and current_order > 0 %}
                             {% set pct = ((current_order - 1) / total_steps * 100)|int %}

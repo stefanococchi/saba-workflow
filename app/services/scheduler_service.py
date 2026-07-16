@@ -267,7 +267,9 @@ class SchedulerService:
                     # Wait for landing if step has a landing page or explicit wait_for_landing
                     email_config = step.skip_conditions or {}
                     has_landing = bool(step.landing_page_config or step.landing_html or step.landing_gjs_data)
-                    if success and (has_landing or email_config.get('wait_for_landing')):
+                    # Skip landing wait if participant already submitted their form
+                    already_participated = (participant.completion_type == CompletionType.PARTICIPATED)
+                    if success and not already_participated and (has_landing or email_config.get('wait_for_landing')):
                         execution.status = ExecutionStatus.SENT
                         execution.sent_at = datetime.utcnow()
                         participant.last_interaction = datetime.utcnow()
@@ -386,7 +388,8 @@ class SchedulerService:
                 if not step or step.type.value != 'email':
                     continue
                 config = step.skip_conditions or {}
-                if not config.get('wait_for_landing'):
+                has_landing = bool(step.landing_page_config or step.landing_html or step.landing_gjs_data)
+                if not config.get('wait_for_landing') and not has_landing:
                     continue
 
                 # Skip if participant has scheduled executions (still progressing)
