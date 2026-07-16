@@ -371,34 +371,22 @@ class SchedulerService:
             if not active_wf_ids:
                 return
 
-            # Cleanup: fix participants wrongly expired by has_landing cron bug.
-            # These have completion_type=EXPIRED but status=IN_PROGRESS (contradictory),
-            # or are reactivated participants that were re-expired.
+            # Cleanup: status=IN_PROGRESS + completion_type=EXPIRED is contradictory.
+            # If the workflow is still running, the participant isn't truly expired yet.
             wrongly_expired = _db().query(Participant).filter(
                 Participant.workflow_id.in_(active_wf_ids),
                 Participant.completion_type == CompletionType.EXPIRED,
                 Participant.status == ParticipantStatus.IN_PROGRESS,
             ).all()
             for p in wrongly_expired:
-                # Find the wait_for_landing step for this workflow
-                wfl_step = _db().query(WorkflowStep).filter(
-                    WorkflowStep.workflow_id == p.workflow_id,
-                    WorkflowStep.type == 'email',
-                ).all()
-                has_wait_step = any((s.skip_conditions or {}).get('wait_for_landing') for s in wfl_step)
-                if not has_wait_step:
-                    continue
-                # Check if this participant's current step has wait_for_landing
-                cur_config = (p.current_step.skip_conditions or {}) if p.current_step else {}
-                if cur_config.get('wait_for_landing'):
-                    continue  # Legitimately expired on a wait_for_landing step
-                logger.info(f"🔄 Resetting wrongly expired participant {p.id} (no wait_for_landing on current step)")
+                logger.info(f"🔄 Resetting wrongly expired in-progress participant {p.id}")
                 p.completion_type = None
-            # Also fix reactivated participants (any status)
+            # Also fix reactivated participants (may have status=COMPLETED)
             reactivated_expired = _db().query(Participant).filter(
                 Participant.workflow_id.in_(active_wf_ids),
                 Participant.reactivated_at.isnot(None),
                 Participant.completion_type == CompletionType.EXPIRED,
+                Participant.status == ParticipantStatus.COMPLETED,
             ).all()
             for p in reactivated_expired:
                 original_landing = _db().query(WorkflowStep).filter(
@@ -484,7 +472,12 @@ class SchedulerService:
                 timeout_at = baseline + timedelta(days=timeout_days)
                 if datetime.utcnow() >= timeout_at:
                     logger.info(f"⏰ Landing wait timeout for participant {p.id}")
-                    p.completion_type = CompletionType.EXPIRED
+                    # Only set EXPIRED if the timeout action stops the workflow.
+                    # If it continues (to a reminder), the participant still has a chance.
+                    # _handle_landing_branch will set completion_type via _calc_completion_type
+                    # when the workflow actually ends (stop/end actions).
+                    if if_timeout == 'stop' or (if_timeout == 'jump' and (not if_timeout_step or if_timeout_step == 'end')):
+                        p.completion_type = CompletionType.EXPIRED
                     SchedulerService._handle_landing_branch(p, step, if_timeout, if_timeout_step)
                     acted += 1
 
