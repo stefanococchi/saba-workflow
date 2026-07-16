@@ -392,6 +392,22 @@ class SchedulerService:
                 if not config.get('wait_for_landing') and not has_landing:
                     continue
 
+                # Reactivated participant wrongly re-expired: reset before any other check.
+                # This can happen when the cron ran before the baseline fix and used
+                # the original sent_at (already past) to re-expire a reactivated participant.
+                if p.completion_type == CompletionType.EXPIRED and p.reactivated_at:
+                    logger.info(f"🔄 Resetting wrongly expired reactivated participant {p.id}")
+                    p.completion_type = None
+                    # Also reset to original landing step so timeout is recalculated properly
+                    original_landing = _db().query(WorkflowStep).filter(
+                        WorkflowStep.workflow_id == p.workflow_id,
+                        (WorkflowStep.landing_html.isnot(None)) | (WorkflowStep.landing_gjs_data.isnot(None)) | (WorkflowStep.landing_page_config.isnot(None))
+                    ).order_by(WorkflowStep.order).first()
+                    if original_landing and p.current_step_id != original_landing.id:
+                        p.current_step_id = original_landing.id
+                    acted += 1
+                    continue
+
                 # Skip if participant has scheduled executions (still progressing)
                 has_scheduled = _db().query(Execution).filter_by(
                     participant_id=p.id,
@@ -445,11 +461,6 @@ class SchedulerService:
                     logger.info(f"⏰ Landing wait timeout for participant {p.id}")
                     p.completion_type = CompletionType.EXPIRED
                     SchedulerService._handle_landing_branch(p, step, if_timeout, if_timeout_step)
-                    acted += 1
-                elif p.completion_type == CompletionType.EXPIRED and p.reactivated_at and p.reactivated_at > last_exec.sent_at:
-                    # Reactivated participant was wrongly re-expired by old cron — reset
-                    logger.info(f"🔄 Resetting wrongly expired reactivated participant {p.id}")
-                    p.completion_type = None
                     acted += 1
 
             if checked > 0:
