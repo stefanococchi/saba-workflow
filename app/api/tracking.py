@@ -13,6 +13,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _is_effectively_completed(p):
+    """Participant is completed if status=completed OR completion_type is set.
+    Matches the same logic used in participant management."""
+    return (p.status == ParticipantStatus.COMPLETED
+            or p.completion_type in (CompletionType.PARTICIPATED, CompletionType.EXPIRED))
+
+
+def _effective_completion_type(p):
+    """Return effective completion type: explicit if set, fallback for status=completed with NULL."""
+    if p.completion_type:
+        return p.completion_type
+    if p.status == ParticipantStatus.COMPLETED:
+        return CompletionType.PARTICIPATED  # fallback: completed without explicit type
+    return None
+
+
 tracking_bp = Blueprint('tracking', __name__, url_prefix='/tracking')
 
 
@@ -45,10 +62,10 @@ def index():
     for wf in workflows:
         participants = db.query(Participant).filter_by(workflow_id=wf.id).all()
         total = len(participants)
-        completed = sum(1 for p in participants if p.status == ParticipantStatus.COMPLETED or p.completion_type in (CompletionType.PARTICIPATED, CompletionType.EXPIRED))
-        participated = sum(1 for p in participants if p.completion_type == CompletionType.PARTICIPATED)
-        expired = sum(1 for p in participants if p.completion_type == CompletionType.EXPIRED)
-        in_progress = sum(1 for p in participants if p.status == ParticipantStatus.IN_PROGRESS and p.completion_type not in (CompletionType.PARTICIPATED, CompletionType.EXPIRED))
+        completed = sum(1 for p in participants if _is_effectively_completed(p))
+        participated = sum(1 for p in participants if _effective_completion_type(p) == CompletionType.PARTICIPATED)
+        expired = sum(1 for p in participants if _effective_completion_type(p) == CompletionType.EXPIRED)
+        in_progress = sum(1 for p in participants if p.status == ParticipantStatus.IN_PROGRESS and not _is_effectively_completed(p))
         pending = sum(1 for p in participants if p.status == ParticipantStatus.PENDING)
         bounced = sum(1 for p in participants if p.status in (ParticipantStatus.BOUNCED, ParticipantStatus.UNSUBSCRIBED))
 
@@ -279,7 +296,7 @@ def api_status_flow(workflow_id):
     pids_completed = set()
     pids_pending = set()
     for p in participants:
-        if p.status == ParticipantStatus.COMPLETED or p.completion_type in (CompletionType.PARTICIPATED, CompletionType.EXPIRED):
+        if _is_effectively_completed(p):
             pids_completed.add(p.id)
         elif p.status == ParticipantStatus.PENDING:
             pids_pending.add(p.id)
@@ -331,8 +348,8 @@ def api_status_flow(workflow_id):
             'substates': counts,
         })
 
-    participated = sum(1 for p in participants if p.completion_type == CompletionType.PARTICIPATED)
-    expired = sum(1 for p in participants if p.completion_type == CompletionType.EXPIRED)
+    participated = sum(1 for p in participants if _effective_completion_type(p) == CompletionType.PARTICIPATED)
+    expired = sum(1 for p in participants if _effective_completion_type(p) == CompletionType.EXPIRED)
 
     return jsonify({
         'steps': flow,
