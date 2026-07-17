@@ -748,28 +748,52 @@ def delete_participant(participant_id):
 
 @participant_bp.route('/participants/<int:participant_id>/regenerate-token', methods=['POST'])
 def regenerate_token(participant_id):
-    """Rigenera JWT token per un partecipante"""
+    """Rigenera JWT token per un partecipante e lo riporta IN_PROGRESS sulla landing"""
     try:
         participant = db.get(Participant, participant_id)
         if not participant:
             return jsonify({'error': 'Partecipante non trovato'}), 404
 
+        # Trova lo step con landing page
+        landing_step = db.query(WorkflowStep).filter(
+            WorkflowStep.workflow_id == participant.workflow_id,
+            (WorkflowStep.landing_html.isnot(None)) |
+            (WorkflowStep.landing_gjs_data.isnot(None)) |
+            (WorkflowStep.landing_page_config.isnot(None))
+        ).order_by(WorkflowStep.order).first()
+
+        target_step_id = landing_step.id if landing_step else participant.current_step_id
+
+        # Align token expiry with landing_timeout_days when wait_for_landing is active
+        regen_exp_hours = participant.workflow.token_expiration_hours
+        if landing_step:
+            landing_config = landing_step.skip_conditions or {}
+            timeout_days = landing_config.get('landing_timeout_days')
+            if landing_config.get('wait_for_landing') and timeout_days:
+                regen_exp_hours = timeout_days * 24
+
         token = TokenService.generate_token(
             participant_id=participant.id,
             workflow_id=participant.workflow_id,
-            step_id=participant.current_step_id
+            step_id=target_step_id,
+            expires_hours=regen_exp_hours
         )
         participant.token = token
+        participant.status = ParticipantStatus.IN_PROGRESS
+        participant.current_step_id = target_step_id
+        participant.completed_at = None
+        participant.completion_type = None
+        participant.reactivated_at = datetime.utcnow()
         db.commit()
 
         landing_url = request.host_url.rstrip('/') + '/landing/' + token
-        logger.info(f"Rigenerato token per partecipante {participant_id}")
+        logger.info(f"Rigenerato token per partecipante {participant_id}, riportato a IN_PROGRESS")
 
         log_activity(
             workflow_id=participant.workflow_id,
             participant_id=participant.id,
             event_type='token_regenerated',
-            description='Token rigenerato manualmente da admin'
+            description=f'Token rigenerato e riportato a IN_PROGRESS su step: {landing_step.name if landing_step else "current"}'
         )
 
         return jsonify({'token': token, 'landing_url': landing_url}), 200
