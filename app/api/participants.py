@@ -764,6 +764,26 @@ def regenerate_token(participant_id):
 
         target_step_id = landing_step.id if landing_step else participant.current_step_id
 
+        # Cancel scheduled executions
+        SchedulerService.cancel_scheduled_executions(participant_id)
+
+        # Delete executions and payment logs from target step onwards (like rollback)
+        if landing_step:
+            steps_to_clear = db.query(WorkflowStep).filter(
+                WorkflowStep.workflow_id == participant.workflow_id,
+                WorkflowStep.order >= landing_step.order
+            ).all()
+            step_ids = [s.id for s in steps_to_clear]
+            if step_ids:
+                db.query(Execution).filter(
+                    Execution.participant_id == participant_id,
+                    Execution.step_id.in_(step_ids)
+                ).delete(synchronize_session='fetch')
+                db.query(PaymentLog).filter(
+                    PaymentLog.participant_id == participant_id,
+                    PaymentLog.step_id.in_(step_ids)
+                ).delete(synchronize_session='fetch')
+
         # Align token expiry with landing_timeout_days when wait_for_landing is active
         regen_exp_hours = participant.workflow.token_expiration_hours
         if landing_step:
@@ -781,6 +801,7 @@ def regenerate_token(participant_id):
         participant.token = token
         participant.status = ParticipantStatus.IN_PROGRESS
         participant.current_step_id = target_step_id
+        participant.collected_data = {}
         participant.completed_at = None
         participant.completion_type = None
         participant.reactivated_at = datetime.utcnow()
