@@ -817,7 +817,7 @@ def regenerate_token(participant_id):
             description=f'Token rigenerato e riportato a IN_PROGRESS su step: {landing_step.name if landing_step else "current"}'
         )
 
-        return jsonify({'token': token, 'landing_url': landing_url}), 200
+        return jsonify({'token': token, 'landing_url': landing_url, 'expires_in_hours': regen_exp_hours}), 200
 
     except Exception as e:
         db.rollback()
