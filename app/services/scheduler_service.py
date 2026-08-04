@@ -451,6 +451,14 @@ class SchedulerService:
 
                 # Check if form was submitted
                 if p.collected_data and len(p.collected_data) > 0:
+                    # Skip if payment is pending (user started checkout but didn't complete)
+                    if p.collected_data.get('_payment_pending'):
+                        continue
+                    # Skip if payment is required but not completed
+                    if config.get('payment_enabled'):
+                        payment_data = p.collected_data.get('_payment', {})
+                        if payment_data.get('status') != 'completed':
+                            continue
                     # Use original landing step for branching (not the reminder step)
                     original_landing = _db().query(WorkflowStep).filter(
                         WorkflowStep.workflow_id == p.workflow_id,
