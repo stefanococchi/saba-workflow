@@ -672,20 +672,31 @@ function exportXLSX() {
     var rows = _filteredRows || ALL_DATA;
     var cols = ALL_COLUMNS.filter(function(c) { return visibleColumns.indexOf(c.key) !== -1; });
     var header = cols.map(function(c) { return c.label; });
-    var data = [header];
 
+    var completed = [], expired = [], inProgress = [];
     rows.forEach(function(p) {
-        var row = cols.map(function(c) {
-            var val = getFieldValue(p, c.key) || '';
-            if (isFileObj(val)) return val.filename || '[file]';
-            return String(val);
-        });
-        data.push(row);
+        if (p.status === 'completed' && p.completion_type === 'expired') expired.push(p);
+        else if (p.status === 'completed') completed.push(p);
+        else inProgress.push(p);
     });
 
-    var ws = XLSX.utils.aoa_to_sheet(data);
+    function makeSheet(list) {
+        var data = [header];
+        list.forEach(function(p) {
+            var row = cols.map(function(c) {
+                var val = getFieldValue(p, c.key) || '';
+                if (isFileObj(val)) return val.filename || '[file]';
+                return String(val);
+            });
+            data.push(row);
+        });
+        return XLSX.utils.aoa_to_sheet(data);
+    }
+
     var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Dati Raccolti');
+    XLSX.utils.book_append_sheet(wb, makeSheet(completed), 'Completed');
+    XLSX.utils.book_append_sheet(wb, makeSheet(expired), 'Expired');
+    XLSX.utils.book_append_sheet(wb, makeSheet(inProgress), 'In Progress');
     XLSX.writeFile(wb, 'dati_raccolti_' + new Date().toISOString().slice(0, 10) + '.xlsx');
 }
 
