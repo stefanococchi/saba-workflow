@@ -801,7 +801,12 @@ def regenerate_token(participant_id):
         participant.token = token
         participant.status = ParticipantStatus.IN_PROGRESS
         participant.current_step_id = target_step_id
-        participant.collected_data = {}
+        # Preserve field keys with blank values for admin editing
+        if participant.collected_data and isinstance(participant.collected_data, dict):
+            participant.collected_data = {
+                k: '' for k, v in participant.collected_data.items()
+                if not isinstance(v, dict)
+            }
         participant.completed_at = None
         participant.completion_type = None
         participant.reactivated_at = datetime.utcnow()
@@ -977,7 +982,12 @@ def rollback_participant(participant_id):
             participant.status = ParticipantStatus.PENDING
             participant.current_step_id = None
             participant.last_interaction = None
-            participant.collected_data = {}
+            # Preserve field keys with blank values for admin editing
+            if participant.collected_data and isinstance(participant.collected_data, dict):
+                participant.collected_data = {
+                    k: '' for k, v in participant.collected_data.items()
+                    if not isinstance(v, dict)
+                }
             participant.completed_at = None
             db.commit()
 
@@ -1030,10 +1040,15 @@ def rollback_participant(participant_id):
                 expires_hours=_exp
             )
 
-            # Aggiorna partecipante — reset collected_data e stato pagamento
+            # Aggiorna partecipante
             participant.status = ParticipantStatus.IN_PROGRESS
             participant.current_step_id = target_step.id
-            participant.collected_data = {}
+            # Preserve field keys with blank values for admin editing
+            if participant.collected_data and isinstance(participant.collected_data, dict):
+                participant.collected_data = {
+                    k: '' for k, v in participant.collected_data.items()
+                    if not isinstance(v, dict)
+                }
             participant.completed_at = None
             db.commit()
 
