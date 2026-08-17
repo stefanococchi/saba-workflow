@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, session
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, UploadedImage, Attachment, User, UserRole, user_workflows
+from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, CompletionType, UploadedImage, Attachment, User, UserRole, user_workflows
 from app.api.auth import superuser_required
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload, subqueryload, aliased
@@ -512,7 +512,7 @@ def collected_data_api():
 
 @admin_bp.route('/api/collected-data/export-all')
 def export_all_collected_excel():
-    """Export all participants with collected data (same format as completed)"""
+    """Export participants with collected data split into 3 sheets: Completed, Expired, In Progress"""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.styles.numbers import FORMAT_TEXT
@@ -540,14 +540,29 @@ def export_all_collected_excel():
                             seen.add(name)
                             ordered_fields.append({'name': name, 'label': f.get('label', name)})
 
-        # Get ALL participants with collected data
+        # Get ALL participants
         rows = db.query(
             Participant.id, Participant.first_name, Participant.last_name,
-            Participant.email, Participant.phone, Participant.collected_data
+            Participant.email, Participant.phone, Participant.collected_data,
+            Participant.status, Participant.completion_type
         ).filter(
             Participant.workflow_id == workflow_id,
             Participant.collected_data.isnot(None)
         ).order_by(Participant.last_name, Participant.first_name).all()
+
+        # Split by status/completion_type
+        completed_rows = []
+        expired_rows = []
+        in_progress_rows = []
+        for r in rows:
+            status, ctype = r[6], r[7]
+            row_data = (r[0], r[1], r[2], r[3], r[4], r[5])
+            if status == ParticipantStatus.COMPLETED and ctype == CompletionType.EXPIRED:
+                expired_rows.append(row_data)
+            elif status == ParticipantStatus.COMPLETED:
+                completed_rows.append(row_data)
+            else:
+                in_progress_rows.append(row_data)
 
         # Latest substate per participant
         SUBSTATE_LABELS = {
@@ -588,7 +603,7 @@ def export_all_collected_excel():
         if not ordered_fields:
             all_keys = []
             keys_seen = set()
-            for _, _, _, _, cd in rows:
+            for _, _, _, _, _, cd, _, _ in rows:
                 if cd and isinstance(cd, dict):
                     for k in cd.keys():
                         if k not in keys_seen:
@@ -597,19 +612,10 @@ def export_all_collected_excel():
             ordered_fields = [{'name': k, 'label': k} for k in all_keys]
 
         wb = Workbook()
-        ws = wb.active
-        ws.title = 'Dati Raccolti'
-
         header_font = Font(bold=True, color='FFFFFF', size=11)
         header_fill = PatternFill(start_color='795548', end_color='795548', fill_type='solid')
         thin_border = Border(bottom=Side(style='thin', color='D7CCC8'))
-
         headers = ['Nome', 'Cognome', 'Email', 'Phone'] + [f['label'] for f in ordered_fields] + ['Sottostato', 'Data Sottostato']
-        for col, h in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=h)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = Alignment(horizontal='center')
 
         date_field_names = {'data_nascita', 'birth_date', 'data_di_nascita', 'date_of_birth'}
         phone_field_names = {'telefono', 'phone', 'cellulare', 'mobile', 'tel'}
@@ -621,39 +627,59 @@ def export_all_collected_excel():
             utc_dt = pytz.utc.localize(ts)
             return utc_dt.astimezone(local_tz).strftime('%d-%m-%Y %H:%M')
 
-        for row_idx, (pid, fn, ln, email, phone, cd) in enumerate(rows, 2):
-            ws.cell(row=row_idx, column=1, value=fn or '')
-            ws.cell(row=row_idx, column=2, value=ln or '')
-            ws.cell(row=row_idx, column=3, value=email or '')
-            phone_cell = ws.cell(row=row_idx, column=4, value=phone or '')
-            phone_cell.number_format = FORMAT_TEXT
+        def _write_sheet(ws, sheet_rows):
+            for col, h in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=h)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal='center')
 
-            cd = cd or {}
-            for col_offset, field in enumerate(ordered_fields):
-                val = cd.get(field['name'], '')
-                if field['name'].lower() in date_field_names and isinstance(val, str):
-                    m = date_re.match(val)
-                    if m:
-                        val = f'{m.group(3)}-{m.group(2)}-{m.group(1)}'
-                if isinstance(val, dict) and 'filename' in val:
-                    val = val.get('filename', '[file]')
-                cell = ws.cell(row=row_idx, column=5 + col_offset, value=str(val) if val else '')
-                if field['name'].lower() in phone_field_names:
-                    cell.number_format = FORMAT_TEXT
+            for row_idx, (pid, fn, ln, email, phone, cd) in enumerate(sheet_rows, 2):
+                ws.cell(row=row_idx, column=1, value=fn or '')
+                ws.cell(row=row_idx, column=2, value=ln or '')
+                ws.cell(row=row_idx, column=3, value=email or '')
+                phone_cell = ws.cell(row=row_idx, column=4, value=phone or '')
+                phone_cell.number_format = FORMAT_TEXT
 
-            substate_info = latest_substate.get(pid, ('', None))
-            ws.cell(row=row_idx, column=len(headers) - 1, value=substate_info[0])
-            ws.cell(row=row_idx, column=len(headers), value=_fmt_ts(substate_info[1]))
+                cd = cd or {}
+                for col_offset, field in enumerate(ordered_fields):
+                    val = cd.get(field['name'], '')
+                    if field['name'].lower() in date_field_names and isinstance(val, str):
+                        m = date_re.match(val)
+                        if m:
+                            val = f'{m.group(3)}-{m.group(2)}-{m.group(1)}'
+                    if isinstance(val, dict) and 'filename' in val:
+                        val = val.get('filename', '[file]')
+                    cell = ws.cell(row=row_idx, column=5 + col_offset, value=str(val) if val else '')
+                    if field['name'].lower() in phone_field_names:
+                        cell.number_format = FORMAT_TEXT
 
-            for c in range(1, len(headers) + 1):
-                ws.cell(row=row_idx, column=c).border = thin_border
+                substate_info = latest_substate.get(pid, ('', None))
+                ws.cell(row=row_idx, column=len(headers) - 1, value=substate_info[0])
+                ws.cell(row=row_idx, column=len(headers), value=_fmt_ts(substate_info[1]))
 
-        for col in ws.columns:
-            max_len = 0
-            for cell in col:
-                if cell.value:
-                    max_len = max(max_len, len(str(cell.value)))
-            ws.column_dimensions[col[0].column_letter].width = min(max_len + 3, 40)
+                for c in range(1, len(headers) + 1):
+                    ws.cell(row=row_idx, column=c).border = thin_border
+
+            for col in ws.columns:
+                max_len = 0
+                for cell in col:
+                    if cell.value:
+                        max_len = max(max_len, len(str(cell.value)))
+                ws.column_dimensions[col[0].column_letter].width = min(max_len + 3, 40)
+
+        # Sheet 1: Completed
+        ws_completed = wb.active
+        ws_completed.title = 'Completed'
+        _write_sheet(ws_completed, completed_rows)
+
+        # Sheet 2: Expired
+        ws_expired = wb.create_sheet('Expired')
+        _write_sheet(ws_expired, expired_rows)
+
+        # Sheet 3: In Progress
+        ws_progress = wb.create_sheet('In Progress')
+        _write_sheet(ws_progress, in_progress_rows)
 
         buffer = BytesIO()
         wb.save(buffer)
