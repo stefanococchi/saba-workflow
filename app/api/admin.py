@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload, selectinload, subqueryload, aliased
 from datetime import datetime
 import logging
 import uuid
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -1030,9 +1031,9 @@ def participant_full_data(pid):
         # Collect ordered landing field definitions from workflow steps
         landing_fields = []
         seen = set()
-        steps = db.query(WorkflowStep.landing_page_config, WorkflowStep.landing_gjs_data)\
+        steps = db.query(WorkflowStep.landing_page_config, WorkflowStep.landing_gjs_data, WorkflowStep.landing_html)\
             .filter_by(workflow_id=row.workflow_id)\
-            .order_by(WorkflowStep.step_order).all()
+            .order_by(WorkflowStep.order).all()
         for s in steps:
             for config in [s.landing_page_config, s.landing_gjs_data]:
                 if config and isinstance(config, dict):
@@ -1041,6 +1042,13 @@ def participant_full_data(pid):
                         if name and name not in seen:
                             seen.add(name)
                             landing_fields.append({'name': name, 'label': f.get('label', name), 'type': f.get('type', 'text')})
+            # Fallback: extract field names from landing HTML
+            if s.landing_html and not landing_fields:
+                for match in re.finditer(r'<(?:input|select|textarea)[^>]+name=["\']([^"\']+)["\']', s.landing_html):
+                    name = match.group(1)
+                    if name and name not in seen:
+                        seen.add(name)
+                        landing_fields.append({'name': name, 'label': name.replace('_', ' ').title(), 'type': 'text'})
 
         return jsonify({
             'collected_data': row.collected_data or {},
