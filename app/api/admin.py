@@ -1022,13 +1022,30 @@ def participant_full_data(pid):
     """Fetch full collected_data and sabaform_data for a single participant (on-demand)"""
     try:
         row = db.query(
-            Participant.collected_data, Participant.sabaform_data
+            Participant.collected_data, Participant.sabaform_data, Participant.workflow_id
         ).filter_by(id=pid).first()
         if not row:
             return jsonify({'error': 'Not found'}), 404
+
+        # Collect ordered landing field definitions from workflow steps
+        landing_fields = []
+        seen = set()
+        steps = db.query(WorkflowStep.landing_page_config, WorkflowStep.landing_gjs_data)\
+            .filter_by(workflow_id=row.workflow_id)\
+            .order_by(WorkflowStep.step_order).all()
+        for s in steps:
+            for config in [s.landing_page_config, s.landing_gjs_data]:
+                if config and isinstance(config, dict):
+                    for f in config.get('fields', []):
+                        name = f.get('name', '')
+                        if name and name not in seen:
+                            seen.add(name)
+                            landing_fields.append({'name': name, 'label': f.get('label', name), 'type': f.get('type', 'text')})
+
         return jsonify({
             'collected_data': row.collected_data or {},
             'sabaform_data': row.sabaform_data or {},
+            'landing_fields': landing_fields,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

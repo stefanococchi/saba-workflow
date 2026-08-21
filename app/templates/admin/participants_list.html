@@ -1059,6 +1059,8 @@ function regenerateExpiredLinks() {
 var _editSfLabels = SF_LABELS;
 
 var _editCollectedDataOriginal = {};
+var _editLandingFields = [];
+var _editCdReset = false;
 
 function addCollectedField() {
     // Get existing keys already in the form
@@ -1119,6 +1121,30 @@ function _insertCollectedField(key) {
     row.appendChild(div);
 }
 
+function resetCollectedFields() {
+    if (!_editLandingFields.length) return;
+    if (!confirm('Rimuovere tutti i campi extra e mantenere solo quelli del template?')) return;
+    _editCdReset = true;
+    // Rebuild only landing config fields, preserving values where keys match
+    var row = document.querySelector('.edit-cd-field') ? document.querySelector('.edit-cd-field').closest('.row') : document.getElementById('cdFieldsRow');
+    if (!row) return;
+    row.innerHTML = '';
+    var cd = _editCollectedDataOriginal || {};
+    _editLandingFields.forEach(function(f) {
+        if (f.type === 'file') return;
+        var val = cd[f.name];
+        if (val && typeof val === 'object' && val.filename) return;
+        var div = document.createElement('div');
+        div.className = 'col-md-6 mb-3';
+        div.innerHTML = '<label class="form-label">' + esc(f.label || f.name) + '</label>' +
+            '<input type="text" class="form-control form-control-sm edit-cd-field" data-cd-key="' + esc(f.name) + '" value="' + esc(String(val !== null && val !== undefined ? val : '')) + '">';
+        row.appendChild(div);
+    });
+    // Hide the reset button after use
+    var btn = document.getElementById('btnResetCd');
+    if (btn) btn.style.display = 'none';
+}
+
 function buildEditForm(p) {
     var html = '<input type="hidden" id="editId" value="' + p.id + '">';
     html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-person"></i> ' + T.participant_data + '</h6>';
@@ -1148,25 +1174,45 @@ function buildEditForm(p) {
     }
 
     // Collected data (editable text fields, skip file objects)
-    var cd = p.collected_data;
-    if (cd && Object.keys(cd).length > 0) {
-        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-collection"></i> ' + (T.collected_data_section || 'Dati raccolti') + '</h6>';
-        html += '<div class="row">';
-        for (var k in cd) {
-            var val = cd[k];
-            if (val && typeof val === 'object' && val.filename) continue; // skip file objects
-            html += '<div class="col-md-6 mb-3"><label class="form-label">' + esc(k) + '</label>';
-            html += '<input type="text" class="form-control form-control-sm edit-cd-field" data-cd-key="' + esc(k) + '" value="' + esc(String(val !== null && val !== undefined ? val : '')) + '"></div>';
-        }
-        html += '</div>';
-        html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="addCollectedField()"><i class="bi bi-plus-lg"></i> Aggiungi campo</button>';
-    } else {
-        html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
-        html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-collection"></i> ' + (T.collected_data_section || 'Dati raccolti') + '</h6>';
-        html += '<div id="cdFieldsRow" class="row"></div>';
-        html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="addCollectedField()"><i class="bi bi-plus-lg"></i> Aggiungi campo</button>';
+    // Merge landing_fields (from step config) with existing collected_data
+    var cd = p.collected_data || {};
+    var lf = p._landing_fields || [];
+    _editLandingFields = lf;
+    _editCdReset = false;
+    var renderedKeys = {};
+    var hasExtraKeys = false;
+
+    html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+    html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-collection"></i> ' + (T.collected_data_section || 'Dati raccolti') + '</h6>';
+    html += '<div class="row"' + ((!Object.keys(cd).length && !lf.length) ? ' id="cdFieldsRow"' : '') + '>';
+
+    // First render fields in landing config order (with labels)
+    lf.forEach(function(f) {
+        if (f.type === 'file') return; // skip file fields
+        var val = cd[f.name];
+        if (val && typeof val === 'object' && val.filename) return;
+        renderedKeys[f.name] = true;
+        html += '<div class="col-md-6 mb-3"><label class="form-label">' + esc(f.label || f.name) + '</label>';
+        html += '<input type="text" class="form-control form-control-sm edit-cd-field" data-cd-key="' + esc(f.name) + '" value="' + esc(String(val !== null && val !== undefined ? val : '')) + '"></div>';
+    });
+
+    // Then render any extra collected_data keys not in landing config
+    for (var k in cd) {
+        if (renderedKeys[k]) continue;
+        var val = cd[k];
+        if (val && typeof val === 'object' && val.filename) continue;
+        hasExtraKeys = true;
+        html += '<div class="col-md-6 mb-3"><label class="form-label">' + esc(k) + '</label>';
+        html += '<input type="text" class="form-control form-control-sm edit-cd-field" data-cd-key="' + esc(k) + '" value="' + esc(String(val !== null && val !== undefined ? val : '')) + '"></div>';
     }
+
+    html += '</div>';
+    html += '<div class="d-flex gap-2 mt-1">';
+    html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="addCollectedField()"><i class="bi bi-plus-lg"></i> Aggiungi campo</button>';
+    if (hasExtraKeys && lf.length) {
+        html += '<button type="button" class="btn btn-sm btn-outline-warning" id="btnResetCd" onclick="resetCollectedFields()"><i class="bi bi-arrow-repeat"></i> Ripopola da template</button>';
+    }
+    html += '</div>';
     return html;
 }
 
@@ -1182,7 +1228,7 @@ function editParticipant(id) {
     .then(function(r) { return r.json(); })
     .then(function(full) {
         _editCollectedDataOriginal = full.collected_data || {};
-        var editP = Object.assign({}, p, { sabaform_data: full.sabaform_data, collected_data: full.collected_data });
+        var editP = Object.assign({}, p, { sabaform_data: full.sabaform_data, collected_data: full.collected_data, _landing_fields: full.landing_fields || [] });
         editBody.innerHTML = buildEditForm(editP);
     })
     .catch(function() { editBody.innerHTML = '<p class="text-danger">Errore caricamento dati</p>'; });
@@ -1210,9 +1256,19 @@ function saveParticipant() {
 
     // Raccogli campi collected_data
     var cdFields = document.querySelectorAll('.edit-cd-field');
-    if (cdFields.length > 0) {
-        // Start with existing collected_data to preserve file objects
-        var cdData = Object.assign({}, _editCollectedDataOriginal || {});
+    if (cdFields.length > 0 || _editCdReset) {
+        // If reset was used, start fresh (only keep file objects); otherwise preserve all original keys
+        var cdData = {};
+        var orig = _editCollectedDataOriginal || {};
+        if (_editCdReset) {
+            // Preserve only file objects from original
+            for (var ok in orig) {
+                var ov = orig[ok];
+                if (ov && typeof ov === 'object' && ov.filename) cdData[ok] = ov;
+            }
+        } else {
+            cdData = Object.assign({}, orig);
+        }
         cdFields.forEach(function(el) {
             var key = el.dataset.cdKey;
             if (key) cdData[key] = el.value;
