@@ -1213,10 +1213,70 @@ function buildEditForm(p) {
         html += '<button type="button" class="btn btn-sm btn-outline-warning" id="btnResetCd" onclick="resetCollectedFields()"><i class="bi bi-arrow-repeat"></i> Ripopola da template</button>';
     }
     html += '</div>';
+
+    // File attachments section
+    var fileKeys = [];
+    for (var k in cd) {
+        var v = cd[k];
+        if (v && typeof v === 'object' && v.filename) fileKeys.push(k);
+    }
+
+    html += '<hr style="border-color:var(--md-outline-variant);margin:16px 0">';
+    html += '<h6 style="color:var(--md-primary);margin-bottom:12px"><i class="bi bi-file-earmark-image"></i> File allegati</h6>';
+
+    if (fileKeys.length) {
+        html += '<div class="d-flex flex-wrap gap-2 mb-3">';
+        fileKeys.forEach(function(k) {
+            var f = cd[k];
+            var isImg = (f.mime || '').startsWith('image/');
+            html += '<div class="d-flex align-items-center gap-2 px-3 py-2 rounded" style="background:#f5f0e8;font-size:13px">';
+            html += '<i class="bi bi-file-earmark-' + (isImg ? 'image' : 'pdf') + '"></i>';
+            html += '<strong>' + esc(k) + ':</strong> ' + esc(f.filename);
+            html += ' <small class="text-muted">(' + Math.round((f.size || 0) / 1024) + 'KB)</small>';
+            html += '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 ms-1" onclick="removeFileField(\'' + esc(k) + '\')" title="Rimuovi"><i class="bi bi-x"></i></button>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+
+    html += '<div id="fileUploadRows"></div>';
+    html += '<button type="button" class="btn btn-sm btn-outline-primary" onclick="addFileUpload()"><i class="bi bi-upload"></i> Upload file</button>';
+
     return html;
 }
 
+var _editRemovedFiles = [];
+var _editFileCounter = 0;
+
+function addFileUpload() {
+    _editFileCounter++;
+    var row = document.createElement('div');
+    row.className = 'd-flex gap-2 align-items-center mb-2';
+    row.id = 'fileRow_' + _editFileCounter;
+    row.innerHTML =
+        '<input type="text" class="form-control form-control-sm" placeholder="Field name (e.g. passport)" style="max-width:180px" id="fileName_' + _editFileCounter + '">' +
+        '<input type="file" class="form-control form-control-sm file-upload-input" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" data-idx="' + _editFileCounter + '">' +
+        '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="document.getElementById(\'fileRow_' + _editFileCounter + '\').remove()"><i class="bi bi-x"></i></button>';
+    document.getElementById('fileUploadRows').appendChild(row);
+}
+
+function removeFileField(key) {
+    _editRemovedFiles.push(key);
+    event.target.closest('.d-flex').remove();
+}
+
+function readFileB64(file) {
+    return new Promise(function(resolve, reject) {
+        var r = new FileReader();
+        r.onload = function() { resolve(r.result); };
+        r.onerror = reject;
+        r.readAsDataURL(file);
+    });
+}
+
 function editParticipant(id) {
+    _editRemovedFiles = [];
+    _editFileCounter = 0;
     var p = ALL_PARTICIPANTS.find(function(x) { return x.id === id; });
     if (!p) return;
     var editBody = document.getElementById('editModalBody');
@@ -1234,7 +1294,7 @@ function editParticipant(id) {
     .catch(function() { editBody.innerHTML = '<p class="text-danger">Errore caricamento dati</p>'; });
 }
 
-function saveParticipant() {
+async function saveParticipant() {
     var id = document.getElementById('editId').value;
     var data = {
         first_name: document.getElementById('editFirstName').value,
@@ -1256,12 +1316,12 @@ function saveParticipant() {
 
     // Raccogli campi collected_data
     var cdFields = document.querySelectorAll('.edit-cd-field');
-    if (cdFields.length > 0 || _editCdReset) {
-        // If reset was used, start fresh (only keep file objects); otherwise preserve all original keys
+    var hasFileChanges = _editRemovedFiles.length > 0 || document.querySelectorAll('.file-upload-input').length > 0;
+
+    if (cdFields.length > 0 || _editCdReset || hasFileChanges) {
         var cdData = {};
         var orig = _editCollectedDataOriginal || {};
         if (_editCdReset) {
-            // Preserve only file objects from original
             for (var ok in orig) {
                 var ov = orig[ok];
                 if (ov && typeof ov === 'object' && ov.filename) cdData[ok] = ov;
@@ -1273,6 +1333,28 @@ function saveParticipant() {
             var key = el.dataset.cdKey;
             if (key) cdData[key] = el.value;
         });
+
+        // Remove deleted files
+        _editRemovedFiles.forEach(function(k) { delete cdData[k]; });
+
+        // Process new file uploads
+        var fileInputs = document.querySelectorAll('.file-upload-input');
+        for (var i = 0; i < fileInputs.length; i++) {
+            var inp = fileInputs[i];
+            var file = inp.files[0];
+            if (!file) continue;
+            var nameInput = document.getElementById('fileName_' + inp.dataset.idx);
+            var fieldName = (nameInput ? nameInput.value.trim() : '') || file.name.replace(/\.[^.]+$/, '');
+            if (!fieldName) continue;
+            var b64 = await readFileB64(file);
+            cdData[fieldName] = {
+                filename: file.name,
+                mime: file.type,
+                size: file.size,
+                data: b64
+            };
+        }
+
         data.collected_data = cdData;
     }
 
