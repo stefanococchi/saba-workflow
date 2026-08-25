@@ -1250,11 +1250,37 @@ var _editFileCounter = 0;
 
 function addFileUpload() {
     _editFileCounter++;
+    // Get file-type fields from landing config, excluding already-uploaded ones
+    var cd = _editCollectedDataOriginal || {};
+    var fileFields = (_editLandingFields || []).filter(function(f) {
+        return f.type === 'file';
+    });
+    // Also exclude fields already removed or already present (unless removed)
+    var existingFileKeys = [];
+    for (var k in cd) {
+        if (cd[k] && typeof cd[k] === 'object' && cd[k].filename && _editRemovedFiles.indexOf(k) === -1) {
+            existingFileKeys.push(k);
+        }
+    }
+
     var row = document.createElement('div');
     row.className = 'd-flex gap-2 align-items-center mb-2';
     row.id = 'fileRow_' + _editFileCounter;
-    row.innerHTML =
-        '<input type="text" class="form-control form-control-sm" placeholder="Field name (e.g. passport)" style="max-width:180px" id="fileName_' + _editFileCounter + '">' +
+
+    var nameHtml;
+    if (fileFields.length > 0) {
+        // Show dropdown with available file field names
+        var availableFields = fileFields.filter(function(f) { return existingFileKeys.indexOf(f.name) === -1; });
+        nameHtml = '<select class="form-select form-select-sm" style="max-width:200px" id="fileName_' + _editFileCounter + '">';
+        availableFields.forEach(function(f) {
+            nameHtml += '<option value="' + esc(f.name) + '">' + esc(f.label || f.name) + '</option>';
+        });
+        nameHtml += '</select>';
+    } else {
+        nameHtml = '<input type="text" class="form-control form-control-sm" placeholder="Field name" style="max-width:200px" id="fileName_' + _editFileCounter + '">';
+    }
+
+    row.innerHTML = nameHtml +
         '<input type="file" class="form-control form-control-sm file-upload-input" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" data-idx="' + _editFileCounter + '">' +
         '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="document.getElementById(\'fileRow_' + _editFileCounter + '\').remove()"><i class="bi bi-x"></i></button>';
     document.getElementById('fileUploadRows').appendChild(row);
