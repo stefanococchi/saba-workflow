@@ -605,6 +605,19 @@ def document_view(shared_file_id, field_name):
     if not isinstance(file_data, dict) or 'data' not in file_data:
         return render_template('tracking/not_found.html'), 404
 
+    # Audit log
+    audit = UserAuditLog(
+        user_id=g.user.id,
+        user_email=g.user.email or g.user.username,
+        action='VIEW',
+        entity='SharedFile',
+        entity_id=sf.id,
+        detail=f'Viewed "{file_data.get("filename", "")}" (participant #{p.id})',
+        ip_address=request.remote_addr,
+    )
+    db.add(audit)
+    db.commit()
+
     raw = file_data['data']
     if ',' in raw:
         raw = raw.split(',', 1)[1]
