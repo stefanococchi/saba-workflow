@@ -4,7 +4,7 @@ from functools import wraps
 from itsdangerous import URLSafeTimedSerializer
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, g, current_app, get_flashed_messages
 from app import db_session as db
-from app.models import User, UserRole
+from app.models import User, UserRole, user_document_workflows
 import logging
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,17 @@ def superuser_required(f):
             return redirect(url_for('admin.dashboard'))
         return f(*args, **kwargs)
     return decorated
+
+
+def _client_landing_url(user):
+    """Decide where to redirect a client after login:
+    - /tracking/documents if they only have document workflows
+    - /tracking/ otherwise (has tracking workflows or both)"""
+    has_tracking = bool(user.workflows)
+    has_documents = bool(user.document_workflows)
+    if has_documents and not has_tracking:
+        return url_for('tracking.documents_list')
+    return url_for('tracking.index')
 
 
 def client_login_required(f):
@@ -185,7 +196,7 @@ def microsoft_callback():
         pass
 
     if user.role == UserRole.CLIENT:
-        return redirect(url_for('tracking.index'))
+        return redirect(_client_landing_url(user))
     return redirect(next_url or url_for('admin.dashboard'))
 
 
@@ -195,6 +206,9 @@ def microsoft_callback():
 def login():
     if session.get('user_id'):
         if session.get('role') == 'client':
+            user = get_current_user()
+            if user:
+                return redirect(_client_landing_url(user))
             return redirect(url_for('tracking.index'))
         return redirect(url_for('admin.dashboard'))
 
@@ -218,7 +232,7 @@ def login():
             except Exception:
                 pass
             if user.role == UserRole.CLIENT:
-                return redirect(url_for('tracking.index'))
+                return redirect(_client_landing_url(user))
             return redirect(url_for('admin.dashboard'))
 
         flash('Invalid username or password', 'danger')
