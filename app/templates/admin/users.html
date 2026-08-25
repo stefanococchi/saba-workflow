@@ -21,6 +21,7 @@
                         <th>{{ t.email }}</th>
                         <th>{{ t.role }}</th>
                         <th>{{ t.assigned_workflows }}</th>
+                        <th>Documents</th>
                         <th>{{ t.created }}</th>
                         <th>{{ t.actions }}</th>
                     </tr>
@@ -85,11 +86,41 @@
                             </div>
                             {% endif %}
                         </td>
+                        <td>
+                            {% if role == 'superuser' %}
+                            <small class="text-muted">All</small>
+                            {% else %}
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for wf in user.document_workflows %}
+                                <span class="badge" style="font-size:11px;background:#6d4c41;color:#fff">{{ wf.name }}
+                                    <a href="#" onclick="toggleDocWorkflow({{ user.id }}, {{ wf.id }}, this);return false;"
+                                       style="color:#fff;text-decoration:none;margin-left:4px" title="Remove">&times;</a>
+                                </span>
+                                {% endfor %}
+                                <div class="dropdown d-inline">
+                                    <button class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:11px"
+                                            data-bs-toggle="dropdown" title="Assign document workflow">
+                                        <i class="bi bi-plus"></i>
+                                    </button>
+                                    <ul class="dropdown-menu" style="font-size:13px">
+                                        {% set doc_assigned_ids = user.document_workflows | map(attribute='id') | list %}
+                                        {% for wf in workflows %}
+                                        {% if wf.id not in doc_assigned_ids %}
+                                        <li>
+                                            <a class="dropdown-item" href="#"
+                                               onclick="toggleDocWorkflow({{ user.id }}, {{ wf.id }}, this);return false;">
+                                                {{ wf.name }}
+                                            </a>
+                                        </li>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </td>
                         <td><small>{{ user.created_at|localtime }}</small></td>
                         <td>
-                            <a href="{{ url_for('admin.user_documents', user_id=user.id) }}" class="btn btn-outline-primary btn-sm" title="Documents">
-                                <i class="bi bi-file-earmark-lock"></i>
-                            </a>
                             {% if user.id != session.get('user_id') %}
                             <form method="POST" action="{{ url_for('admin.user_delete', user_id=user.id) }}"
                                   onsubmit="return confirm('{{ t.confirm_delete_user }} {{ user.username }}?')" style="display:inline">
@@ -175,6 +206,16 @@ function toggleRole(userId, el) {
 
 function toggleWorkflow(userId, workflowId, el) {
     fetch('/admin/users/' + userId + '/toggle-workflow/' + workflowId, { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { alert(data.error); return; }
+            location.reload();
+        })
+        .catch(function() { alert('Error'); });
+}
+
+function toggleDocWorkflow(userId, workflowId, el) {
+    fetch('/admin/users/' + userId + '/toggle-doc-workflow/' + workflowId, { method: 'POST' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.error) { alert(data.error); return; }

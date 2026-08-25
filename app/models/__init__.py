@@ -331,9 +331,17 @@ class Attachment(Base):
         return f'<Attachment {self.id}: {self.filename}>'
 
 
-# Association table for User <-> Workflow
+# Association table for User <-> Workflow (tracking access)
 user_workflows = Table(
     'user_workflows',
+    Base.metadata,
+    Column('user_id', Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    Column('workflow_id', Integer, ForeignKey('workflows.id', ondelete='CASCADE'), primary_key=True),
+)
+
+# Association table for User <-> Workflow (documents access, separate from tracking)
+user_document_workflows = Table(
+    'user_document_workflows',
     Base.metadata,
     Column('user_id', Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
     Column('workflow_id', Integer, ForeignKey('workflows.id', ondelete='CASCADE'), primary_key=True),
@@ -358,6 +366,7 @@ class User(Base):
     ms_refresh_token = Column(Text, nullable=True)
 
     workflows = relationship('Workflow', secondary=user_workflows, backref='users')
+    document_workflows = relationship('Workflow', secondary=user_document_workflows)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

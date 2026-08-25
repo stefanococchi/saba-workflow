@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, session
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, CompletionType, UploadedImage, Attachment, User, UserRole, user_workflows, ClientDocument, SharedFile
+from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, CompletionType, UploadedImage, Attachment, User, UserRole, user_workflows, user_document_workflows, ClientDocument, SharedFile
 from app.api.auth import superuser_required
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload, subqueryload, aliased
@@ -2189,6 +2189,31 @@ def toggle_user_workflow(user_id, workflow_id):
             assigned = False
         else:
             user.workflows.append(workflow)
+            assigned = True
+
+        db.commit()
+        return jsonify({'assigned': assigned}), 200
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/users/<int:user_id>/toggle-doc-workflow/<int:workflow_id>', methods=['POST'])
+@superuser_required
+def toggle_user_doc_workflow(user_id, workflow_id):
+    """Assign/remove document workflow from user"""
+    try:
+        user = db.get(User, user_id)
+        workflow = db.get(Workflow, workflow_id)
+        if not user or not workflow:
+            return jsonify({'error': 'Not found'}), 404
+
+        if workflow in user.document_workflows:
+            user.document_workflows.remove(workflow)
+            assigned = False
+        else:
+            user.document_workflows.append(workflow)
             assigned = True
 
         db.commit()

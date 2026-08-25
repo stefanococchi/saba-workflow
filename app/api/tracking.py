@@ -450,11 +450,19 @@ def api_resolve_participant(participant_id):
 
 # ── Client Documents ──────────────────────────────────────────────
 
+def _get_user_document_workflows():
+    """Return document workflows accessible to the current user."""
+    user = g.user
+    if user.role == UserRole.SUPERUSER or user.is_superuser:
+        return db.query(Workflow).order_by(Workflow.name).all()
+    return list(user.document_workflows)
+
+
 @tracking_bp.route('/documents')
 def documents_list():
     """Lista dati e file condivisi per il client loggato."""
     from datetime import datetime
-    workflows = _get_user_workflows()
+    workflows = _get_user_document_workflows()
     wf_ids = [w.id for w in workflows]
 
     if not wf_ids:
@@ -537,9 +545,9 @@ def document_download(shared_file_id, field_name):
     if not sf or not sf.visible:
         return render_template('tracking/not_found.html'), 404
 
-    # Check access
-    workflows = _get_user_workflows()
-    if not any(w.id == sf.workflow_id for w in workflows):
+    # Check access via document workflows
+    doc_workflows = _get_user_document_workflows()
+    if not any(w.id == sf.workflow_id for w in doc_workflows):
         return render_template('tracking/not_found.html'), 404
 
     p = sf.participant
