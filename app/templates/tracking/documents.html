@@ -79,9 +79,9 @@
 <div class="d-flex justify-content-between align-items-center" style="margin-bottom:20px">
     <h4 style="font-weight:700;margin:0"><i class="bi bi-file-earmark-lock"></i> Your Documents</h4>
     {% if workflow_data %}
-    <a href="{{ url_for('tracking.documents_download_all') }}" class="file-btn file-btn-download">
-        <i class="bi bi-file-earmark-zip"></i> Download All (ZIP)
-    </a>
+    <button class="file-btn file-btn-download" id="downloadZipBtn" onclick="downloadAllZip()">
+        <i class="bi bi-file-earmark-zip"></i> <span id="zipBtnText">Download All (ZIP)</span>
+    </button>
     {% endif %}
 </div>
 
@@ -151,7 +151,62 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
+// ZIP download with counter
+var _allFiles = [
+{% if workflow_data %}
+{% for wd in workflow_data %}
+{% for p in wd.participants %}
+{% for f in p.files %}
+{
+    url: '{{ url_for("tracking.document_view", shared_file_id=p.shared_file_id, field_name=f.field_name) }}',
+    path: '{{ p.name|replace("'", "") }}/{{ f.filename|replace("'", "") }}',
+    filename: '{{ f.filename|replace("'", "") }}'
+},
+{% endfor %}
+{% endfor %}
+{% endfor %}
+{% endif %}
+];
+
+async function downloadAllZip() {
+    var btn = document.getElementById('downloadZipBtn');
+    var txt = document.getElementById('zipBtnText');
+    if (btn.disabled) return;
+    btn.disabled = true;
+
+    var total = _allFiles.length;
+    if (!total) { btn.disabled = false; return; }
+
+    var zip = new JSZip();
+    for (var i = 0; i < total; i++) {
+        txt.textContent = (i + 1) + ' / ' + total;
+        try {
+            var r = await fetch(_allFiles[i].url);
+            var blob = await r.blob();
+            zip.file(_allFiles[i].path, blob);
+        } catch(e) {
+            console.error('Failed to fetch', _allFiles[i].url, e);
+        }
+    }
+
+    txt.textContent = 'Creating ZIP...';
+    var content = await zip.generateAsync({type: 'blob'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    var d = new Date();
+    a.download = 'documents_' + d.toISOString().slice(0,10) + '.zip';
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    txt.innerHTML = '<i class="bi bi-check-lg"></i> Done!';
+    setTimeout(function() {
+        txt.innerHTML = 'Download All (ZIP)';
+        btn.disabled = false;
+    }, 2000);
+}
+
 function openViewer(url, filename) {
     var viewer = document.getElementById('docViewer');
     document.getElementById('docViewerImg').src = url;
