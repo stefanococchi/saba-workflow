@@ -11,47 +11,47 @@
 
 <h4 style="font-weight:700;margin-bottom:20px"><i class="bi bi-file-earmark-lock"></i> Your Documents</h4>
 
-{% if files_by_workflow %}
-    {% for wf_name, files in files_by_workflow.items() %}
-    <div class="tk-card" style="margin-bottom:20px">
+{% if workflow_data %}
+    {% for wd in workflow_data %}
+    <div class="tk-card" style="margin-bottom:24px">
         <div class="tk-card-title" style="margin-bottom:16px">
-            <i class="bi bi-diagram-3"></i> {{ wf_name }}
-            <span class="tk-badge tk-badge-completed" style="margin-left:8px">{{ files|length }} file</span>
+            <i class="bi bi-diagram-3"></i> {{ wd.workflow_name }}
+            <span class="tk-badge tk-badge-completed" style="margin-left:8px">{{ wd.participants|length }} participants</span>
         </div>
 
-        <div class="row g-3">
-            {% for f in files %}
-            <div class="col-md-6 col-lg-4">
-                <div style="background:#faf6ee;border-radius:10px;padding:16px;border:1px solid var(--tk-outline)">
-                    <div class="d-flex align-items-start gap-3">
-                        <div style="font-size:1.8rem;color:var(--tk-primary);flex-shrink:0">
-                            {% if 'pdf' in f.mime %}
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            {% elif 'image' in f.mime %}
-                                <i class="bi bi-file-earmark-image"></i>
-                            {% else %}
-                                <i class="bi bi-file-earmark"></i>
-                            {% endif %}
-                        </div>
-                        <div style="flex:1;min-width:0">
-                            <div style="font-weight:700;font-size:13px;word-break:break-word">{{ f.filename }}</div>
-                            <div style="font-size:11px;color:var(--tk-on-surface-variant);margin-top:2px">
-                                {{ f.participant_name }} &middot; {{ f.field_name }}
-                            </div>
-                            <div style="font-size:11px;color:#999;margin-top:4px">
-                                {{ "%.1f"|format(f.size / 1024) }} KB
-                            </div>
-                            <a href="{{ url_for('tracking.document_download', shared_file_id=f.shared_file_id) }}"
-                               class="btn btn-sm mt-2"
-                               style="background:var(--tk-primary);color:#fff;border-radius:20px;padding:4px 16px;font-size:12px;font-weight:600">
-                                <i class="bi bi-download"></i> Download
-                            </a>
-                        </div>
-                    </div>
+        {% for p in wd.participants %}
+        <div style="background:#faf6ee;border-radius:10px;padding:16px;border:1px solid var(--tk-outline);margin-bottom:12px">
+            <div style="font-weight:700;font-size:14px;margin-bottom:8px">{{ p.name }}</div>
+
+            {% if wd.data_fields and p.data %}
+            <div class="d-flex flex-wrap gap-3 mb-3" style="font-size:12px">
+                {% for field in wd.data_fields %}
+                {% if p.data.get(field) %}
+                <div>
+                    <span style="color:var(--tk-on-surface-variant);text-transform:uppercase;font-size:10px;font-weight:600;letter-spacing:0.5px">{{ field }}</span>
+                    <br>
+                    <strong>{{ p.data[field] }}</strong>
                 </div>
+                {% endif %}
+                {% endfor %}
             </div>
-            {% endfor %}
+            {% endif %}
+
+            {% if p.files %}
+            <div class="d-flex flex-wrap gap-2">
+                {% for f in p.files %}
+                <a href="{{ url_for('tracking.document_download', shared_file_id=p.shared_file_id, field_name=f.field_name) }}"
+                   class="btn btn-sm d-flex align-items-center gap-1"
+                   style="background:var(--tk-primary);color:#fff;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;text-decoration:none">
+                    <i class="bi bi-download"></i>
+                    {{ f.filename }}
+                    <small style="opacity:0.7">({{ "%.0f"|format(f.size / 1024) }}KB)</small>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
+        {% endfor %}
     </div>
     {% endfor %}
 {% else %}

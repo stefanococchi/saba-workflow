@@ -107,6 +107,9 @@ class Workflow(Base):
     ao_agent_id = Column(String(255), nullable=True)
     ao_agent_name = Column(String(255), nullable=True)
 
+    # Shared files: quali campi dati rendere visibili ai client
+    shared_data_fields = Column(JSON, nullable=True)  # ["nome", "cognome", "data_nascita", ...]
+
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -518,18 +521,16 @@ class ClientDocument(Base):
 
 
 class SharedFile(Base):
-    """Toggle di visibilità per file raccolti via landing page.
-    L'admin accende/spegne quali file dal collected_data rendere
-    visibili ai client assegnati al workflow."""
+    """Toggle di visibilità per-partecipante: l'admin accende/spegne
+    l'intero set di file di un partecipante per i client."""
     __tablename__ = 'shared_files'
     __table_args__ = (
-        Index('uq_shared_file', 'participant_id', 'field_name', unique=True),
+        Index('uq_shared_participant', 'workflow_id', 'participant_id', unique=True),
     )
 
     id = Column(Integer, primary_key=True)
     workflow_id = Column(Integer, ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False, index=True)
     participant_id = Column(Integer, ForeignKey('participants.id', ondelete='CASCADE'), nullable=False)
-    field_name = Column(String(255), nullable=False)
     visible = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -537,4 +538,4 @@ class SharedFile(Base):
     workflow = relationship('Workflow')
 
     def __repr__(self):
-        return f'<SharedFile {self.id}: p={self.participant_id} field={self.field_name} visible={self.visible}>'
+        return f'<SharedFile {self.id}: p={self.participant_id} visible={self.visible}>'

@@ -452,62 +452,101 @@ def api_resolve_participant(participant_id):
 
 @tracking_bp.route('/documents')
 def documents_list():
-    """Lista file condivisi per il client loggato (da collected_data dei workflow assegnati)."""
-    user_workflows = _get_user_workflows()
-    wf_ids = [w.id for w in user_workflows]
+    """Lista dati e file condivisi per il client loggato."""
+    from datetime import datetime
+    workflows = _get_user_workflows()
+    wf_ids = [w.id for w in workflows]
 
     if not wf_ids:
-        return render_template('tracking/documents.html', files_by_workflow={}, user=g.user)
+        return render_template('tracking/documents.html', workflow_data=[], user=g.user)
 
-    # Get visible shared files for user's workflows
+    # Get visible shared participants for user's workflows
     shared = (
         db.query(SharedFile)
         .filter(SharedFile.workflow_id.in_(wf_ids), SharedFile.visible == True)
         .all()
     )
 
-    # Group by workflow and resolve file metadata from collected_data
-    files_by_workflow = {}
+    # Group by workflow
+    wf_map = {w.id: w for w in workflows}
+    workflow_data = []
+
+    # Collect per workflow
+    by_wf = {}
     for sf in shared:
-        p = sf.participant
-        if not p or not p.collected_data:
+        by_wf.setdefault(sf.workflow_id, []).append(sf)
+
+    for wf_id, sfs in by_wf.items():
+        wf = wf_map.get(wf_id)
+        if not wf:
             continue
-        file_data = p.collected_data.get(sf.field_name)
-        if not isinstance(file_data, dict) or 'filename' not in file_data:
-            continue
+        data_fields = wf.shared_data_fields or []
 
-        wf_name = sf.workflow.name if sf.workflow else f'Workflow #{sf.workflow_id}'
-        files_by_workflow.setdefault(wf_name, []).append({
-            'shared_file_id': sf.id,
-            'participant_name': p.full_name or p.email or f'#{p.id}',
-            'field_name': sf.field_name,
-            'filename': file_data.get('filename', ''),
-            'mime': file_data.get('mime', ''),
-            'size': file_data.get('size', 0),
-        })
+        participants = []
+        for sf in sfs:
+            p = sf.participant
+            if not p or not p.collected_data:
+                continue
+            cd = p.collected_data
 
-    return render_template('tracking/documents.html', files_by_workflow=files_by_workflow, user=g.user)
+            # Extract selected data fields
+            row_data = {}
+            for f in data_fields:
+                val = cd.get(f, '')
+                if isinstance(val, dict):
+                    continue  # skip file dicts
+                row_data[f] = val
+
+            # Extract files
+            files = []
+            for key, val in cd.items():
+                if key.startswith('_'):
+                    continue
+                if isinstance(val, dict) and 'filename' in val and 'data' in val:
+                    files.append({
+                        'field_name': key,
+                        'filename': val.get('filename', ''),
+                        'mime': val.get('mime', ''),
+                        'size': val.get('size', 0),
+                    })
+
+            if row_data or files:
+                participants.append({
+                    'shared_file_id': sf.id,
+                    'participant_id': p.id,
+                    'name': p.full_name or p.email or f'#{p.id}',
+                    'data': row_data,
+                    'files': files,
+                })
+
+        if participants:
+            workflow_data.append({
+                'workflow_name': wf.name,
+                'data_fields': data_fields,
+                'participants': participants,
+            })
+
+    return render_template('tracking/documents.html', workflow_data=workflow_data, user=g.user)
 
 
-@tracking_bp.route('/documents/<int:shared_file_id>/download')
-def document_download(shared_file_id):
-    """Download file condiviso con audit log."""
+@tracking_bp.route('/documents/<int:shared_file_id>/<field_name>/download')
+def document_download(shared_file_id, field_name):
+    """Download singolo file con audit log."""
     import base64
     sf = db.get(SharedFile, shared_file_id)
     if not sf or not sf.visible:
         return render_template('tracking/not_found.html'), 404
 
-    # Check access: workflow must be assigned to user
-    user_workflows = _get_user_workflows()
-    if not any(w.id == sf.workflow_id for w in user_workflows):
+    # Check access
+    workflows = _get_user_workflows()
+    if not any(w.id == sf.workflow_id for w in workflows):
         return render_template('tracking/not_found.html'), 404
 
-    # Get file data from collected_data
     p = sf.participant
     if not p or not p.collected_data:
         return render_template('tracking/not_found.html'), 404
 
-    file_data = p.collected_data.get(sf.field_name)
+    file_data = p.collected_data.get(field_name)
     if not isinstance(file_data, dict) or 'data' not in file_data:
         return render_template('tracking/not_found.html'), 404
 
@@ -526,7 +565,6 @@ def document_download(shared_file_id):
 
     logger.info(f"Shared file download: user={g.user.id}, sf={sf.id}, file={file_data.get('filename')}")
 
-    # Decode base64 data (format: "data:mime;base64,XXXX")
     raw = file_data['data']
     if ',' in raw:
         raw = raw.split(',', 1)[1]

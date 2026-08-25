@@ -10,97 +10,160 @@
 {% endblock %}
 
 {% block content %}
-{% if files %}
-<div class="card mb-3">
-    <div class="card-body d-flex align-items-center gap-3">
-        <span style="font-size:13px"><strong>{{ files|length }}</strong> file trovati nel collected data</span>
-        <span class="text-muted">|</span>
-        <span style="font-size:13px"><strong id="visibleCount">{{ files|selectattr('visible')|list|length }}</strong> visibili al client</span>
-        <div class="ms-auto d-flex gap-2">
-            <button class="btn btn-outline-success btn-sm" onclick="toggleAll(true)">
-                <i class="bi bi-eye"></i> Show All
-            </button>
-            <button class="btn btn-outline-secondary btn-sm" onclick="toggleAll(false)">
-                <i class="bi bi-eye-slash"></i> Hide All
-            </button>
+
+<!-- SECTION 1: Data fields selection -->
+<div class="card mb-4">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="mb-0"><i class="bi bi-database"></i> Data Fields</h5>
+        <button class="btn btn-sm btn-primary" onclick="saveFields()" id="saveFieldsBtn" disabled>
+            <i class="bi bi-check-lg"></i> Save
+        </button>
+    </div>
+    <div class="card-body">
+        <p style="font-size:13px;color:#666;margin-bottom:12px">
+            Select which data fields to show to the client for each shared participant.
+        </p>
+        {% if all_data_fields %}
+        <div class="d-flex flex-wrap gap-2">
+            {% for field in all_data_fields %}
+            <label class="d-flex align-items-center gap-1 px-3 py-1 rounded-pill field-chip"
+                   style="background:#f5f0e8;cursor:pointer;font-size:13px;border:2px solid transparent;transition:all 0.2s">
+                <input type="checkbox" class="field-check" value="{{ field }}"
+                       {% if field in selected_fields %}checked{% endif %}
+                       style="display:none">
+                <span class="field-label">{{ field }}</span>
+            </label>
+            {% endfor %}
         </div>
+        {% else %}
+        <p class="text-muted" style="font-size:13px">No text fields found in collected data.</p>
+        {% endif %}
     </div>
 </div>
 
+<!-- SECTION 2: Participants with files -->
 <div class="card">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="mb-0"><i class="bi bi-people"></i> Participants & Files</h5>
+        <div class="d-flex align-items-center gap-3">
+            <span style="font-size:13px">
+                <strong id="visibleCount">{{ participant_rows|selectattr('visible')|list|length }}</strong>
+                / {{ participant_rows|length }} shared
+            </span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-success btn-sm" onclick="toggleAll(true)">
+                    <i class="bi bi-eye"></i> All
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="toggleAll(false)">
+                    <i class="bi bi-eye-slash"></i> None
+                </button>
+            </div>
+        </div>
+    </div>
     <div class="card-body">
+        {% if participant_rows %}
         <div class="table-responsive">
             <table class="table table-hover align-middle" style="font-size:13px">
                 <thead>
                     <tr>
-                        <th style="width:60px">Visible</th>
+                        <th style="width:60px">Share</th>
                         <th>Participant</th>
-                        <th>Field</th>
-                        <th>File</th>
-                        <th>Type</th>
-                        <th>Size</th>
+                        <th>Files</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for f in files %}
+                    {% for row in participant_rows %}
                     <tr>
                         <td>
                             <div class="form-check form-switch">
-                                <input class="form-check-input file-toggle" type="checkbox"
-                                       data-participant="{{ f.participant_id }}"
-                                       data-field="{{ f.field_name }}"
-                                       {% if f.visible %}checked{% endif %}
+                                <input class="form-check-input participant-toggle" type="checkbox"
+                                       data-pid="{{ row.id }}"
+                                       {% if row.visible %}checked{% endif %}
                                        style="cursor:pointer">
                             </div>
                         </td>
-                        <td><strong>{{ f.participant_name }}</strong></td>
-                        <td><code>{{ f.field_name }}</code></td>
+                        <td><strong>{{ row.name }}</strong></td>
                         <td>
-                            <i class="bi bi-file-earmark-{{ 'pdf' if 'pdf' in f.mime else 'image' if 'image' in f.mime else 'text' }}"></i>
-                            {{ f.filename }}
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for f in row.files %}
+                                <span class="badge bg-light text-dark d-flex align-items-center gap-1" style="font-weight:500;font-size:12px;padding:4px 10px">
+                                    <i class="bi bi-file-earmark-{{ 'pdf' if 'pdf' in f.mime else 'image' if 'image' in f.mime else 'text' }}" style="font-size:14px"></i>
+                                    {{ f.filename }}
+                                    <small class="text-muted">({{ "%.0f"|format(f.size / 1024) }}KB)</small>
+                                </span>
+                                {% endfor %}
+                            </div>
                         </td>
-                        <td><small class="text-muted">{{ f.mime }}</small></td>
-                        <td>{{ "%.1f"|format(f.size / 1024) }} KB</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+        {% else %}
+        <div class="text-center py-4" style="color:#999">
+            <i class="bi bi-folder2-open" style="font-size:2rem;opacity:0.3;display:block;margin-bottom:8px"></i>
+            No file attachments found in collected data.
+        </div>
+        {% endif %}
     </div>
 </div>
-{% else %}
-<div class="card">
-    <div class="card-body text-center py-5" style="color:#999">
-        <i class="bi bi-folder2-open" style="font-size:3rem;opacity:0.3;display:block;margin-bottom:12px"></i>
-        <p>No file attachments found in collected data for this workflow.</p>
-    </div>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block extra_js %}
+<style>
+.field-chip:has(input:checked) {
+    background: #795548 !important;
+    color: #fff;
+    border-color: #795548 !important;
+}
+.field-chip:hover { border-color: #a1887f !important; }
+</style>
 <script>
 var WORKFLOW_ID = {{ workflow.id }};
 
-function updateCount() {
-    var c = document.querySelectorAll('.file-toggle:checked').length;
-    document.getElementById('visibleCount').textContent = c;
+// ── Data fields ──
+var _fieldsChanged = false;
+document.querySelectorAll('.field-chip').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+        var cb = chip.querySelector('.field-check');
+        cb.checked = !cb.checked;
+        _fieldsChanged = true;
+        document.getElementById('saveFieldsBtn').disabled = false;
+    });
+});
+
+function saveFields() {
+    var selected = [];
+    document.querySelectorAll('.field-check:checked').forEach(function(cb) {
+        selected.push(cb.value);
+    });
+    var btn = document.getElementById('saveFieldsBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving...';
+    fetch('/admin/api/shared-files/save-fields', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({workflow_id: WORKFLOW_ID, fields: selected})
+    }).then(function(r) {
+        btn.innerHTML = r.ok ? '<i class="bi bi-check-lg"></i> Saved!' : '<i class="bi bi-x"></i> Error';
+        setTimeout(function() { btn.innerHTML = '<i class="bi bi-check-lg"></i> Save'; }, 1500);
+    });
 }
 
-document.querySelectorAll('.file-toggle').forEach(function(toggle) {
+// ── Participant toggles ──
+function updateCount() {
+    document.getElementById('visibleCount').textContent =
+        document.querySelectorAll('.participant-toggle:checked').length;
+}
+
+document.querySelectorAll('.participant-toggle').forEach(function(toggle) {
     toggle.addEventListener('change', function() {
-        var pid = parseInt(this.dataset.participant);
-        var field = this.dataset.field;
+        var pid = parseInt(this.dataset.pid);
         var visible = this.checked;
         fetch('/admin/api/shared-files/toggle', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                workflow_id: WORKFLOW_ID,
-                participant_id: pid,
-                field_name: field,
-                visible: visible
-            })
+            body: JSON.stringify({workflow_id: WORKFLOW_ID, participant_id: pid, visible: visible})
         }).then(function(r) {
             if (!r.ok) toggle.checked = !visible;
             updateCount();
@@ -109,17 +172,17 @@ document.querySelectorAll('.file-toggle').forEach(function(toggle) {
 });
 
 function toggleAll(visible) {
-    var files = [];
-    document.querySelectorAll('.file-toggle').forEach(function(t) {
-        files.push({participant_id: parseInt(t.dataset.participant), field_name: t.dataset.field});
+    var pids = [];
+    document.querySelectorAll('.participant-toggle').forEach(function(t) {
+        pids.push(parseInt(t.dataset.pid));
     });
     fetch('/admin/api/shared-files/toggle-all', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({workflow_id: WORKFLOW_ID, visible: visible, files: files})
+        body: JSON.stringify({workflow_id: WORKFLOW_ID, visible: visible, participant_ids: pids})
     }).then(function(r) {
         if (r.ok) {
-            document.querySelectorAll('.file-toggle').forEach(function(t) { t.checked = visible; });
+            document.querySelectorAll('.participant-toggle').forEach(function(t) { t.checked = visible; });
             updateCount();
         }
     });
