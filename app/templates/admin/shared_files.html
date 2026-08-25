@@ -4,8 +4,8 @@
 {% block page_title %}<i class="bi bi-file-earmark-lock"></i> Shared Files — {{ workflow.name }}{% endblock %}
 
 {% block page_actions %}
-<a href="{{ url_for('admin.workflow_detail', workflow_id=workflow.id) }}" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-arrow-left"></i> Back to Workflow
+<a href="{{ url_for('admin.shared_files_index') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Back
 </a>
 {% endblock %}
 

@@ -2305,6 +2305,17 @@ def user_document_delete(doc_id):
 
 # ── Shared Files (collected_data → client) ───────────────────────
 
+@admin_bp.route('/shared-files')
+@superuser_required
+def shared_files_index():
+    """Shared files — seleziona workflow."""
+    workflow_id = request.args.get('workflow_id', type=int)
+    if workflow_id:
+        return redirect(url_for('admin.shared_files', workflow_id=workflow_id))
+    workflows = get_visible_workflows().order_by(Workflow.name).all()
+    return render_template('admin/shared_files_index.html', workflows=workflows)
+
+
 @admin_bp.route('/workflows/<int:workflow_id>/shared-files')
 @superuser_required
 def shared_files(workflow_id):
@@ -2312,7 +2323,7 @@ def shared_files(workflow_id):
     workflow = db.get(Workflow, workflow_id)
     if not workflow:
         flash('Workflow not found', 'danger')
-        return redirect(url_for('admin.workflows_list'))
+        return redirect(url_for('admin.shared_files_index'))
 
     participants = db.query(Participant).filter_by(workflow_id=workflow_id).all()
 
