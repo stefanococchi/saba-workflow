@@ -125,6 +125,33 @@
 
         var validateMustBe = window.__sabaValidateMustBe;
 
+        // Pre-populate form fields with existing collected data
+        var _existingData = {{ (existing_data or {})|tojson }};
+        (function() {
+            var form = document.querySelector('.saba-landing-form');
+            if (!form || !Object.keys(_existingData).length) return;
+            Object.keys(_existingData).forEach(function(name) {
+                var val = _existingData[name];
+                if (!val && val !== 0) return;
+                var inputs = form.querySelectorAll('[name="' + name + '"]');
+                inputs.forEach(function(inp) {
+                    if (inp.type === 'radio') {
+                        inp.checked = (inp.value === String(val));
+                    } else if (inp.type === 'checkbox') {
+                        inp.checked = (String(val).toLowerCase() === 'yes' || val === true);
+                    } else if (inp.type === 'file') {
+                        // Cannot set file inputs — skip
+                    } else if (inp.tagName === 'SELECT') {
+                        inp.value = String(val);
+                    } else if (inp.tagName === 'TEXTAREA') {
+                        inp.value = String(val);
+                    } else {
+                        inp.value = String(val);
+                    }
+                });
+            });
+        })();
+
         // Patch saved HTML: inject required, data-must-be, data-radio-group from field config
         var _fieldsConfig = {{ (fields_config or [])|tojson }};
         _fieldsConfig.forEach(function(f) {

@@ -21,31 +21,34 @@
             {% endif %}
 
             {% if field.type == 'text' %}
-                <input type="text" 
-                       id="{{ field.name }}" 
+                <input type="text"
+                       id="{{ field.name }}"
                        name="{{ field.name }}"
+                       {% if existing_data.get(field.name) %}value="{{ existing_data[field.name] }}"{% endif %}
                        {% if field.required %}required{% endif %}
                        {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>
-            
+
             {% elif field.type == 'email' %}
-                <input type="email" 
-                       id="{{ field.name }}" 
+                <input type="email"
+                       id="{{ field.name }}"
                        name="{{ field.name }}"
+                       {% if existing_data.get(field.name) %}value="{{ existing_data[field.name] }}"{% endif %}
                        {% if field.required %}required{% endif %}
                        {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>
-            
+
             {% elif field.type == 'tel' %}
-                <input type="tel" 
-                       id="{{ field.name }}" 
+                <input type="tel"
+                       id="{{ field.name }}"
                        name="{{ field.name }}"
+                       {% if existing_data.get(field.name) %}value="{{ existing_data[field.name] }}"{% endif %}
                        {% if field.required %}required{% endif %}
                        {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>
-            
+
             {% elif field.type == 'textarea' %}
-                <textarea id="{{ field.name }}" 
+                <textarea id="{{ field.name }}"
                           name="{{ field.name }}"
                           {% if field.required %}required{% endif %}
-                          {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}></textarea>
+                          {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>{{ existing_data.get(field.name, '') }}</textarea>
             
             {% elif field.type == 'file' %}
                 <input type="file"
@@ -59,6 +62,7 @@
                 <input type="number"
                        id="{{ field.name }}"
                        name="{{ field.name }}"
+                       {% if existing_data.get(field.name) %}value="{{ existing_data[field.name] }}"{% endif %}
                        {% if field.required %}required{% endif %}
                        {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>
 
@@ -66,13 +70,14 @@
                 <input type="date"
                        id="{{ field.name }}"
                        name="{{ field.name }}"
+                       {% if existing_data.get(field.name) %}value="{{ existing_data[field.name] }}"{% endif %}
                        {% if field.required %}required{% endif %}>
 
             {% elif field.type == 'hidden' %}
                 <input type="hidden"
                        id="{{ field.name }}"
                        name="{{ field.name }}"
-                       value="{{ field.value or '' }}">
+                       value="{{ existing_data.get(field.name, field.value or '') }}">
 
             {% elif field.type == 'select' %}
                 <select id="{{ field.name }}"
@@ -82,11 +87,11 @@
                     <option value="">Select...</option>
                     {% if field.options is string %}
                         {% for opt in field.options.split(',') %}
-                        <option value="{{ opt.strip() }}">{{ opt.strip() }}</option>
+                        <option value="{{ opt.strip() }}" {% if existing_data.get(field.name) == opt.strip() %}selected{% endif %}>{{ opt.strip() }}</option>
                         {% endfor %}
                     {% else %}
                         {% for option in field.options %}
-                        <option value="{{ option.value }}">{{ option.label }}</option>
+                        <option value="{{ option.value }}" {% if existing_data.get(field.name) == option.value %}selected{% endif %}>{{ option.label }}</option>
                         {% endfor %}
                     {% endif %}
                 </select>
@@ -106,6 +111,7 @@
                             <input type="radio"
                                    name="{{ field.name }}"
                                    value="{{ opt.strip() }}"
+                                   {% if existing_data.get(field.name) == opt.strip() %}checked{% endif %}
                                    {% if field.required %}required{% endif %}
                                    style="min-width: 18px; min-height: 18px;">
                             {{ opt.strip() }}
@@ -117,6 +123,7 @@
                             <input type="radio"
                                    name="{{ field.name }}"
                                    value="{{ option.value }}"
+                                   {% if existing_data.get(field.name) == option.value %}checked{% endif %}
                                    {% if field.required %}required{% endif %}
                                    style="min-width: 18px; min-height: 18px;">
                             {{ option.label }}
@@ -136,6 +143,7 @@
                            id="{{ field.name }}"
                            name="{{ field.name }}"
                            value="yes"
+                           {% if existing_data.get(field.name) == 'yes' %}checked{% endif %}
                            {% if field.required %}required{% endif %}
                            style="margin-top: 4px; min-width: 18px; min-height: 18px;">
                     <span>{{ field.label }}{% if field.required %} <span style="color: red;">*</span>{% endif %}</span>

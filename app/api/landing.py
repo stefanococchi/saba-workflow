@@ -142,6 +142,14 @@ def show_landing_page(token):
             if isinstance(gjs, dict) and gjs.get('fields'):
                 landing_config = gjs
 
+        # Existing collected data (excluding internal keys and file dicts) for pre-population
+        existing_data = {}
+        if participant.collected_data and isinstance(participant.collected_data, dict):
+            existing_data = {
+                k: v for k, v in participant.collected_data.items()
+                if not k.startswith('_') and not isinstance(v, dict)
+            }
+
         if landing_html:
             # Pass field config so template can patch missing attributes at runtime
             gjs = current_step.landing_gjs_data
@@ -153,7 +161,8 @@ def show_landing_page(token):
                                  participant=participant,
                                  workflow=participant.workflow,
                                  token=token,
-                                 payment_config=payment_config)
+                                 payment_config=payment_config,
+                                 existing_data=existing_data)
 
         # Altrimenti usa il form template di default
         return render_template('landing/form.html',
@@ -161,7 +170,8 @@ def show_landing_page(token):
                              workflow=participant.workflow,
                              config=landing_config,
                              token=token,
-                             payment_config=payment_config)
+                             payment_config=payment_config,
+                             existing_data=existing_data)
         
     except Exception as e:
         logger.error(f"Errore landing page: {str(e)}")
@@ -193,11 +203,12 @@ def submit_landing_data(token):
             return jsonify({'error': 'Already completed'}), 400
 
         # Verifica se form già compilato (anti double-submit)
-        # Allow resubmission if previous data was only a pending payment (user went back)
+        # Allow resubmission if: pending payment (user went back) OR reactivated participant
         if participant.collected_data:
             user_keys = [k for k in participant.collected_data.keys() if not k.startswith('_')]
             is_pending_payment = participant.collected_data.get('_payment_pending', False)
-            if user_keys and not is_pending_payment:
+            is_reactivated = participant.reactivated_at is not None
+            if user_keys and not is_pending_payment and not is_reactivated:
                 return jsonify({'error': 'Form already submitted'}), 409
 
         # Guard: block direct submission if payment is required but not completed
@@ -254,6 +265,7 @@ def submit_landing_data(token):
         participant.collected_data = existing
         participant.completion_type = CompletionType.PARTICIPATED
         participant.last_interaction = datetime.utcnow()
+        participant.reactivated_at = None  # Clear so anti-double-submit guard re-activates
         
         # Cancella follow-up schedulati (ha risposto)
         SchedulerService.cancel_scheduled_executions(participant.id)
