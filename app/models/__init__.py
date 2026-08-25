@@ -515,3 +515,26 @@ class ClientDocument(Base):
 
     def __repr__(self):
         return f'<ClientDocument {self.id}: {self.filename} for user={self.user_id}>'
+
+
+class SharedFile(Base):
+    """Toggle di visibilità per file raccolti via landing page.
+    L'admin accende/spegne quali file dal collected_data rendere
+    visibili ai client assegnati al workflow."""
+    __tablename__ = 'shared_files'
+    __table_args__ = (
+        Index('uq_shared_file', 'participant_id', 'field_name', unique=True),
+    )
+
+    id = Column(Integer, primary_key=True)
+    workflow_id = Column(Integer, ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False, index=True)
+    participant_id = Column(Integer, ForeignKey('participants.id', ondelete='CASCADE'), nullable=False)
+    field_name = Column(String(255), nullable=False)
+    visible = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    participant = relationship('Participant')
+    workflow = relationship('Workflow')
+
+    def __repr__(self):
+        return f'<SharedFile {self.id}: p={self.participant_id} field={self.field_name} visible={self.visible}>'

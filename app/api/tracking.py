@@ -5,7 +5,7 @@ from app import db_session as db
 from app.models import (
     Workflow, Participant, Execution, ActivityLog, WorkflowStep,
     ParticipantStatus, ExecutionStatus, User, UserRole, CompletionType,
-    ClientDocument, UserAuditLog,
+    SharedFile, UserAuditLog,
 )
 
 from sqlalchemy import case
@@ -452,27 +452,63 @@ def api_resolve_participant(participant_id):
 
 @tracking_bp.route('/documents')
 def documents_list():
-    """Lista documenti disponibili per il client loggato."""
-    from datetime import datetime
-    docs = (
-        db.query(ClientDocument)
-        .filter_by(user_id=g.user.id)
-        .order_by(ClientDocument.created_at.desc())
+    """Lista file condivisi per il client loggato (da collected_data dei workflow assegnati)."""
+    user_workflows = _get_user_workflows()
+    wf_ids = [w.id for w in user_workflows]
+
+    if not wf_ids:
+        return render_template('tracking/documents.html', files_by_workflow={}, user=g.user)
+
+    # Get visible shared files for user's workflows
+    shared = (
+        db.query(SharedFile)
+        .filter(SharedFile.workflow_id.in_(wf_ids), SharedFile.visible == True)
         .all()
     )
-    # Filter out expired
-    active_docs = [d for d in docs if not d.is_expired]
-    return render_template('tracking/documents.html', documents=active_docs, user=g.user)
+
+    # Group by workflow and resolve file metadata from collected_data
+    files_by_workflow = {}
+    for sf in shared:
+        p = sf.participant
+        if not p or not p.collected_data:
+            continue
+        file_data = p.collected_data.get(sf.field_name)
+        if not isinstance(file_data, dict) or 'filename' not in file_data:
+            continue
+
+        wf_name = sf.workflow.name if sf.workflow else f'Workflow #{sf.workflow_id}'
+        files_by_workflow.setdefault(wf_name, []).append({
+            'shared_file_id': sf.id,
+            'participant_name': p.full_name or p.email or f'#{p.id}',
+            'field_name': sf.field_name,
+            'filename': file_data.get('filename', ''),
+            'mime': file_data.get('mime', ''),
+            'size': file_data.get('size', 0),
+        })
+
+    return render_template('tracking/documents.html', files_by_workflow=files_by_workflow, user=g.user)
 
 
-@tracking_bp.route('/documents/<int:doc_id>/download')
-def document_download(doc_id):
-    """Download documento con audit log."""
-    from datetime import datetime
-    doc = db.get(ClientDocument, doc_id)
-    if not doc or doc.user_id != g.user.id:
+@tracking_bp.route('/documents/<int:shared_file_id>/download')
+def document_download(shared_file_id):
+    """Download file condiviso con audit log."""
+    import base64
+    sf = db.get(SharedFile, shared_file_id)
+    if not sf or not sf.visible:
         return render_template('tracking/not_found.html'), 404
-    if doc.is_expired:
+
+    # Check access: workflow must be assigned to user
+    user_workflows = _get_user_workflows()
+    if not any(w.id == sf.workflow_id for w in user_workflows):
+        return render_template('tracking/not_found.html'), 404
+
+    # Get file data from collected_data
+    p = sf.participant
+    if not p or not p.collected_data:
+        return render_template('tracking/not_found.html'), 404
+
+    file_data = p.collected_data.get(sf.field_name)
+    if not isinstance(file_data, dict) or 'data' not in file_data:
         return render_template('tracking/not_found.html'), 404
 
     # Audit log
@@ -480,20 +516,24 @@ def document_download(doc_id):
         user_id=g.user.id,
         user_email=g.user.email or g.user.username,
         action='DOWNLOAD',
-        entity='ClientDocument',
-        entity_id=doc.id,
-        detail=f'Downloaded "{doc.filename}"',
+        entity='SharedFile',
+        entity_id=sf.id,
+        detail=f'Downloaded "{file_data.get("filename", "")}" (participant #{p.id})',
         ip_address=request.remote_addr,
     )
     db.add(audit)
-    doc.download_count += 1
-    doc.last_downloaded_at = datetime.utcnow()
     db.commit()
 
-    logger.info(f"Document download: user={g.user.id}, doc={doc.id}, file={doc.filename}")
+    logger.info(f"Shared file download: user={g.user.id}, sf={sf.id}, file={file_data.get('filename')}")
+
+    # Decode base64 data (format: "data:mime;base64,XXXX")
+    raw = file_data['data']
+    if ',' in raw:
+        raw = raw.split(',', 1)[1]
+    binary = base64.b64decode(raw)
 
     return Response(
-        doc.data,
-        mimetype=doc.mime_type,
-        headers={'Content-Disposition': f'attachment; filename="{doc.filename}"'}
+        binary,
+        mimetype=file_data.get('mime', 'application/octet-stream'),
+        headers={'Content-Disposition': f'attachment; filename="{file_data.get("filename", "document")}"'}
     )

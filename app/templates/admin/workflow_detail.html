@@ -196,6 +196,11 @@
                 {% endif %}
 
                 <hr>
+                <a href="{{ url_for('admin.shared_files', workflow_id=workflow.id) }}" class="btn btn-outline-primary w-100 mb-2">
+                    <i class="bi bi-file-earmark-lock"></i> Shared Files
+                </a>
+                <small class="text-muted d-block mt-1 mb-2">Gestisci file visibili ai client</small>
+
                 <button class="btn btn-outline-info w-100 mb-2" onclick="simulateWorkflow()" id="btnSimulate">
                     <i class="bi bi-eye"></i> Simula Invio
                 </button>

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, session
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, CompletionType, UploadedImage, Attachment, User, UserRole, user_workflows, ClientDocument
+from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, CompletionType, UploadedImage, Attachment, User, UserRole, user_workflows, ClientDocument, SharedFile
 from app.api.auth import superuser_required
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload, subqueryload, aliased
@@ -2301,6 +2301,128 @@ def user_document_delete(doc_id):
         db.rollback()
         flash(f'Error: {str(e)}', 'danger')
         return redirect(url_for('admin.users_list'))
+
+
+# ── Shared Files (collected_data → client) ───────────────────────
+
+@admin_bp.route('/workflows/<int:workflow_id>/shared-files')
+@superuser_required
+def shared_files(workflow_id):
+    """Lista file raccolti dai partecipanti con toggle visibilità per client."""
+    workflow = db.get(Workflow, workflow_id)
+    if not workflow:
+        flash('Workflow not found', 'danger')
+        return redirect(url_for('admin.workflows_list'))
+
+    participants = db.query(Participant).filter_by(workflow_id=workflow_id).all()
+
+    # Scan collected_data for file-type entries
+    files = []
+    for p in participants:
+        if not p.collected_data or not isinstance(p.collected_data, dict):
+            continue
+        for key, val in p.collected_data.items():
+            if isinstance(val, dict) and 'filename' in val and 'data' in val:
+                files.append({
+                    'participant_id': p.id,
+                    'participant_name': p.full_name or p.email or f'#{p.id}',
+                    'field_name': key,
+                    'filename': val.get('filename', ''),
+                    'mime': val.get('mime', ''),
+                    'size': val.get('size', 0),
+                })
+
+    # Load existing shared_files toggles
+    existing = db.query(SharedFile).filter_by(workflow_id=workflow_id).all()
+    toggle_map = {(sf.participant_id, sf.field_name): sf.visible for sf in existing}
+
+    for f in files:
+        f['visible'] = toggle_map.get((f['participant_id'], f['field_name']), False)
+
+    return render_template('admin/shared_files.html', workflow=workflow, files=files)
+
+
+@admin_bp.route('/api/shared-files/toggle', methods=['POST'])
+@superuser_required
+def toggle_shared_file():
+    """Toggle visibilità file per client."""
+    try:
+        data = request.get_json() or {}
+        workflow_id = data.get('workflow_id')
+        participant_id = data.get('participant_id')
+        field_name = data.get('field_name')
+        visible = data.get('visible', False)
+
+        if not all([workflow_id, participant_id, field_name]):
+            return jsonify({'error': 'Missing fields'}), 400
+
+        sf = db.query(SharedFile).filter_by(
+            participant_id=participant_id, field_name=field_name
+        ).first()
+
+        if sf:
+            sf.visible = visible
+        else:
+            sf = SharedFile(
+                workflow_id=workflow_id,
+                participant_id=participant_id,
+                field_name=field_name,
+                visible=visible,
+            )
+            db.add(sf)
+
+        db.commit()
+
+        from app.services.audit_service import log_user_action
+        action = 'SHARE' if visible else 'UNSHARE'
+        log_user_action(action, 'SharedFile', sf.id, f'participant={participant_id} field={field_name}')
+
+        return jsonify({'ok': True, 'visible': visible}), 200
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/shared-files/toggle-all', methods=['POST'])
+@superuser_required
+def toggle_all_shared_files():
+    """Toggle visibilità per tutti i file di un workflow."""
+    try:
+        data = request.get_json() or {}
+        workflow_id = data.get('workflow_id')
+        visible = data.get('visible', False)
+        files = data.get('files', [])
+
+        if not workflow_id or not files:
+            return jsonify({'error': 'Missing fields'}), 400
+
+        for f in files:
+            sf = db.query(SharedFile).filter_by(
+                participant_id=f['participant_id'], field_name=f['field_name']
+            ).first()
+            if sf:
+                sf.visible = visible
+            else:
+                sf = SharedFile(
+                    workflow_id=workflow_id,
+                    participant_id=f['participant_id'],
+                    field_name=f['field_name'],
+                    visible=visible,
+                )
+                db.add(sf)
+
+        db.commit()
+
+        from app.services.audit_service import log_user_action
+        action = 'SHARE_ALL' if visible else 'UNSHARE_ALL'
+        log_user_action(action, 'SharedFile', None, f'workflow={workflow_id} count={len(files)}')
+
+        return jsonify({'ok': True, 'count': len(files)}), 200
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 @admin_bp.route('/api/onedrive/browse')
