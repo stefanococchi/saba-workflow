@@ -522,7 +522,7 @@ def documents_list():
                 participants.append({
                     'shared_file_id': sf.id,
                     'participant_id': p.id,
-                    'name': p.full_name or p.email or f'#{p.id}',
+                    'name': f'{p.last_name or ""} {p.first_name or ""}'.strip() or p.email or f'#{p.id}',
                     'last_name': (p.last_name or '').lower(),
                     'data': row_data,
                     'files': files,
