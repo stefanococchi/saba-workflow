@@ -523,10 +523,12 @@ def documents_list():
                     'shared_file_id': sf.id,
                     'participant_id': p.id,
                     'name': p.full_name or p.email or f'#{p.id}',
+                    'last_name': (p.last_name or '').lower(),
                     'data': row_data,
                     'files': files,
                 })
 
+        participants.sort(key=lambda x: x['last_name'])
         if participants:
             workflow_data.append({
                 'workflow_name': wf.name,
