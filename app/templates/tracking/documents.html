@@ -2,6 +2,73 @@
 
 {% block title %}Documents - Saba Workflow{% endblock %}
 
+{% block extra_css %}
+<style>
+.doc-viewer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+.doc-viewer-overlay.active { display: flex; }
+.doc-viewer-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    cursor: default;
+}
+.doc-viewer-close {
+    position: fixed;
+    top: 16px;
+    right: 24px;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    z-index: 10000;
+    background: rgba(0,0,0,0.4);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.doc-viewer-close:hover { background: rgba(255,255,255,0.2); }
+.doc-viewer-filename {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #fff;
+    font-size: 13px;
+    background: rgba(0,0,0,0.5);
+    padding: 6px 16px;
+    border-radius: 20px;
+}
+.file-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.file-btn:hover { opacity: 0.85; }
+.file-btn-download { background: var(--tk-primary); color: #fff; }
+.file-btn-view { background: #e3f2fd; color: #1565c0; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="tk-breadcrumb">
     <a href="{{ url_for('tracking.index') }}"><i class="bi bi-house"></i> Home</a>
@@ -9,7 +76,14 @@
     Documents
 </div>
 
-<h4 style="font-weight:700;margin-bottom:20px"><i class="bi bi-file-earmark-lock"></i> Your Documents</h4>
+<div class="d-flex justify-content-between align-items-center" style="margin-bottom:20px">
+    <h4 style="font-weight:700;margin:0"><i class="bi bi-file-earmark-lock"></i> Your Documents</h4>
+    {% if workflow_data %}
+    <a href="{{ url_for('tracking.documents_download_all') }}" class="file-btn file-btn-download">
+        <i class="bi bi-file-earmark-zip"></i> Download All (ZIP)
+    </a>
+    {% endif %}
+</div>
 
 {% if workflow_data %}
     {% for wd in workflow_data %}
@@ -40,11 +114,18 @@
             {% if p.files %}
             <div class="d-flex flex-wrap gap-2">
                 {% for f in p.files %}
+                {% set is_image = 'image' in f.mime %}
+                {% set is_pdf = 'pdf' in f.mime %}
+                {% if is_image %}
+                <button class="file-btn file-btn-view" type="button"
+                        onclick="openViewer('{{ url_for('tracking.document_view', shared_file_id=p.shared_file_id, field_name=f.field_name) }}', '{{ f.filename }}')">
+                    <i class="bi bi-eye"></i> {{ f.filename }}
+                </button>
+                {% endif %}
                 <a href="{{ url_for('tracking.document_download', shared_file_id=p.shared_file_id, field_name=f.field_name) }}"
-                   class="btn btn-sm d-flex align-items-center gap-1"
-                   style="background:var(--tk-primary);color:#fff;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;text-decoration:none">
+                   class="file-btn file-btn-download">
                     <i class="bi bi-download"></i>
-                    {{ f.filename }}
+                    {% if is_image %}Download{% else %}{{ f.filename }}{% endif %}
                     <small style="opacity:0.7">({{ "%.0f"|format(f.size / 1024) }}KB)</small>
                 </a>
                 {% endfor %}
@@ -60,4 +141,33 @@
     <p>No documents available.</p>
 </div>
 {% endif %}
+
+<!-- Image Viewer Overlay -->
+<div class="doc-viewer-overlay" id="docViewer" onclick="closeViewer(event)">
+    <span class="doc-viewer-close" onclick="closeViewer()"><i class="bi bi-x-lg"></i></span>
+    <img id="docViewerImg" src="" alt="">
+    <div class="doc-viewer-filename" id="docViewerName"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function openViewer(url, filename) {
+    var viewer = document.getElementById('docViewer');
+    document.getElementById('docViewerImg').src = url;
+    document.getElementById('docViewerName').textContent = filename;
+    viewer.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+function closeViewer(e) {
+    if (e && e.target.tagName === 'IMG') return;
+    var viewer = document.getElementById('docViewer');
+    viewer.classList.remove('active');
+    document.getElementById('docViewerImg').src = '';
+    document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeViewer();
+});
+</script>
 {% endblock %}

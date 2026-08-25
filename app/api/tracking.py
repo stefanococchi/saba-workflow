@@ -583,3 +583,95 @@ def document_download(shared_file_id, field_name):
         mimetype=file_data.get('mime', 'application/octet-stream'),
         headers={'Content-Disposition': f'attachment; filename="{file_data.get("filename", "document")}"'}
     )
+
+
+@tracking_bp.route('/documents/<int:shared_file_id>/<field_name>/view')
+def document_view(shared_file_id, field_name):
+    """Serve file inline per viewer (immagini/PDF)."""
+    import base64
+    sf = db.get(SharedFile, shared_file_id)
+    if not sf or not sf.visible:
+        return render_template('tracking/not_found.html'), 404
+
+    doc_workflows = _get_user_document_workflows()
+    if not any(w.id == sf.workflow_id for w in doc_workflows):
+        return render_template('tracking/not_found.html'), 404
+
+    p = sf.participant
+    if not p or not p.collected_data:
+        return render_template('tracking/not_found.html'), 404
+
+    file_data = p.collected_data.get(field_name)
+    if not isinstance(file_data, dict) or 'data' not in file_data:
+        return render_template('tracking/not_found.html'), 404
+
+    raw = file_data['data']
+    if ',' in raw:
+        raw = raw.split(',', 1)[1]
+    binary = base64.b64decode(raw)
+
+    return Response(
+        binary,
+        mimetype=file_data.get('mime', 'application/octet-stream'),
+        headers={'Content-Disposition': f'inline; filename="{file_data.get("filename", "document")}"'}
+    )
+
+
+@tracking_bp.route('/documents/download-all')
+def documents_download_all():
+    """Download ZIP di tutti i file condivisi visibili al client."""
+    import base64
+    import io
+    import zipfile
+    from datetime import datetime
+
+    workflows = _get_user_document_workflows()
+    wf_ids = [w.id for w in workflows]
+    if not wf_ids:
+        return render_template('tracking/not_found.html'), 404
+
+    shared = (
+        db.query(SharedFile)
+        .filter(SharedFile.workflow_id.in_(wf_ids), SharedFile.visible == True)
+        .all()
+    )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for sf in shared:
+            p = sf.participant
+            if not p or not p.collected_data:
+                continue
+            p_name = (p.full_name or p.email or f'participant_{p.id}').replace(' ', '_')
+            for key, val in p.collected_data.items():
+                if key.startswith('_'):
+                    continue
+                if not isinstance(val, dict) or 'filename' not in val or 'data' not in val:
+                    continue
+                raw = val['data']
+                if ',' in raw:
+                    raw = raw.split(',', 1)[1]
+                binary = base64.b64decode(raw)
+                # Path: participant_name/filename
+                zf.writestr(f'{p_name}/{val["filename"]}', binary)
+
+    buf.seek(0)
+
+    # Audit log
+    audit = UserAuditLog(
+        user_id=g.user.id,
+        user_email=g.user.email or g.user.username,
+        action='DOWNLOAD_ZIP',
+        entity='SharedFile',
+        detail=f'Downloaded all documents ZIP ({len(shared)} participants)',
+        ip_address=request.remote_addr,
+    )
+    db.add(audit)
+    db.commit()
+
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M')
+    return Response(
+        buf.getvalue(),
+        mimetype='application/zip',
+        headers={'Content-Disposition': f'attachment; filename="documents_{timestamp}.zip"'}
+    )
