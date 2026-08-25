@@ -1,10 +1,11 @@
 """Client tracking blueprint — read-only workflow status for external clients."""
 
-from flask import Blueprint, render_template, session, g, jsonify, request
+from flask import Blueprint, render_template, session, g, jsonify, request, Response
 from app import db_session as db
 from app.models import (
     Workflow, Participant, Execution, ActivityLog, WorkflowStep,
-    ParticipantStatus, ExecutionStatus, User, UserRole, CompletionType
+    ParticipantStatus, ExecutionStatus, User, UserRole, CompletionType,
+    ClientDocument, UserAuditLog,
 )
 
 from sqlalchemy import case
@@ -445,3 +446,54 @@ def api_resolve_participant(participant_id):
         'success': True,
         'message': f'Re-routed to step {target.order}: {target.name}'
     })
+
+
+# ── Client Documents ──────────────────────────────────────────────
+
+@tracking_bp.route('/documents')
+def documents_list():
+    """Lista documenti disponibili per il client loggato."""
+    from datetime import datetime
+    docs = (
+        db.query(ClientDocument)
+        .filter_by(user_id=g.user.id)
+        .order_by(ClientDocument.created_at.desc())
+        .all()
+    )
+    # Filter out expired
+    active_docs = [d for d in docs if not d.is_expired]
+    return render_template('tracking/documents.html', documents=active_docs, user=g.user)
+
+
+@tracking_bp.route('/documents/<int:doc_id>/download')
+def document_download(doc_id):
+    """Download documento con audit log."""
+    from datetime import datetime
+    doc = db.get(ClientDocument, doc_id)
+    if not doc or doc.user_id != g.user.id:
+        return render_template('tracking/not_found.html'), 404
+    if doc.is_expired:
+        return render_template('tracking/not_found.html'), 404
+
+    # Audit log
+    audit = UserAuditLog(
+        user_id=g.user.id,
+        user_email=g.user.email or g.user.username,
+        action='DOWNLOAD',
+        entity='ClientDocument',
+        entity_id=doc.id,
+        detail=f'Downloaded "{doc.filename}"',
+        ip_address=request.remote_addr,
+    )
+    db.add(audit)
+    doc.download_count += 1
+    doc.last_downloaded_at = datetime.utcnow()
+    db.commit()
+
+    logger.info(f"Document download: user={g.user.id}, doc={doc.id}, file={doc.filename}")
+
+    return Response(
+        doc.data,
+        mimetype=doc.mime_type,
+        headers={'Content-Disposition': f'attachment; filename="{doc.filename}"'}
+    )

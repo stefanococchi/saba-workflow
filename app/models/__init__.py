@@ -488,3 +488,30 @@ class PracticeFile(Base):
 
     def __repr__(self):
         return f'<PracticeFile {self.practice_id}/{self.file_name}>'
+
+
+class ClientDocument(Base):
+    """Documento sensibile condiviso con un utente client (es. passaporto, patente).
+    Accesso protetto da login, ogni download viene auditato."""
+    __tablename__ = 'client_documents'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    size = Column(Integer, nullable=False, default=0)
+    description = Column(String(500), nullable=True)
+    expires_at = Column(DateTime, nullable=True)  # TTL: auto-delete dopo scadenza
+    download_count = Column(Integer, default=0, nullable=False)
+    last_downloaded_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship('User', backref='documents')
+
+    @property
+    def is_expired(self):
+        return self.expires_at and datetime.utcnow() > self.expires_at
+
+    def __repr__(self):
+        return f'<ClientDocument {self.id}: {self.filename} for user={self.user_id}>'

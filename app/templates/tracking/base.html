@@ -257,6 +257,7 @@
             Saba Workflow Tracking
         </div>
         <div class="tk-topbar-user">
+            <a href="{{ url_for('tracking.documents_list') }}" style="font-weight:500"><i class="bi bi-file-earmark-lock"></i> Documents</a>
             <span><i class="bi bi-person-circle"></i> {{ user.username }}</span>
             <a href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
         </div>

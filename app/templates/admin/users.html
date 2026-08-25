@@ -87,6 +87,9 @@
                         </td>
                         <td><small>{{ user.created_at|localtime }}</small></td>
                         <td>
+                            <a href="{{ url_for('admin.user_documents', user_id=user.id) }}" class="btn btn-outline-primary btn-sm" title="Documents">
+                                <i class="bi bi-file-earmark-lock"></i>
+                            </a>
                             {% if user.id != session.get('user_id') %}
                             <form method="POST" action="{{ url_for('admin.user_delete', user_id=user.id) }}"
                                   onsubmit="return confirm('{{ t.confirm_delete_user }} {{ user.username }}?')" style="display:inline">

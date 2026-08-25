@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, session
 from app import db_session as db
-from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, CompletionType, UploadedImage, Attachment, User, UserRole, user_workflows
+from app.models import Workflow, WorkflowStep, Participant, Execution, ActivityLog, WorkflowStatus, ParticipantStatus, ExecutionStatus, CompletionType, UploadedImage, Attachment, User, UserRole, user_workflows, ClientDocument
 from app.api.auth import superuser_required
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload, subqueryload, aliased
@@ -2197,6 +2197,110 @@ def toggle_user_workflow(user_id, workflow_id):
     except Exception as e:
         db.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+# ── Client Documents ──────────────────────────────────────────────
+
+ALLOWED_DOC_MIME = {
+    'application/pdf', 'image/jpeg', 'image/png',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}
+
+
+@admin_bp.route('/users/<int:user_id>/documents')
+@superuser_required
+def user_documents(user_id):
+    """Lista documenti di un utente client"""
+    user = db.get(User, user_id)
+    if not user:
+        flash('User not found', 'danger')
+        return redirect(url_for('admin.users_list'))
+    docs = db.query(ClientDocument).filter_by(user_id=user_id).order_by(ClientDocument.created_at.desc()).all()
+    return render_template('admin/user_documents.html', target_user=user, documents=docs)
+
+
+@admin_bp.route('/users/<int:user_id>/documents/upload', methods=['POST'])
+@superuser_required
+def user_document_upload(user_id):
+    """Upload documento per utente client"""
+    try:
+        user = db.get(User, user_id)
+        if not user:
+            flash('User not found', 'danger')
+            return redirect(url_for('admin.users_list'))
+
+        file = request.files.get('file')
+        if not file or not file.filename:
+            flash('No file selected', 'danger')
+            return redirect(url_for('admin.user_documents', user_id=user_id))
+
+        import os
+        filename = os.path.basename(file.filename)
+        mime = file.content_type or 'application/octet-stream'
+        if mime not in ALLOWED_DOC_MIME:
+            flash(f'File type not allowed: {mime}', 'danger')
+            return redirect(url_for('admin.user_documents', user_id=user_id))
+
+        data = file.read()
+        if len(data) > 20 * 1024 * 1024:
+            flash('File too large (max 20 MB)', 'danger')
+            return redirect(url_for('admin.user_documents', user_id=user_id))
+
+        description = request.form.get('description', '').strip()
+        expires_days = request.form.get('expires_days', '').strip()
+        expires_at = None
+        if expires_days:
+            from datetime import timedelta
+            expires_at = datetime.utcnow() + timedelta(days=int(expires_days))
+
+        doc = ClientDocument(
+            user_id=user_id,
+            filename=filename,
+            mime_type=mime,
+            data=data,
+            size=len(data),
+            description=description,
+            expires_at=expires_at,
+        )
+        db.add(doc)
+        db.commit()
+
+        from app.services.audit_service import log_user_action
+        log_user_action('UPLOAD', 'ClientDocument', doc.id, f'Uploaded "{filename}" for user "{user.username}"')
+        flash(f'Document "{filename}" uploaded', 'success')
+        return redirect(url_for('admin.user_documents', user_id=user_id))
+
+    except Exception as e:
+        db.rollback()
+        flash(f'Error: {str(e)}', 'danger')
+        return redirect(url_for('admin.user_documents', user_id=user_id))
+
+
+@admin_bp.route('/documents/<int:doc_id>/delete', methods=['POST'])
+@superuser_required
+def user_document_delete(doc_id):
+    """Elimina documento client"""
+    try:
+        doc = db.get(ClientDocument, doc_id)
+        if not doc:
+            flash('Document not found', 'danger')
+            return redirect(url_for('admin.users_list'))
+
+        user_id = doc.user_id
+        fname = doc.filename
+        db.delete(doc)
+        db.commit()
+
+        from app.services.audit_service import log_user_action
+        log_user_action('DELETE', 'ClientDocument', doc_id, f'Deleted "{fname}"')
+        flash(f'Document "{fname}" deleted', 'success')
+        return redirect(url_for('admin.user_documents', user_id=user_id))
+
+    except Exception as e:
+        db.rollback()
+        flash(f'Error: {str(e)}', 'danger')
+        return redirect(url_for('admin.users_list'))
 
 
 @admin_bp.route('/api/onedrive/browse')
